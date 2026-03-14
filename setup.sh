@@ -1,36 +1,45 @@
 #!/bin/bash
 set -e  # Exit on any error
 
-echo "🎯 Setting up nnUNet v2 environment for UCloud V100..."
+echo "🎯 Setting up nnUNet v2 environment (local dir)..."
 
-# Set home and nnUNet dirs (adjust if needed)
-export HOME=/workflows/default-storage/$USER
-export BASE_DIR=$HOME/nnunet
-mkdir -p $BASE_DIR/{nnUNet_raw,nnUNet_preprocessed,nnUNet_results}
+# Use current working directory
+BASE_DIR=$(pwd)
+echo "📁 Working in: $BASE_DIR"
+
+# Create nnUNet standard dirs
+mkdir -p {nnUNet_raw,nnUNet_preprocessed,nnUNet_results}
+
+# Export nnUNet paths (nnUNet v2 expects these)
+export nnUNet_raw="$BASE_DIR/nnUNet_raw"
+export nnUNet_preprocessed="$BASE_DIR/nnUNet_preprocessed" 
+export nnUNet_results="$BASE_DIR/nnUNet_results"
 
 # Create Python virtual environment
-python3 -m venv $BASE_DIR/venv
-source $BASE_DIR/venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 
 # Upgrade pip
-pip install --upgrade pip setuptools wheel
+python -m pip install --upgrade pip setuptools wheel
 
-# Install nnUNet v2 + dependencies (V100 CUDA 11.8 compatible)
-pip install torch>=2.0.0 torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install nnunetv2>=2.5.0
-pip install nibabel SimpleITK batchgenerators scikit-image tqdm
+# Check CUDA version first
+echo "🔍 Checking GPU/CUDA..."
+nvidia-smi
 
-# Make script executable
-chmod +x $BASE_DIR/train_nnunet.py
+# Install PyTorch (cu118 safe for most UCloud V100s)
+python -m pip install "torch==2.1.0" "torchvision==0.16.0" --index-url https://download.pytorch.org/whl/cu118
 
-# Add to PATH for convenience
-export PATH="$BASE_DIR/venv/bin:$PATH"
+# Install nnUNet v2
+python -m pip install "nnunetv2>=2.5.0"
 
-# Verify installation
-nnUNetv2_print_installed_packages || echo "nnUNetv2 commands ready!"
+# Verify installation  
+nnUNetv2_print_installed_packages
 
 echo "✅ Setup complete!"
 echo ""
-echo "📁 Copy your LiTS/ and Maisi/ folders to $BASE_DIR/"
-echo "🚀 Run: cd $BASE_DIR && nohup python train_nnunet.py > nnunet_training_$(date +%Y%m%d_%H%M%S).log 2>&1 &"
-echo "📊 Monitor: tail -f nnunet_training_*.log"
+echo "📁 Verify your LiTS/ and Maisi/ folders exist here:"
+ls -la LiTS/ Maisi/
+echo ""
+echo "🚀 Run: nohup python train_nnunet.py > training_$(date +%Y%m%d_%H%M%S).log 2>&1 &"
+echo "📊 Monitor: tail -f training_*.log"
+echo "🖥️  Results: $BASE_DIR/nnUNet_results/"

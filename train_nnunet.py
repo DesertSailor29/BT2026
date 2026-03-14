@@ -22,7 +22,7 @@ COMBINED_DATASET_NAME = "LiTSMaisiCombined"
 # Training settings (V100 16GB perfect for 3d_fullres)
 CONFIG = "3d_fullres"
 TRAINER = "nnUNetTrainer"
-FOLDS = ["0", "1", "2", "3", "4"]  # Full 5-fold CV (nnUNet standard)
+FOLDS = ["0"]  # 1 Fold Training (nnUNet standard)
 NUM_PROCESSES_PREPROCESS = 8  # Safe for 46GB RAM
 # =================================
 
