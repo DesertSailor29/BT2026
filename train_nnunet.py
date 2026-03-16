@@ -5,8 +5,8 @@ import subprocess
 import shutil
 from pathlib import Path
 from typing import List, Dict, Tuple
-import nibabel as nib
-import numpy as np
+import nibabel as nib # type: ignore
+import numpy as np # type: ignore
 
 # ========= CONFIGURATION =========
 BASE_DIR = Path.cwd()
@@ -22,8 +22,8 @@ COMBINED_DATASET_NAME = "LiTSMaisiCombined"
 
 CONFIG = "3d_fullres"
 TRAINER = "nnUNetTrainer"
-FOLDS = ["0"]
-NUM_PROCESSES_PREPROCESS = 8
+FOLDS = ["0"] # Only fold 0, since comperative evaluation can be done with only one fold.
+NUM_PROCESSES_PREPROCESS = 8 # System limit has been reached before, so I set it to 8 for safety
 
 def setup_nnunet_dirs(base_dir: Path) -> Dict[str, Path]:
     """Create standard nnUNet directory structure with env vars first."""
@@ -42,6 +42,8 @@ def setup_nnunet_dirs(base_dir: Path) -> Dict[str, Path]:
     print(f"✅ nnUNet env vars set: raw={dirs['raw']}")
     return dirs
 
+
+# ==== VALIDATION & PREPARATION FUNCTIONS ====
 def validate_nifti_files(pairs: List[Tuple[Path, Path]], dataset_name: str):
     """FIXED: Safe validation that handles LiTS spacing issues."""
     print(f"\n🔍 Validating {dataset_name} ({len(pairs)} cases)...")
@@ -92,6 +94,7 @@ def validate_nifti_files(pairs: List[Tuple[Path, Path]], dataset_name: str):
     # Don't fail on LiTS known issues - let nnUNet handle it
     return bad_cases
 
+# Remove blacklisted items, see if it can be handled on a better machine.
 def find_lits_pairs(images_dir: Path, labels_dir: Path) -> List[Tuple[Path, Path]]:
     """LiTS: Skip ALL known corrupt cases BY FILENAME."""
     # Skip these EXACT filenames (not case numbers)
@@ -151,6 +154,7 @@ def find_maisi_pairs(images_dir: Path, labels_dir: Path) -> List[Tuple[Path, Pat
     print(f"Found {len(pairs)} valid MAISI pairs")
     return pairs
 
+
 def prepare_dataset(dataset_id: int, dataset_name: str, pairs: List[Tuple[Path, Path]], 
                    nnunet_raw: Path, start_case: int = 0, copy_files: bool = True):
     """Create nnUNet DatasetXXX folder. Copy files to avoid symlink issues."""
@@ -199,7 +203,7 @@ def prepare_dataset(dataset_id: int, dataset_name: str, pairs: List[Tuple[Path, 
     print(f"✅ Prepared Dataset{ds_id_str}_{dataset_name} with {len(pairs)} cases")
     return len(pairs)
 
-
+# Remove to see, if a better machine can handle it.
 def filter_by_size(pairs: List[Tuple[Path, Path]], max_slices: int = 600) -> List[Tuple[Path, Path]]:
     """Skip giant volumes >600 slices"""
     filtered = []
@@ -219,6 +223,7 @@ def filter_by_size(pairs: List[Tuple[Path, Path]], max_slices: int = 600) -> Lis
     print(f"✅ Filtered {len(filtered)} cases (skipped {skipped} giants)")
     return filtered
 
+
 def run_command(cmd: List[str], description: str):
     """Run nnUNet command with full error output."""
     print(f"\n🚀 {description}")
@@ -237,6 +242,7 @@ def run_command(cmd: List[str], description: str):
         print("\n💡 Try running manually: cd /work/Bachelor\\ Thesis &&", ' '.join(cmd))
         raise
 
+# Remove if both datasets can fully load.
 def balance_datasets(lits_pairs: List[Tuple[Path, Path]], maisi_pairs: List[Tuple[Path, Path]], 
                     target_n: int = 55, seed: int = 42) -> List[Tuple[Path, Path]]:
     """Select exactly target_n from each dataset with fixed seed for reproducibility."""
@@ -255,7 +261,7 @@ def balance_datasets(lits_pairs: List[Tuple[Path, Path]], maisi_pairs: List[Tupl
     balanced_maisi = [maisi_pairs[i] for i in maisi_sample]
     
     # ✅ LOG SELECTED MAISI CASES with original names
-    print(f"\n📋 SELECTED MAISI CASES (indices in original list):")
+    print("\n📋 SELECTED MAISI CASES (indices in original list):")
     for idx, orig_idx in enumerate(maisi_sample):
         case_name = maisi_pairs[orig_idx][0].stem  # e.g. "maisi_001_0000"
         print(f"  MAISI[{orig_idx:3d}] → case_{idx+55:03d}: {case_name}")
