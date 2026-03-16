@@ -1,0 +1,88 @@
+\documentclass[12pt,longbibliography]{article}
+
+% Essential packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper, margin=2.7cm]{geometry}
+\usepackage{amsmath, amsthm, amsfonts, amssymb}
+\usepackage{mathrsfs}  % For script fonts like \mathscr
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue,breaklinks]{hyperref}
+\usepackage{breakurl}
+\usepackage{natbib}
+\bibliographystyle{plainnat}  % Or plain for simpler style
+
+% Math shortcuts (common in ML/research papers)
+\newcommand{\abs}[1]{\left\vert#1\right\vert}
+\newcommand{\norm}[1]{\left\Vert#1\right\Vert}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\N}{\mathbb{N}}
+\DeclareMathOperator{\argmin}{arg\,min}
+\DeclareMathOperator{\E}{E}
+
+% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Title block
+\title{Your Paper Title}
+\author{Your Name \\ 
+Institution/Affiliation \\
+\texttt{email@example.com}}
+\date{\today}  % Or specify date
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Your abstract here (150-250 words). Summarize motivation, methods, results, and conclusions.
+\end{abstract}
+
+\section{Introduction}
+Introduce the problem, motivation, contributions, and paper structure. [web:1][web:3]
+
+\section{Related Work}
+Discuss prior art. Use \citet{key} for author-year or \citep{key} for numeric citations.
+
+\section{Methods}
+Describe your approach, e.g., nnU-Net setup or model architecture.
+
+\begin{theorem}
+This is a sample theorem.
+\end{theorem}
+\begin{proof}
+Proof content here.
+\end{proof}
+
+\section{Experiments}
+Include tables/figures.
+
+% Example table for results comparison
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\hline
+Method & Dice & HD95 & Time (h) \\
+\hline
+nnU-Net & 0.85 & 12.3 & 4.2 \\
+Baseline & 0.78 & 18.5 & 6.1 \\
+\hline
+\end{tabular}
+\caption{Performance on your dataset.}
+\label{tab:results}
+\end{table}
+
+\section{Conclusion}
+Wrap up and suggest future work.
+
+% Bibliography (create bibliography.bib and run bibtex paper)
+\bibliography{bibliography}
+
+\end{document}
