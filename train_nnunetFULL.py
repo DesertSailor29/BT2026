@@ -330,8 +330,12 @@ def main():
     maisi_pairs_full = find_maisi_pairs(MAISI_IMAGES, MAISI_LABELS)
     mixed_pairs = lits_pairs_full + maisi_pairs_full  # ← Just concatenate!
 
+    bad_cases = validate_nifti_files(mixed_pairs, "LiTSMaisiFullMixed")
+    if bad_cases:
+        print(f"🗑️  Removing {len(bad_cases)} bad cases before dataset prep...")
+        mixed_pairs = [p for i, p in enumerate(mixed_pairs) if i not in bad_cases]
+        print(f"✅ {len(mixed_pairs)} good cases remaining")
     prepare_dataset(FULL_MIXED_DATASET_ID, FULL_MIXED_DATASET_NAME, mixed_pairs, dirs["raw"], copy_files=True)
-    validate_nifti_files(mixed_pairs, "LiTSMaisiFullMixed")
 
     # 5. Preprocess Dataset004
     print("\n🚀 5. Preprocessing Dataset004_LiTSMaisiFullMixed ...")
