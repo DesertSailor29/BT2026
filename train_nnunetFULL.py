@@ -21,6 +21,9 @@ COMBINED_DATASET_ID = 2
 COMBINED_DATASET_NAME = "LiTSMaisiCombined"
 LITS_FULL_DATASET_ID = 3
 LITS_FULL_DATASET_NAME = "LiTS_Full"
+FULL_MIXED_DATASET_ID = 4
+FULL_MIXED_DATASET_NAME = "LiTSMaisiFullMixed"
+
 
 CONFIG = "3d_fullres"
 TRAINER = "nnUNetTrainer"
@@ -294,7 +297,7 @@ def main():
     os.environ['nnUNet_compile'] = 'F'
 
     dirs = setup_nnunet_dirs(BASE_DIR)
-
+    """
     # 1. LiTS FULL dataset (Dataset003)
     print("\n📁 1. Preparing Dataset003_LiTS_Full (all valid cases)...")
     lits_pairs = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
@@ -319,6 +322,32 @@ def main():
 
     print("\n🎉 COMPLETE!")
     print(f"LiTS_Full model: {dirs['results']}/Dataset003_LiTS_Full/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
+    """
+
+    # 4. FULL MIXED dataset (Dataset004)  
+    print("\n📁 4. Preparing Dataset004_LiTSMaisiFullMixed (ALL cases)...")
+    lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
+    maisi_pairs_full = find_maisi_pairs(MAISI_IMAGES, MAISI_LABELS)
+    mixed_pairs = lits_pairs_full + maisi_pairs_full  # ← Just concatenate!
+
+    prepare_dataset(FULL_MIXED_DATASET_ID, FULL_MIXED_DATASET_NAME, mixed_pairs, dirs["raw"], copy_files=True)
+    validate_nifti_files(mixed_pairs, "LiTSMaisiFullMixed")
+
+    # 5. Preprocess Dataset004
+    print("\n🚀 5. Preprocessing Dataset004_LiTSMaisiFullMixed ...")
+    run_command([
+        "nnUNetv2_plan_and_preprocess", "-d", "4", 
+        "-np", "1",
+    ], "Preprocess Dataset004_LiTSMaisiFullMixed")
+
+    # 6. Train Dataset004 (fold 0)
+    print("\n🎓 6. Training Dataset004_LiTSMaisiFullMixed model...")
+    run_command([
+        "nnUNetv2_train", "4", CONFIG, FOLDS[0],
+    ], "Train Dataset004_LiTSMaisiFullMixed fold 0")
+
+    print("\n🎉 COMPLETE!")
+    print(f"FullMixed model: {dirs['results']}/Dataset004_LiTSMaisiFullMixed/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
 
 
 if __name__ == "__main__":
