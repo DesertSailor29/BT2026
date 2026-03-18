@@ -23,6 +23,8 @@ LITS_FULL_DATASET_ID = 3
 LITS_FULL_DATASET_NAME = "LiTS_Full"
 FULL_MIXED_DATASET_ID = 4
 FULL_MIXED_DATASET_NAME = "LiTSMaisiFullMixed"
+MIXED_DATASET_100_50_ID = 5
+MIXED_DATASET_100_50_NAME = "LiTSMaisi100_50"
 
 
 CONFIG = "3d_fullres"
@@ -247,43 +249,44 @@ def run_command(cmd: List[str], description: str):
         print("\n💡 Try running manually: cd /work/Bachelor\\ Thesis &&", ' '.join(cmd))
         raise
 
-# Remove if both datasets can fully load.
 def balance_datasets(lits_pairs: List[Tuple[Path, Path]], maisi_pairs: List[Tuple[Path, Path]], 
-                    target_n: int = 55, seed: int = 42) -> List[Tuple[Path, Path]]:
-    """Select exactly target_n from each dataset with fixed seed for reproducibility."""
+                    target_n: int = 0, seed: int = 42) -> List[Tuple[Path, Path]]:
+    """Select target_n MAISI + ALL LiTS with fixed seed."""
     np.random.seed(seed)
     
-    print(f"\n  Balancing: {len(lits_pairs)} LiTS + {len(maisi_pairs)} MAISI → {target_n}+{target_n}")
+    # Use ALL LiTS (100%)
+    n_lits = len(lits_pairs)
     
-    # Sample 55 from each (or all if fewer available)
-    n_lits = min(target_n, len(lits_pairs))
+    # target_n=0 → 50% MAISI, else use target_n
+    if target_n == 0:
+        target_n = int(len(maisi_pairs) * 0.5)
     n_maisi = min(target_n, len(maisi_pairs))
     
-    lits_sample = np.random.choice(len(lits_pairs), n_lits, replace=False)
-    maisi_sample = np.random.choice(len(maisi_pairs), n_maisi, replace=False)
+    print(f"\n  Balancing: {n_lits} LiTS (100%) + {n_maisi}/{len(maisi_pairs)} MAISI ({n_maisi/len(maisi_pairs)*100:.0f}%)")
     
-    balanced_lits = [lits_pairs[i] for i in lits_sample]
+    # ALL LiTS + random MAISI subset
+    maisi_sample = np.random.choice(len(maisi_pairs), n_maisi, replace=False)
+    balanced_lits = lits_pairs  # 100% LiTS
     balanced_maisi = [maisi_pairs[i] for i in maisi_sample]
     
-    # ✅ LOG SELECTED MAISI CASES with original names
+    # Log selected MAISI cases
     print("\n📋 SELECTED MAISI CASES (indices in original list):")
     for idx, orig_idx in enumerate(maisi_sample):
-        case_name = maisi_pairs[orig_idx][0].stem  # e.g. "maisi_001_0000"
-        print(f"  MAISI[{orig_idx:3d}] → case_{idx+55:03d}: {case_name}")
+        case_name = maisi_pairs[orig_idx][0].stem
+        print(f"  MAISI[{orig_idx:3d}] → case_{n_lits+idx:03d}: {case_name}")
     
-    print(f"\n✅ Selected {len(balanced_lits)} LiTS + {len(balanced_maisi)} MAISI cases (seed={seed})")
+    print(f"\n✅ {len(balanced_lits)} LiTS + {len(balanced_maisi)} MAISI = {len(balanced_lits)+len(balanced_maisi)} total (seed={seed})")
     
-    # Also save to file for permanent record
-    with open("selected_maisi_cases.txt", "w") as f:
-        f.write(f"MAISI cases selected for Dataset002_LiTSMaisiCombined (seed={seed}):\n")
-        f.write(f"Original indices: {sorted(maisi_sample.tolist())}\n\n")
-        f.write("Mapping (original → nnU-Net case ID):\n")
-        for idx, orig_idx in enumerate(maisi_sample):
-            case_name = maisi_pairs[orig_idx][0].stem
-            f.write(f"  MAISI[{orig_idx:3d}] → case_{idx+55:03d}: {case_name}\n")
+    # Save selection
+    with open("selected_maisi_50pct.txt", "w") as f:
+        f.write(f"MAISI subset for Dataset004 (seed={seed}):\n")
+        f.write(f"LiTS: {len(balanced_lits)} (100%)\n")
+        f.write(f"MAISI: {len(balanced_maisi)}/{len(maisi_pairs)} ({len(balanced_maisi)/len(maisi_pairs)*100:.1f}%)\n\n")
+        f.write("MAISI indices: " + str(sorted(maisi_sample.tolist())) + "\n")
     
-    print("💾 Case selection saved to: selected_maisi_cases.txt")
+    print("💾 Selection saved: selected_maisi_50pct.txt")
     return balanced_lits + balanced_maisi
+
 
 
 def main():
@@ -324,6 +327,7 @@ def main():
     print(f"LiTS_Full model: {dirs['results']}/Dataset003_LiTS_Full/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
     """
 
+    """
     # 4. FULL MIXED dataset (Dataset004)  
     print("\n📁 4. Preparing Dataset004_LiTSMaisiFullMixed (ALL cases)...")
     lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
@@ -352,7 +356,37 @@ def main():
 
     print("\n🎉 COMPLETE!")
     print(f"FullMixed model: {dirs['results']}/Dataset004_LiTSMaisiFullMixed/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
+    """
 
+    # 5. MIXED dataset (Dataset005) with 100% LiTS + 50% MAISI  
+    print("\n📁 5. Preparing Dataset005_LiTSMaisi100_50 (ALL cases)...")
+    lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
+    maisi_pairs_full = find_maisi_pairs(MAISI_IMAGES, MAISI_LABELS)
+    mixed_pairs = lits_pairs_full + maisi_pairs_full  # ← Just concatenate!
+
+    mixed_pairs = balance_datasets(lits_pairs_full, maisi_pairs_full, target_n=0, seed=42)
+    bad_cases = validate_nifti_files(mixed_pairs, "LiTSMaisi100_50")
+    if bad_cases:
+        print(f"🗑️  Removing {len(bad_cases)} bad cases before dataset prep...")
+        mixed_pairs = [p for i, p in enumerate(mixed_pairs) if i not in bad_cases]
+        print(f"✅ {len(mixed_pairs)} good cases remaining")
+    prepare_dataset(MIXED_DATASET_100_50_ID, MIXED_DATASET_100_50_NAME, mixed_pairs, dirs["raw"], copy_files=True)
+
+    # 5. Preprocess Dataset005
+    print("\n🚀 5. Preprocessing Dataset005_LiTSMaisi100_50 ...")
+    run_command([
+        "nnUNetv2_plan_and_preprocess", "-d", "5", 
+        "-np", "1",
+    ], "Preprocess Dataset005_LiTSMaisi100_50")
+
+    # 6. Train Dataset005 (fold 0)
+    print("\n🎓 6. Training Dataset005_LiTSMaisi100_50 model...")
+    run_command([
+        "nnUNetv2_train", "5", CONFIG, FOLDS[0],
+    ], "Train Dataset005_LiTSMaisi100_50 fold 0")
+
+    print("\n🎉 COMPLETE!")
+    print(f"100_50 model: {dirs['results']}/Dataset005_LiTSMaisi100_50/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
 
 if __name__ == "__main__":
     main()
