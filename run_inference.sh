@@ -1,5 +1,13 @@
 #!/bin/bash
 
+
+# === ENVIRONMENT SETUP ===
+export nnUNet_raw="Predictions/nnUNet_raw"
+export nnUNet_preprocessed="Predictions/nnUNet_preprocessed" 
+export nnUNet_results="./nnUNet_results"
+
+mkdir -p "$nnUNet_raw" "$nnUNet_preprocessed"
+
 # === CONFIG ===
 INPUT_DIR="./LiTS/imagesTs"
 OUTPUT_ROOT="./Predictions"
@@ -41,10 +49,10 @@ for DATASET in "${DATASETS[@]}"; do
         -o "$OUTPUT_DIR" \
         -d "$DATASET" \
         -c 3d_fullres \
-        -f all \
+        -f 0 \
         -chk checkpoint_best.pth \
         --save_probabilities \
-        -np 1  # adjust to your GPU count
+        -npp 1 -nps 1
         
     echo "✅ Done: $DATASET -> $OUTPUT_DIR"
     echo ""
