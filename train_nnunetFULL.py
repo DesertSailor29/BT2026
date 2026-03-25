@@ -27,6 +27,8 @@ MIXED_DATASET_100_50_ID = 5
 MIXED_DATASET_100_50_NAME = "LiTSMaisi100_50"
 MIXED_DATASET_100_80_ID = 6
 MIXED_DATASET_100_80_NAME = "LiTSMaisi100_80"
+MIXED_DATASET_100_30_ID = 7
+MIXED_DATASET_100_30_NAME = "LiTSMaisi100_30"
 
 
 CONFIG = "3d_fullres"
@@ -389,8 +391,8 @@ def main():
     print("\n🎉 COMPLETE!")
     print(f"100_50 model: {dirs['results']}/Dataset005_LiTSMaisi100_50/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0")
     """
-    
-        # 6. MIXED dataset (Dataset006) with 100% LiTS + 80% MAISI
+    """
+    # 6. MIXED dataset (Dataset006) with 100% LiTS + 80% MAISI
     print("\n📁 6. Preparing Dataset006_LiTSMaisi100_80 (100% LiTS + 80% MAISI)...")
     lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
     maisi_pairs_full = find_maisi_pairs(MAISI_IMAGES, MAISI_LABELS)
@@ -436,6 +438,7 @@ def main():
         ],
         "Preprocess Dataset006_LiTSMaisi100_80",
     )
+    """
 
     # Train Dataset006 (fold 0)
     print("\n🎓 6. Training Dataset006_LiTSMaisi100_80 model...")
@@ -453,6 +456,71 @@ def main():
     print(
         f"100_80 model: "
         f"{dirs['results']}/Dataset006_{MIXED_DATASET_100_80_NAME}/"
+        f"{TRAINER}__nnUNetPlans__{CONFIG}/fold_0")
+
+    # 7. MIXED dataset (Dataset007) with 100% LiTS + 30% MAISI
+    print("\n📁 7. Preparing Dataset007_LiTSMaisi100_30 (100% LiTS + 30% MAISI)...")
+    lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
+    maisi_pairs_full = find_maisi_pairs(MAISI_IMAGES, MAISI_LABELS)
+
+    # Compute how many MAISI cases correspond to 30%
+    target_maisi_30 = int(len(maisi_pairs_full) * 0.3)
+
+    # Reuse balance_datasets: ALL LiTS + target_maisi_30 MAISI (seeded)
+    mixed_pairs_100_30 = balance_datasets(
+        lits_pairs_full,
+        maisi_pairs_full,
+        target_n=target_maisi_30,
+        seed=42,
+    )
+
+    # Validate and drop bad cases
+    bad_cases = validate_nifti_files(mixed_pairs_100_30, MIXED_DATASET_100_30_NAME)
+    if bad_cases:
+        print(f"🗑️  Removing {len(bad_cases)} bad cases before dataset prep (100_30)...")
+        mixed_pairs_100_30 = [
+            p for i, p in enumerate(mixed_pairs_100_30) if i not in bad_cases
+        ]
+        print(f"✅ {len(mixed_pairs_100_30)} good cases remaining for 100_30")
+
+    # Prepare Dataset007
+    prepare_dataset(
+        MIXED_DATASET_100_30_ID,
+        MIXED_DATASET_100_30_NAME,
+        mixed_pairs_100_30,
+        dirs["raw"],
+        copy_files=True,
+    )
+
+    # Preprocess Dataset007
+    print("\n🚀 7. Preprocessing Dataset007_LiTSMaisi100_30 ...")
+    run_command(
+        [
+            "nnUNetv2_plan_and_preprocess",
+            "-d",
+            str(MIXED_DATASET_100_30_ID),
+            "-np",
+            "4",  # or "4" if RAM allows
+        ],
+        "Preprocess Dataset007_LiTSMaisi100_30",
+    )
+
+    # Train Dataset007 (fold 0)
+    print("\n🎓 7. Training Dataset007_LiTSMaisi100_30 model...")
+    run_command(
+        [
+            "nnUNetv2_train",
+            str(MIXED_DATASET_100_30_ID),
+            CONFIG,
+            FOLDS[0],
+        ],
+        "Train Dataset007_LiTSMaisi100_30 fold 0",
+    )
+
+    print("\n🎉 COMPLETE!")
+    print(
+        f"100_30 model: "
+        f"{dirs['results']}/Dataset007_{MIXED_DATASET_100_30_NAME}/"
         f"{TRAINER}__nnUNetPlans__{CONFIG}/fold_0"
     )
 

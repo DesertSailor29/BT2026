@@ -15,10 +15,12 @@ NNUNET_RESULTS_PATH="./nnUNet_results"  # CHANGE THIS to your full path if neede
 
 # List ALL your dataset IDs here (add more as needed):
 DATASETS=(
-    "Dataset001_LiTS"
-    "Dataset002_LiTSMaisiCombined"
-    "Dataset003_LiTS_Full"
-    "Dataset004_LiTSMaisiFullMixed"
+    #"Dataset001_LiTS"
+    #"Dataset002_LiTSMaisiCombined"
+    #"Dataset003_LiTS_Full"
+    #"Dataset004_LiTSMaisiFullMixed"
+    "Dataset005_LiTSMaisi100_50"
+    "Dataset006_LiTSMaisi100_80"
 )
 
 echo "Running inference for ${#DATASETS[@]} datasets on $INPUT_DIR"
@@ -51,7 +53,6 @@ for DATASET in "${DATASETS[@]}"; do
         -c 3d_fullres \
         -f 0 \
         -chk checkpoint_best.pth \
-        --save_probabilities \
         -npp 1 -nps 1
         
     echo "✅ Done: $DATASET -> $OUTPUT_DIR"
