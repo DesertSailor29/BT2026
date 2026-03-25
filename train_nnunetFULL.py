@@ -456,7 +456,8 @@ def main():
     print(
         f"100_80 model: "
         f"{dirs['results']}/Dataset006_{MIXED_DATASET_100_80_NAME}/"
-        f"{TRAINER}__nnUNetPlans__{CONFIG}/fold_0")
+        f"{TRAINER}__nnUNetPlans__{CONFIG}/fold_0"
+)
 
     # 7. MIXED dataset (Dataset007) with 100% LiTS + 30% MAISI
     print("\n📁 7. Preparing Dataset007_LiTSMaisi100_30 (100% LiTS + 30% MAISI)...")
