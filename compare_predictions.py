@@ -11,6 +11,13 @@ import SimpleITK as sitk
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import seaborn as sns
+from plotly.subplots import make_subplots
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
+import json
+
+
 
 GT_DIR = Path("./LiTS/labelsTs")
 CT_DIR = Path("./LiTS/imagesTs")
@@ -61,7 +68,6 @@ def compute_dice(pred, gt, label):
 def load_binary_image(img, label):
     return sitk.Cast(img == label, sitk.sitkUInt8)
 
-
 def surface_distances_mm(pred_img, gt_img, label):
     pred_bin = load_binary_image(pred_img, label)
     gt_bin = load_binary_image(gt_img, label)
@@ -70,22 +76,27 @@ def surface_distances_mm(pred_img, gt_img, label):
     pred_bin = sitk.ConstantPad(pred_bin, [1] * dim, [1] * dim)
     gt_bin = sitk.ConstantPad(gt_bin, [1] * dim, [1] * dim)
 
-    pred_surf = sitk.LabelContour(pred_bin)
-    gt_surf = sitk.LabelContour(gt_bin)
+    pred_surface = sitk.LabelContour(pred_bin)
+    gt_surface = sitk.LabelContour(gt_bin)
 
-    pred_distmap = sitk.Abs(
-        sitk.SignedMaurerDistanceMap(pred_surf, squaredDistance=False, useImageSpacing=True)
+    pred_distance_map = sitk.Abs(
+        sitk.SignedMaurerDistanceMap(pred_surface, squaredDistance=False, useImageSpacing=True)
     )
-    gt_distmap = sitk.Abs(
-        sitk.SignedMaurerDistanceMap(gt_surf, squaredDistance=False, useImageSpacing=True)
+    gt_distance_map = sitk.Abs(
+        sitk.SignedMaurerDistanceMap(gt_surface, squaredDistance=False, useImageSpacing=True)
     )
 
-    gt_to_pred = sitk.GetArrayViewFromImage(pred_distmap * sitk.Cast(gt_surf, sitk.sitkFloat32))
-    pred_to_gt = sitk.GetArrayViewFromImage(gt_distmap * sitk.Cast(pred_surf, sitk.sitkFloat32))
+    pred_surface_arr = sitk.GetArrayViewFromImage(pred_surface).astype(bool)
+    gt_surface_arr = sitk.GetArrayViewFromImage(gt_surface).astype(bool)
 
-    d1 = gt_to_pred[gt_to_pred > 0]
-    d2 = pred_to_gt[pred_to_gt > 0]
-    return np.concatenate([d1, d2]) if (len(d1) or len(d2)) else np.array([])
+    pred_to_gt = sitk.GetArrayViewFromImage(gt_distance_map)[pred_surface_arr]
+    gt_to_pred = sitk.GetArrayViewFromImage(pred_distance_map)[gt_surface_arr]
+
+    if pred_to_gt.size == 0 and gt_to_pred.size == 0:
+        return np.array([])
+
+    return np.concatenate([pred_to_gt, gt_to_pred])
+
 
 
 def compute_hd_and_hd95(pred_img, gt_img, label):
@@ -95,9 +106,9 @@ def compute_hd_and_hd95(pred_img, gt_img, label):
     return float(np.max(dists)), float(np.percentile(dists, 95))
 
 
+
 def save_case_comparison(case_id, info):
     gt_path = info["gt_path"]
-    ct_path = info["ct_path"]
     slice_idx = info["slice_idx"]
     models = info["models"]
 
@@ -105,6 +116,7 @@ def save_case_comparison(case_id, info):
     gt = sitk.GetArrayFromImage(gt_img)
 
     ct = None
+    ct_path = info.get("ct_path")
     if ct_path and ct_path.exists():
         ct_img = sitk.ReadImage(str(ct_path))
         ct = sitk.GetArrayFromImage(ct_img)
@@ -124,11 +136,13 @@ def save_case_comparison(case_id, info):
     max_valid_slice = gt.shape[0] - 1
     if ct is not None:
         max_valid_slice = min(max_valid_slice, ct.shape[0] - 1)
+
     for m in models.values():
         pred_img = sitk.ReadImage(str(m["pred_path"]))
         pred = sitk.GetArrayFromImage(pred_img)
         min_shape = np.minimum(gt.shape, pred.shape)
         max_valid_slice = min(max_valid_slice, min_shape[0] - 1)
+
     slice_idx = int(max(0, min(slice_idx, max_valid_slice)))
 
     fig.suptitle(f"{case_id} - axial slice {slice_idx}", fontsize=14)
@@ -155,6 +169,7 @@ def save_case_comparison(case_id, info):
             ax.imshow(pred[slice_idx], cmap=cmap, alpha=0.4, vmin=0, vmax=2)
         else:
             ax.imshow(pred[slice_idx], cmap=cmap, vmin=0, vmax=2)
+
 
         ax.set_title(f"{model_name}\nDice={m['dice_avg']:.3f}, HD95={m['hd95_avg']:.1f}")
         ax.axis("off")
@@ -189,7 +204,7 @@ def save_summary_plots(df):
     plt.close()
 
 
-def process_pair(gt_path, pred_path, ct_path, case_id, model):
+def process_pair(gt_path, pred_path, case_id, model):
     gt_img = sitk.ReadImage(str(gt_path))
     pred_img = sitk.ReadImage(str(pred_path))
 
@@ -201,10 +216,6 @@ def process_pair(gt_path, pred_path, ct_path, case_id, model):
         min_shape = np.minimum(gt.shape, pred.shape)
         gt = gt[:min_shape[0], :min_shape[1], :min_shape[2]]
         pred = pred[:min_shape[0], :min_shape[1], :min_shape[2]]
-        gt_img = sitk.GetImageFromArray(gt)
-        pred_img = sitk.GetImageFromArray(pred)
-        gt_img.CopyInformation(sitk.ReadImage(str(gt_path)))
-        pred_img.CopyInformation(sitk.ReadImage(str(pred_path)))
 
     slice_idx = find_max_tumor_slice(gt)
 
@@ -221,6 +232,155 @@ def process_pair(gt_path, pred_path, ct_path, case_id, model):
     metrics["hd95_avg"] = np.nanmean([metrics["hd95_liver"], metrics["hd95_tumor"]])
     metrics["slice_idx"] = slice_idx
     return metrics
+
+def save_separate_label_plots(df):
+    out_dir = FIG_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def save_meta(path, caption, description):
+        with open(str(path) + ".meta.json", "w") as f:
+            json.dump({"caption": caption, "description": description}, f)
+
+    order = (
+        df.groupby("model")["dice_avg"].mean().sort_values(ascending=False).index.tolist()
+        if "dice_avg" in df.columns else sorted(df["model"].unique())
+    )
+
+    long_dice = df.melt(
+        id_vars=["model", "case_id"],
+        value_vars=["dice_liver", "dice_tumor"],
+        var_name="label",
+        value_name="dice",
+    )
+    long_dice["label"] = long_dice["label"].map({"dice_liver": "Liver", "dice_tumor": "Tumor"})
+
+    fig1 = px.box(
+        long_dice,
+        x="model",
+        y="dice",
+        color="label",
+        points="all",
+        category_orders={"model": order},
+    )
+    fig1.update_layout(
+        title={
+            "text": "Dice by label across models (LiTS)<br><span style='font-size: 18px; font-weight: normal;'>Source: liver_tumor_metrics.csv | separate liver vs tumor Dice</span>"
+        }
+    )
+    fig1.update_xaxes(title_text="Model")
+    fig1.update_yaxes(title_text="Dice")
+    fig1.update_traces(cliponaxis=False)
+    fig1.write_image(str(out_dir / "dice_separate.png"))
+    save_meta(out_dir / "dice_separate.png", "Dice by label across models", "Boxplot of liver and tumor Dice scores for each model.")
+
+    long_hd = df.melt(
+        id_vars=["model", "case_id"],
+        value_vars=["hd95_liver", "hd95_tumor"],
+        var_name="label",
+        value_name="hd95",
+    )
+    long_hd["label"] = long_hd["label"].map({"hd95_liver": "Liver", "hd95_tumor": "Tumor"})
+
+    fig2 = px.box(
+        long_hd,
+        x="model",
+        y="hd95",
+        color="label",
+        points="all",
+        category_orders={"model": order},
+    )
+    fig2.update_layout(
+        title={
+            "text": "HD95 by label across models (LiTS)<br><span style='font-size: 18px; font-weight: normal;'>Source: liver_tumor_metrics.csv | separate liver vs tumor HD95</span>"
+        }
+    )
+    fig2.update_xaxes(title_text="Model")
+    fig2.update_yaxes(title_text="HD95")
+    fig2.update_traces(cliponaxis=False)
+    fig2.write_image(str(out_dir / "hd95_separate.png"))
+    save_meta(out_dir / "hd95_separate.png", "HD95 by label across models", "Boxplot of liver and tumor HD95 values for each model.")
+
+    model_order = order
+    case_order = sorted(df["case_id"].unique())
+
+    pivot_liver_d = df.pivot(index="model", columns="case_id", values="dice_liver").reindex(model_order)
+    pivot_tumor_d = df.pivot(index="model", columns="case_id", values="dice_tumor").reindex(model_order)
+
+    fig3 = make_subplots(rows=1, cols=2, subplot_titles=("Liver Dice", "Tumor Dice"), horizontal_spacing=0.08)
+    fig3.add_trace(
+        go.Heatmap(
+            z=pivot_liver_d.values,
+            x=[str(x) for x in pivot_liver_d.columns],
+            y=[str(y) for y in pivot_liver_d.index],
+            colorscale="RdYlGn",
+            zmin=0,
+            zmax=1,
+            colorbar=dict(title="Dice"),
+        ),
+        row=1,
+        col=1,
+    )
+    fig3.add_trace(
+        go.Heatmap(
+            z=pivot_tumor_d.values,
+            x=[str(x) for x in pivot_tumor_d.columns],
+            y=[str(y) for y in pivot_tumor_d.index],
+            colorscale="RdYlGn",
+            zmin=0,
+            zmax=1,
+            showscale=False,
+        ),
+        row=1,
+        col=2,
+    )
+    fig3.update_layout(
+        title={
+            "text": "Dice heatmaps by label across models (LiTS)<br><span style='font-size: 18px; font-weight: normal;'>Source: liver_tumor_metrics.csv | case-wise liver vs tumor Dice</span>"
+        }
+    )
+    fig3.update_xaxes(title_text="Case")
+    fig3.update_yaxes(title_text="Model")
+    fig3.write_image(str(out_dir / "dice_heatmaps.png"))
+    save_meta(out_dir / "dice_heatmaps.png", "Dice heatmaps by label", "Side-by-side heatmaps for liver and tumor Dice across cases and models.")
+
+    pivot_liver_h = df.pivot(index="model", columns="case_id", values="hd95_liver").reindex(model_order)
+    pivot_tumor_h = df.pivot(index="model", columns="case_id", values="hd95_tumor").reindex(model_order)
+
+    fig4 = make_subplots(rows=1, cols=2, subplot_titles=("Liver HD95", "Tumor HD95"), horizontal_spacing=0.08)
+    fig4.add_trace(
+        go.Heatmap(
+            z=pivot_liver_h.values,
+            x=[str(x) for x in pivot_liver_h.columns],
+            y=[str(y) for y in pivot_liver_h.index],
+            colorscale="Reds",
+            colorbar=dict(title="HD95"),
+        ),
+        row=1,
+        col=1,
+    )
+    fig4.add_trace(
+        go.Heatmap(
+            z=pivot_tumor_h.values,
+            x=[str(x) for x in pivot_tumor_h.columns],
+            y=[str(y) for y in pivot_tumor_h.index],
+            colorscale="Reds",
+            showscale=False,
+        ),
+        row=1,
+        col=2,
+    )
+    fig4.update_layout(
+        title={
+            "text": "HD95 heatmaps by label across models (LiTS)<br><span style='font-size: 18px; font-weight: normal;'>Source: liver_tumor_metrics.csv | case-wise liver vs tumor HD95</span>"
+        }
+    )
+    fig4.update_xaxes(title_text="Case")
+    fig4.update_yaxes(title_text="Model")
+    fig4.write_image(str(out_dir / "hd95_heatmaps.png"))
+    save_meta(out_dir / "hd95_heatmaps.png", "HD95 heatmaps by label", "Side-by-side heatmaps for liver and tumor HD95 across cases and models.")
+
+    separate_chart_df = df[["model", "case_id", "dice_liver", "dice_tumor", "hd95_liver", "hd95_tumor"]].copy()
+    separate_chart_df.to_csv(out_dir / "separate_label_chart_data.csv", index=False)
 
 
 def main():
@@ -259,7 +419,7 @@ def main():
                 continue
 
             case_id = case_id_from_path(gt_file)
-            metrics = process_pair(gt_file, pred_file, ct_file, case_id, model_name)
+            metrics = process_pair(gt_file, pred_file, case_id, model_name)
             metrics["case_id"] = case_id
             metrics["model"] = model_name
             model_results.append(metrics)
@@ -300,6 +460,7 @@ def main():
         print(f"✅ Case figures saved to: {FIG_DIR}")
 
     save_summary_plots(df)
+    save_separate_label_plots(df)
     print("\n📊 Model Averages:")
     summary = df.groupby("model")[["dice_avg", "hd95_avg"]].mean()
     print(summary.round(4))
