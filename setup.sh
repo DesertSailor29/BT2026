@@ -16,7 +16,7 @@ export nnUNet_preprocessed="$BASE_DIR/nnUNet_preprocessed"
 export nnUNet_results="$BASE_DIR/nnUNet_results"
 
 # Upgrade system pip
-python3 -m pip install --user --upgrade pip setuptools wheel
+python3 -m pip install --upgrade pip setuptools wheel
 
 # Check CUDA version first
 echo "🔍 Checking GPU/CUDA..."
@@ -26,11 +26,11 @@ nvidia-smi
 python3 -c "import torch; print(f'PyTorch ready: {torch.__version__} CUDA: {torch.version.cuda} Available: {torch.cuda.is_available()}')"
 
 # Install EXACT matching packages from your original venv
-pip3 install --user \
+pip3 install \
   "torch==2.3.0+cu121" "torchvision==0.18.0+cu121" \
   --index-url https://download.pytorch.org/whl/cu121
 
-pip3 install --user \
+pip3 install \
   "nnunetv2==2.6.4" \
   "SimpleITK==2.5.3" "nibabel==5.4.2" "pandas==3.0.1" \
   "scikit-image==0.26.0" "scipy==1.17.1" "seaborn==0.13.2" \
