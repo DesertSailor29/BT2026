@@ -160,16 +160,19 @@ def save_case_comparison(case_id, info):
     for row_idx, (model_name, m) in enumerate(models.items(), start=1):
         pred_img = sitk.ReadImage(str(m["pred_path"]))
         pred = sitk.GetArrayFromImage(pred_img)
+
         min_shape = np.minimum(gt.shape, pred.shape)
         pred = pred[:min_shape[0], :min_shape[1], :min_shape[2]]
 
+        pred_max_slice = pred.shape[0] - 1
+        this_slice = int(max(0, min(slice_idx, pred_max_slice)))
+
         ax = axes[row_idx]
         if ct is not None:
-            ax.imshow(ct[slice_idx], cmap="gray", vmin=-200, vmax=300)
-            ax.imshow(pred[slice_idx], cmap=cmap, alpha=0.4, vmin=0, vmax=2)
+            ax.imshow(ct[this_slice], cmap="gray", vmin=-200, vmax=300)
+            ax.imshow(pred[this_slice], cmap=cmap, alpha=0.4, vmin=0, vmax=2)
         else:
-            ax.imshow(pred[slice_idx], cmap=cmap, vmin=0, vmax=2)
-
+            ax.imshow(pred[this_slice], cmap=cmap, vmin=0, vmax=2)
 
         ax.set_title(f"{model_name}\nDice={m['dice_avg']:.3f}, HD95={m['hd95_avg']:.1f}")
         ax.axis("off")
@@ -177,6 +180,7 @@ def save_case_comparison(case_id, info):
     plt.tight_layout()
     plt.savefig(FIG_DIR / f"{case_id}_all_models_slice{slice_idx}.png", dpi=200, bbox_inches="tight")
     plt.close()
+
 
 
 def save_summary_plots(df):
