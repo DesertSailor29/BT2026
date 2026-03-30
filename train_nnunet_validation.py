@@ -26,14 +26,17 @@ SHARED_VAL_SEED = 42
 LITS_TRAIN_ID = 3
 LITS_TRAIN_NAME = "LiTS_Train"
 
-MIXED_100_50_ID = 4
+MIXED_100_30_ID = 4
+MIXED_100_30_NAME = "LiTSMaisi100_30_Train"
+
+MIXED_100_50_ID = 5
 MIXED_100_50_NAME = "LiTSMaisi100_50_Train"
 
-MIXED_100_80_ID = 5
+MIXED_100_80_ID = 6
 MIXED_100_80_NAME = "LiTSMaisi100_80_Train"
 
-MIXED_100_30_ID = 6
-MIXED_100_30_NAME = "LiTSMaisi100_30_Train"
+FULL_MIXED_ID = 7
+FULL_MIXED_NAME = "LiTSMaisi100_100_Train"
 
 CONFIG = "3d_fullres"
 TRAINER = "nnUNetTrainer2000epochs"
@@ -563,22 +566,29 @@ def main() -> None:
             "name": LITS_TRAIN_NAME,
             "maisi_fraction": 0.0,
         },
-        {
-            "id": MIXED_100_50_ID,
-            "name": MIXED_100_50_NAME,
-            "maisi_fraction": 0.5,
-        },
-        {
-            "id": MIXED_100_80_ID,
-            "name": MIXED_100_80_NAME,
-            "maisi_fraction": 0.8,
-        },
-        {
-            "id": MIXED_100_30_ID,
-            "name": MIXED_100_30_NAME,
-            "maisi_fraction": 0.3,
-        },
     ]
+    """
+    {
+        "id": MIXED_100_30_ID,
+        "name": MIXED_100_30_NAME,
+        "maisi_fraction": 0.3,
+    },
+    {
+        "id": MIXED_100_50_ID,
+        "name": MIXED_100_50_NAME,
+        "maisi_fraction": 0.5,
+    },
+    {
+        "id": MIXED_100_80_ID,
+        "name": MIXED_100_80_NAME,
+        "maisi_fraction": 0.8,
+    },
+    {
+        "id": FULL_MIXED_ID,
+        "name": FULL_MIXED_NAME,
+        "maisi_fraction": 1.0,
+    },
+    """
 
     # -------- 4) Prepare, preprocess, and write manual split for each dataset --------
     for spec in dataset_specs:
@@ -631,10 +641,11 @@ def main() -> None:
     print("\n🎉 Finished successfully")
     print("Summary:")
     print("  Dataset003: LiTS only")
-    print("  Dataset004: LiTS + 50% MAISI")
-    print("  Dataset005: LiTS + 80% MAISI")
-    print("  Dataset006: LiTS + 30% MAISI")
-    print("  Shared validation: {len(lits_val_pairs)} LiTS cases across all datasets")
+    #print("  Dataset004: LiTS + 30% MAISI")
+    #print("  Dataset005: LiTS + 50% MAISI")
+    #print("  Dataset006: LiTS + 80% MAISI")
+    #print("  Dataset007: LiTS + 100% MAISI")
+    print(f"  Shared validation: {len(lits_val_pairs)} LiTS cases across all datasets")
 
 
 if __name__ == "__main__":
