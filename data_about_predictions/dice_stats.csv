@@ -1,8 +1,0 @@
-model,n_cases,mean_dice,median_dice,std_dice
-Dataset001_LiTS,40,0.7625,0.8366,0.1853
-Dataset002_LiTSMaisiCombined,40,0.7732,0.8392,0.1647
-Dataset003_LiTS_Full,40,0.8093,0.858,0.1438
-Dataset004_LiTSMaisiFullMixed,40,0.7792,0.8309,0.148
-Dataset005_LiTSMaisi100_50,40,0.7857,0.8175,0.152
-Dataset006_LiTSMaisi100_80,40,0.796,0.8426,0.1499
-Dataset007_LiTSMaisi100_30,40,0.8044,0.8608,0.1504
