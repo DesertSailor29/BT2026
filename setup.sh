@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e  # Exit on any error
 
-echo "🎯 Setting up nnUNet v2 environment (system-wide install)..."
+echo "🎯 Setting up nnUNet v2 environment (VENV - isolated)..."
 
 # Use current working directory
 BASE_DIR=$(pwd)
@@ -10,48 +10,46 @@ echo "📁 Working in: $BASE_DIR"
 # Create nnUNet standard dirs
 mkdir -p {nnUNet_raw,nnUNet_preprocessed,nnUNet_results}
 
-# Export nnUNet paths (nnUNet v2 expects these)
+# Export nnUNet paths
 export nnUNet_raw="$BASE_DIR/nnUNet_raw"
 export nnUNet_preprocessed="$BASE_DIR/nnUNet_preprocessed" 
 export nnUNet_results="$BASE_DIR/nnUNet_results"
 
-# Upgrade system pip
-python3 -m pip install --upgrade pip setuptools wheel
+# CREATE & ACTIVATE VENV
+python3 -m venv venv
+source venv/bin/activate
+echo "✅ venv: $(which python)"
 
-# Check CUDA version first
-echo "🔍 Checking GPU/CUDA..."
+# Upgrade pip
+pip install --upgrade pip setuptools wheel
+
+# Check CUDA
+echo "🔍 GPU/CUDA..."
 nvidia-smi
 
-# Verify PyTorch + CUDA before install
-python3 -c "import torch; print(f'PyTorch ready: {torch.__version__} CUDA: {torch.version.cuda} Available: {torch.cuda.is_available()}')"
-
-# Install EXACT matching packages from your original venv
-pip3 install \
-  "torch==2.3.0+cu121" "torchvision==0.18.0+cu121" \
+# Install PyTorch FIRST (exact versions, NO +cu121 suffix)
+pip install \
+  "torch==2.3.0" "torchvision==0.18.0" \
   --index-url https://download.pytorch.org/whl/cu121
 
-pip3 install \
+# Install nnU-Net + your script deps
+pip install \
   "nnunetv2==2.6.4" \
   "SimpleITK==2.5.3" "nibabel==5.4.2" "pandas==3.0.1" \
   "scikit-image==0.26.0" "scipy==1.17.1" "seaborn==0.13.2" \
   "matplotlib==3.10.8" "plotly==6.6.0" "kaleido==1.2.0"
 
-# Verify installation  
-nnUNetv2_print_all_installed_packages || echo "Note: print_all command may vary by version"
+# Verify installation
+nnUNetv2_print_all_installed_packages || echo "✓ nnU-Net ready"
 
 # Test imports
-python3 -c "
+python -c "
 import torch, nnunetv2, nibabel, SimpleITK, pandas, plotly
-print('✅ All core packages imported successfully!')
-print(f'GPU ready: {torch.cuda.is_available()}')
+print('✅ All packages OK!')
+print(f'PyTorch: {torch.__version__}')
+print(f'GPU: {torch.cuda.is_available()} ({torch.cuda.device_count()} GPUs)')
 "
 
 echo "✅ Setup complete!"
-echo ""
-echo "📁 Verify your LiTS/ and Maisi/ folders exist here:"
-ls -la LiTS/ Maisi/ 2>/dev/null || echo "📁 Copy LiTS/ Maisi/ folders here first"
-echo ""
-echo "🚀 Run: nohup python3 your_train_script.py > training_$(date +%Y%m%d_%H%M%S).log 2>&1 &"
-echo "📊 Monitor: tail -f training_*.log"
-echo "🖥️  Results: $BASE_DIR/nnUNet_results/"
-echo "💡 Tip: Add 'export nnUNet_*=...' to ~/.bashrc for persistence"
+echo "🚀 Run: source venv/bin/activate && python your_train_script.py"
+echo "📁 Results: $BASE_DIR/nnUNet_results/"
