@@ -43,7 +43,7 @@ TRAINER = "nnUNetTrainer2000epochs"
 FOLD = "0"
 
 # Safer defaults for 32 GB RAM host
-NUM_PROCESSES_PREPROCESS = 8
+NUM_PROCESSES_PREPROCESS = 2
 OMP_NUM_THREADS = 4
 NUM_GPUS = 2
 
@@ -562,32 +562,32 @@ def main() -> None:
     # -------- 3) Define all datasets --------
     dataset_specs = [
         {
+            "id": MIXED_100_30_ID,
+            "name": MIXED_100_30_NAME,
+            "maisi_fraction": 0.3,
+        },
+        {
+            "id": MIXED_100_50_ID,
+            "name": MIXED_100_50_NAME,
+            "maisi_fraction": 0.5,
+        },
+        {
+            "id": MIXED_100_80_ID,
+            "name": MIXED_100_80_NAME,
+            "maisi_fraction": 0.8,
+        },
+        {
+            "id": FULL_MIXED_ID,
+            "name": FULL_MIXED_NAME,
+            "maisi_fraction": 1.0,
+        },
+    ]
+    """
+        {
             "id": LITS_TRAIN_ID,
             "name": LITS_TRAIN_NAME,
             "maisi_fraction": 0.0,
         },
-    ]
-    """
-    {
-        "id": MIXED_100_30_ID,
-        "name": MIXED_100_30_NAME,
-        "maisi_fraction": 0.3,
-    },
-    {
-        "id": MIXED_100_50_ID,
-        "name": MIXED_100_50_NAME,
-        "maisi_fraction": 0.5,
-    },
-    {
-        "id": MIXED_100_80_ID,
-        "name": MIXED_100_80_NAME,
-        "maisi_fraction": 0.8,
-    },
-    {
-        "id": FULL_MIXED_ID,
-        "name": FULL_MIXED_NAME,
-        "maisi_fraction": 1.0,
-    },
     """
 
     # -------- 4) Prepare, preprocess, and write manual split for each dataset --------
@@ -625,6 +625,7 @@ def main() -> None:
         )
         print(f"✅ Selection report saved: {report_path}")
 
+    """
     # -------- 5) Train all datasets on fold 0 using the same shared LiTS validation --------
     print(f"\n{'='*80}")
     print("🎓 TRAINING")
@@ -646,6 +647,7 @@ def main() -> None:
     #print("  Dataset006: LiTS + 80% MAISI")
     #print("  Dataset007: LiTS + 100% MAISI")
     print(f"  Shared validation: {len(lits_val_pairs)} LiTS cases across all datasets")
+    """
 
 
 if __name__ == "__main__":
