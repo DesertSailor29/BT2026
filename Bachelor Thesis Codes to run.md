@@ -45,8 +45,8 @@ nohup bash -c "source venv/bin/activate && python train_nnunet.py" > training_MI
 tail -f training_MIXED_80_AND_30*.log
 ```
 
-CUDA_VISIBLE_DEVICES=0 nohup nnUNetv2_train 3 3d_fullres 0 -tr nnUNetTrainer_2000epochs > train_ds003_gpu0.log 2>&1 &
-
+nohup bash -c "source venv/bin/activate && CUDA_VISIBLE_DEVICES=0 nnUNetv2_train 3 3d_fullres 0 -tr nnUNetTrainer_2000epochs" > train_ds003_gpu0_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+tail -f train_ds003_gpu0_*.log
 
 
 # Inference
