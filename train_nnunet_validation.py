@@ -39,7 +39,7 @@ FULL_MIXED_ID = 7
 FULL_MIXED_NAME = "LiTSMaisi100_100_Train"
 
 CONFIG = "3d_fullres"
-TRAINER = "nnUNetTrainer2000epochs"
+TRAINER = "nnUNetTrainer_2000epochs"
 FOLD = "0"
 
 # Safer defaults for 32 GB RAM host
@@ -56,6 +56,24 @@ class PreparedCase(TypedDict):
     source: Literal["LiTS", "MAISI"]
     split_role: Literal["train", "val"]
 
+def check_planned_batch_size(dataset_id: int, dataset_name: str, nnunet_preprocessed: Path) -> int | None:
+    plans_file = nnunet_preprocessed / f"Dataset{dataset_id:03d}_{dataset_name}" / "nnUNetPlans.json"
+    if not plans_file.exists():
+        print(f"⚠️ Plans file not found: {plans_file}")
+        return None
+
+    with open(plans_file, "r", encoding="utf-8") as f:
+        plans = json.load(f)
+
+    try:
+        batch_size = plans["configurations"][CONFIG]["batch_size"]
+        print(f"✅ Planned global batch size for {CONFIG}: {batch_size}")
+        if NUM_GPUS > batch_size:
+            print(f"⚠️ NUM_GPUS={NUM_GPUS} but batch_size={batch_size}. DDP is a poor fit here.")
+        return int(batch_size)
+    except Exception as e:
+        print(f"⚠️ Could not read batch size from plans: {e}")
+        return None
 
 def setup_nnunet_dirs(base_dir: Path) -> Dict[str, Path]:
     """Create standard nnUNet directory structure and export env vars."""
@@ -92,51 +110,6 @@ def configure_runtime() -> None:
     print(f"   CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}")
     print(f"   OMP_NUM_THREADS={os.environ['OMP_NUM_THREADS']}")
     print(f"   nnUNet_compile={os.environ['nnUNet_compile']}")
-
-
-def install_custom_trainer() -> None:
-    """
-    Install a custom trainer into the actual nnUNet v2 trainer package path
-    so nnUNetv2_train can import it by name.
-    """
-    try:
-        import nnunetv2  # type: ignore
-    except ImportError as e:
-        raise RuntimeError(
-            "nnunetv2 is not importable in this Python environment. "
-            "Activate the correct environment before running this script."
-        ) from e
-
-    nnunet_file = nnunetv2.__file__
-    if nnunet_file is None:
-        raise RuntimeError("nnunetv2.__file__ is None; cannot locate nnUNet installation.")
-    nnunet_root = Path(nnunet_file).resolve().parent
-    trainer_dir = nnunet_root / "training" / "nnUNetTrainer"
-    trainer_dir.mkdir(parents=True, exist_ok=True)
-
-    trainer_file = trainer_dir / f"{TRAINER}.py"
-    trainer_code = '''import torch
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
-
-class nnUNetTrainer2000epochs(nnUNetTrainer):
-    def __init__(self, plans, configuration, fold, dataset_json, unpack_dataset=True, device=torch.device("cuda")):
-        super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
-        self.max_num_epochs = 2000
-        print("Loaded nnUNetTrainer2000epochs with max_num_epochs=2000")
-'''
-
-    trainer_file.write_text(trainer_code, encoding="utf-8")
-    print(f"✅ Custom trainer installed: {trainer_file}")
-
-    # Try a direct import check
-    module_name = f"nnunetv2.training.nnUNetTrainer.{TRAINER}"
-    try:
-        __import__(module_name, fromlist=[TRAINER])
-        print(f"✅ Trainer import check passed: {module_name}")
-    except Exception as e:
-        raise RuntimeError(
-            f"Custom trainer file was written, but import failed for {module_name}: {e}"
-        ) from e
 
 
 def create_shared_validation(lits_pairs: List[Pair]) -> List[Pair]:
@@ -533,7 +506,6 @@ def train_dataset(dataset_id: int) -> None:
 def main() -> None:
     configure_runtime()
     dirs = setup_nnunet_dirs(BASE_DIR)
-    install_custom_trainer()
 
     # -------- 1) Load and validate LiTS --------
     lits_pairs_full = find_lits_pairs(LITS_IMAGES, LITS_LABELS)
@@ -611,8 +583,9 @@ def main() -> None:
             maisi_pairs=maisi_subset,
         )
 
-        prepare_dataset(ds_id, ds_name, case_records, dirs["raw"], copy_files=True)
+        prepare_dataset(ds_id, ds_name, case_records, dirs["raw"], copy_files=False)
         preprocess_dataset(ds_id)
+        check_planned_batch_size(ds_id, ds_name, dirs["preprocessed"])
         write_manual_split(ds_id, ds_name, case_records, dirs["preprocessed"])
 
         report_path = BASE_DIR / f"dataset_{ds_id:03d}_selection_report.txt"
@@ -624,6 +597,8 @@ def main() -> None:
             maisi_pairs=maisi_subset,
         )
         print(f"✅ Selection report saved: {report_path}")
+
+        
 
     """
     # -------- 5) Train all datasets on fold 0 using the same shared LiTS validation --------
@@ -642,10 +617,10 @@ def main() -> None:
     print("\n🎉 Finished successfully")
     print("Summary:")
     print("  Dataset003: LiTS only")
-    #print("  Dataset004: LiTS + 30% MAISI")
-    #print("  Dataset005: LiTS + 50% MAISI")
-    #print("  Dataset006: LiTS + 80% MAISI")
-    #print("  Dataset007: LiTS + 100% MAISI")
+    print("  Dataset004: LiTS + 30% MAISI")
+    print("  Dataset005: LiTS + 50% MAISI")
+    print("  Dataset006: LiTS + 80% MAISI")
+    print("  Dataset007: LiTS + 100% MAISI")
     print(f"  Shared validation: {len(lits_val_pairs)} LiTS cases across all datasets")
     """
 
