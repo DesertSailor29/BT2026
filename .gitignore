@@ -1,0 +1,22 @@
+# Environments
+venv/
+.venv/
+__pycache__/
+
+# Data and nnU-Net working dirs (large; never commit)
+LiTS/
+Maisi/
+nnUNet_raw/
+nnUNet_preprocessed/
+nnUNet_results/
+preprocessed_resunet/
+predictions*/
+*.nii
+*.nii.gz
+
+# Run outputs
+*.log
+*.csv
+charts/
+
+.DS_Store
