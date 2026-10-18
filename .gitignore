@@ -6,6 +6,7 @@ __pycache__/
 # Data and nnU-Net working dirs (large; never commit)
 LiTS/
 Maisi/
+!maisi/
 nnUNet_raw/
 nnUNet_preprocessed/
 nnUNet_results/
