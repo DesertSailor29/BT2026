@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time setup of the MAISI-v2 (rflow-ct) environment on UCloud. Everything goes into $PROJ (persistent).
-# Safe to re-run: finished steps are skipped.
+# Needs no GPU (install + downloads only), so it can run on a cheap CPU machine. Safe to re-run.
 #   export PROJ=/work/<YourFolder>
 #   nohup bash "$PROJ/BT2026/maisi/setup_maisi.sh" > "$PROJ/logs/setup_maisi_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
 set -euo pipefail
@@ -17,7 +17,7 @@ VENV="$PROJ/venv-maisi"
 echo "== $(date) | PROJ=$PROJ"
 
 echo "== 1/6 GPU"
-nvidia-smi
+if command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; else echo "no GPU on this machine: fine for setup, GPU check is skipped"; fi
 
 echo "== 2/6 uv (Python/package manager, installed into $PROJ/tools)"
 if ! command -v uv >/dev/null 2>&1; then
@@ -46,7 +46,9 @@ echo "== 5/6 GPU check inside venv"
 "$VENV/bin/python" - <<'EOF'
 import torch, monai
 print("torch", torch.__version__, "| CUDA", torch.version.cuda, "| MONAI", monai.__version__)
-assert torch.cuda.is_available(), "CUDA not available"
+if not torch.cuda.is_available():
+    print("no GPU visible: skipped, run the GPU check at the start of GUIDE step 4")
+    raise SystemExit(0)
 print("GPU:", torch.cuda.get_device_name(0), "| capability", torch.cuda.get_device_capability(0))
 print("arch list:", torch.cuda.get_arch_list())
 x = torch.randn(4096, 4096, device="cuda")

@@ -51,14 +51,36 @@ only, no resampling). Real data is converted the same way with `orient.py` (Step
 
 ## Step 0: start the UCloud job
 
+Steps 1–3 (clone, install, download weights) need **no GPU**. Run them in a cheap CPU session, then start a GPU
+session for step 4 onwards. Both sessions must mount **the same folder**, because the venv points to the Python
+in `$PROJ/tools` by its absolute path.
+
 1. On UCloud, open **Apps → Terminal (Ubuntu)**.
-2. **Machine type:** the one with 1× B200.
-3. **Time:** 4 hours for the first session (setup about 15–30 min, smoke test about 5 min, trial roughly 1–2 h).
-   When the job ends, background processes are killed too. Files in `/work` stay.
+2. **Machine type:**
+   - Steps 1–3: any CPU-only machine type. If the Terminal app only offers GPU machines, take the smallest
+     slice (`gpu-nvidia-b200-1-mig.1g`, 1/7 of a B200).
+   - Step 4 onwards: see the table below. **Not** the 1/7 slice: 23 GB is too small for 512³ volumes.
+3. **Time:** CPU session 1 hour (setup about 15–30 min). GPU session 4 hours (smoke test about 5 min on a full
+   B200, trial roughly 1–2 h). When the job ends, background processes are killed too. Files in `/work` stay.
 4. **Folders:** click *Add folder* and choose the drive folder where the project should live (for example `Research`).
    It is mounted at `/work/Research`. Everything (code, venv, weights, outputs) goes there, so the next session
    can start straight away.
 5. Submit the job, then open the terminal when it is running.
+
+B200 machine types: the slider picks a MIG slice (a hardware partition of one B200 with its own memory and
+compute) or whole GPUs. A full B200 has about 180 GB and 7 compute slices.
+
+| Slider | MIG profile | GPU memory | Compute | Use for |
+|---|---|---|---|---|
+| 1/7 | 1g.23gb | 23 GB | 1/7 | setup only (if no CPU machine), too small for 512³ |
+| 2/7 | 2g.45gb | 45 GB | 2/7 | probably too small (NVIDIA's 512³ preset is validated on 80 GB) |
+| 3/7 | 3g.90gb | 90 GB | 3/7 | fits the 512³ preset; about 2× slower than a full GPU |
+| 4/7 | 4g.90gb | 90 GB | 4/7 | same memory as 3/7, a bit faster |
+| 1 | full B200 | ~180 GB | 7/7 | smoke test + trial (recommended); room for 2 workers |
+| 2–8 | several B200 | | | the 1000-volume pool (one run_jobs worker per GPU) |
+
+Speed scales roughly with the compute share, so a slice costs about the same per volume if UCloud bills it
+proportionally (check the price shown when submitting). A slice wins only on idle time, e.g. setup or analysis.
 
 ## Step 1: set your folder and check the machine
 
@@ -73,8 +95,9 @@ for u in https://github.com https://pypi.org https://download.pytorch.org/whl/cu
 ```
 
 Check:
-- `nvidia-smi` lists a **B200**, and the top-right says **CUDA Version 12.8 or higher**, which needs driver ≥ 570.
-  If it is lower, stop and tell me, because the torch build has to change.
+- On a CPU session `nvidia-smi` says *command not found*; that is fine. On a GPU session it lists a **B200**, and
+  the top-right says **CUDA Version 12.8 or higher**, which needs driver ≥ 570. If it is lower, stop and tell me,
+  because the torch build has to change.
 - `df -h` shows at least **~30 GB free**. The trial needs about 15 GB; the venv and weights about 10 GB.
 - Every URL returns a code (200/301/302/404 all mean reachable). `000` means no internet access to that site.
 
@@ -110,8 +133,8 @@ The setup does the following. You don't need to do any of it by hand:
   Path A doesn't need the ~4000-mask database, so it is not downloaded.
 
 It worked if the log ends with `== setup done` and contains:
-- `GPU: NVIDIA B200 | capability (10, 0)` and an arch list that includes `sm_100`,
-- `matmul ok: True`,
+- on a CPU session: `no GPU visible: skipped` (the GPU check then happens in step 4); on a GPU session:
+  `GPU: NVIDIA B200 | capability (10, 0)`, an arch list that includes `sm_100`, and `matmul ok: True`,
 - an `ls` of `models/` listing 5 `.pt` files: `autoencoder_v1.pt`, `diff_unet_3d_rflow-ct.pt`, `controlnet_3d_rflow-ct.pt`,
   `mask_generation_autoencoder.pt`, `mask_generation_diffusion_unet_v2.pt`.
 
@@ -130,6 +153,16 @@ cd "$PROJ/NV-Generate-CTMR" && python -m scripts.download_model_data --version r
 ## Step 4: smoke test, one liver volume (about 5 min)
 
 This checks that everything works end to end, and gives the time per volume and the peak VRAM.
+**GPU session from here on.** In a new session, first run the "Every later session" block at the bottom, then
+`nvidia-smi` (B200, CUDA ≥ 12.8, see step 1) and this GPU check:
+
+```bash
+source "$PROJ/BT2026/maisi/env.sh"
+python -c "import torch; print(torch.__version__, torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0), torch.cuda.mem_get_info()[1]/1e9, 'GB', 'sm_100' in torch.cuda.get_arch_list()); x=torch.randn(4096,4096,device='cuda'); print('matmul ok:', float((x@x).abs().mean())>0)"
+```
+
+It should print `2.9.1+cu128 NVIDIA B200 … (10, 0)`, the GPU memory (about 180 on a full B200, 90 on a 3/7
+slice), `True` and `matmul ok: True`. Then the smoke test:
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
