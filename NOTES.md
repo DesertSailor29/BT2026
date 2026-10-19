@@ -9,7 +9,7 @@
 ## Next steps
 1. **User on UCloud:** follow `BT2026/maisi/GUIDE.md`: steps 1–3 on a CPU session, step 4 smoke test on 1/7 (does 512³ fit 23 GB? fallback `--ae-splits 16`, else full B200), steps 5–6 on 4/7 = 4 workers. Report what step 7 asks for: driver/CUDA, summary totals, time/vol, peak GB, axcodes, previews.
 2. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
-3. Reorient LiTS (and later MSD07) to RAS on UCloud with `orient.py` (GUIDE step 6b). Where is LiTS on UCloud?
+3. Reorient LiTS (and later MSD07) to RAS on UCloud with `orient.py` (GUIDE step 6b). LiTS split is at `$PROJ/nifti_data` (91/40); `$PROJ/LiTS/` is empty.
 4. venv-nnunet for B200 (rewrite `setup.sh`: torch cu128, nnunetv2 2.6.x).
 5. Filtering metrics module (candidates in Progression Ideas; basic ones are already in postprocess metrics).
 
@@ -25,7 +25,7 @@
 
 ## Open questions
 - UCloud: which app/image, job time limit, persistent `/work` path, internet access (GitHub, HuggingFace, PyPI), driver/CUDA version from `nvidia-smi`?
-- Is LiTS (split_data + split_mapping.csv) already on UCloud? Are the 90 thesis MAISI volumes there? Where are the old NIM scripts?
+- ~~Is LiTS on UCloud?~~ yes, `$PROJ/nifti_data`. Are the 90 thesis MAISI volumes there? Where are the old NIM scripts?
 - How many synthetic volumes (target pool size)?
 - **Leakage:** MAISI's diffusion model and ControlNet were trained on MSD Task03 Liver (88–105 vols), which is built from LiTS. AbdomenCT-1K, also in its training data, partly reuses LiTS as well. Our LiTS test cases may have been seen by MAISI.
 - Is the ~1000 volume pool per target or in total?
@@ -37,6 +37,8 @@
 - Run pattern on UCloud: `nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > <name>_$(date +%Y%m%d_%H%M%S).log 2>&1 &`
 
 ## Log
+- 2026-10-19 (UCloud, CPU session): Install check. MAISI setup (GUIDE 1–3) complete: log setup_maisi_20261019_134830.log has no errors; venv-maisi = Py 3.11.16, torch 2.9.1+cu128 (CUDA 12.8), MONAI 1.6.1, nibabel/scipy/matplotlib import OK; NV-Generate-CTMR @ dba166e; 5 rflow-ct weights (4.7 GB). uv comes from the image (/usr/local/bin). Data: `$PROJ/nifti_data` = LiTS split (91 Tr / 40 Ts + split_mapping.csv); `$PROJ/LiTS/` has only empty folders. Not yet: GPU check (no GPU here), venv-nnunet, MSD07.
+- 2026-10-19 (UCloud): First Claude Code session on UCloud. Login confirmed persisted in `$PROJ/.claude-config` (.credentials.json, settings, history). It only works if `env.sh` is sourced before `claude` (else CLAUDE_CONFIG_DIR is unset and it uses ephemeral ~/.claude → new login). Session was started in /work/Research, not BT2026, so CLAUDE.md was not auto-loaded.
 - 2026-10-19 (Mac): Moved CLAUDE.md + NOTES.md into BT2026 (CLAUDE.md rewritten for two machines, Mac-only memory facts folded in); .gitignore ignores Claude per-machine files; GUIDE starts claude in $PROJ/BT2026. Committing + pushing per user; user then installs on UCloud.
 - 2026-10-19: User asked about running Claude Code on UCloud. Added to env.sh: CLAUDE_CONFIG_DIR=$PROJ/.claude-config (login persists) + ~/.local/bin on PATH; GUIDE "Optional: Claude Code on UCloud" (reinstall binary per session, headless login via URL + pasted code). Note: a Claude on UCloud does not see NOTES.md/CLAUDE.md (they live on the Mac, outside the repo).
 - 2026-10-19: Correction: user's screenshots show 3/7 = "3 MIGs (B200-mig.1g.23gb)", 18 vCPU, 108 GB RAM; 4/7 = 4 MIGs, 24 vCPU, 144 GB RAM (RAM is CPU RAM). NVIDIA presets at dba166e: 80g 512³ = [80,80,80] 4 splits (~45 GB), 32g = [80,80,48] 4 splits (28.4), 24g = [64,64,48] 2 splits (22.8 GB, torch max_memory_allocated). Implemented MIG pinning + new defaults; tested pinning with fake nvidia-smi (4 MIG → 4 workers on distinct UUIDs).
