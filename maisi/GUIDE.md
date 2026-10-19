@@ -249,17 +249,17 @@ Download these through the UCloud file browser (*Files → your folder → maisi
 ## Step 6b: reorient the real data to RAS (once per dataset)
 
 Writes a converted copy. The originals are never touched, file names stay the same, and running it again
-skips files already done. First see what orientations a dataset has (adjust the path to where LiTS is on UCloud):
+skips files already done. LiTS (the 91/40 split) is in `$PROJ/nifti_data`. First see what orientations it has:
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
-python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/LiTS/split_data" --check
+python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --check
 ```
 
 Then convert (about 5–10 min for LiTS):
 
 ```bash
-nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/LiTS/split_data" --out "$PROJ/LiTS/split_data_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
+nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --out "$PROJ/nifti_data_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
 ```
 
 The log ends with `done, now all RAS` and the counts of the original orientations. Use the same command for
@@ -299,7 +299,13 @@ git -C "$PROJ/BT2026" pull
 cd "$PROJ/BT2026" && claude
 ```
 
-Start it inside `BT2026`: that is where it finds `CLAUDE.md` and `NOTES.md`, the project notes shared with the Mac.
+Always source `env.sh` first: without it Claude Code doesn't find the saved login and asks you to log in again.
+Start it inside `BT2026`, where it finds `CLAUDE.md` and `NOTES.md` (the project notes shared with the Mac). To make
+starting from `$PROJ` work too, create a pointer once:
+
+```bash
+printf '@BT2026/CLAUDE.md\n' > "$PROJ/CLAUDE.md"
+```
 
 First time only: the machine has no browser. Claude Code prints a login URL: select it, open it in the browser
 on your own computer and sign in. The browser then shows a code; paste it into the terminal at
