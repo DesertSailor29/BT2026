@@ -74,9 +74,11 @@ def main():
     p.add_argument("--mask-steps", type=int, default=100, help="mask diffusion steps (v2 mask model: 100)")
     p.add_argument("--mask-cfg", type=float, default=2.0, help="mask_generation_cfg_guidance_scale")
     p.add_argument("--tumor-cfg", type=float, default=0.0, help="cfg_guidance_scale on tumour presence (0 = off)")
-    p.add_argument("--ae-window", nargs=3, type=int, default=[80, 80, 80])
+    # NVIDIA's 24 GB preset for 512^3 (config_infer_24g_512x512x512.json) with 8 instead of 2 splits, so one volume
+    # fits a 23 GB B200 MIG slice. Their 80 GB preset is window 80^3, 4 splits (fewer tile seams, ~45 GB peak).
+    p.add_argument("--ae-window", nargs=3, type=int, default=[64, 64, 48])
     p.add_argument("--ae-overlap", type=float, default=0.4)
-    p.add_argument("--ae-splits", type=int, default=4)
+    p.add_argument("--ae-splits", type=int, default=8)
     p.add_argument("--maisi-dir", type=Path, default=None, help="only used to record the MAISI commit")
     args = p.parse_args()
 

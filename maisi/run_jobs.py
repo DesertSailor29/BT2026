@@ -5,7 +5,9 @@ NV-Generate-CTMR clone, keep the raw output (failed volumes too), postprocess, a
 raw/<job_id>/result.json and in the run-wide results.jsonl.
 
 Re-running the same command skips finished jobs. A job whose result has status != ok is retried only with
---retry-failed. Several workers can share one GPU: --num-workers 2 --worker 0 / --worker 1.
+--retry-failed. Several workers: --num-workers 2 --worker 0 / --worker 1. If the machine has several GPUs or MIG
+slices (e.g. UCloud's 4× B200-mig.1g.23gb), each worker is pinned to its own one (worker i -> device i), otherwise
+the workers share the single GPU. --gpu overrides the choice (index into `nvidia-smi -L`, or a UUID).
 
     python run_jobs.py --run-dir $MAISI_RUNS/trial10
 """
@@ -29,6 +31,29 @@ RE_QC_FAIL = re.compile(r"quality check for label '([^']+)' failed: median value
 RE_MASK_RETRY = re.compile(r"absent from generated mask, retry")
 RE_MASK_GAVE_UP = re.compile(r"still absent after \d+ attempts")
 RE_MASK_TIME = re.compile(r"Mask preparation time: ([\d.]+) seconds")
+
+
+def gpu_uuids():
+    """MIG slice UUIDs if any (a CUDA process can only use one slice), else whole-GPU UUIDs."""
+    try:
+        out = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    return re.findall(r"UUID: (MIG-[^)\s]+)", out) or re.findall(r"UUID: (GPU-[^)\s]+)", out)
+
+
+def pick_device(gpu, worker):
+    """CUDA_VISIBLE_DEVICES value for this worker, or None to leave the environment alone."""
+    uuids = gpu_uuids()
+    if gpu is not None:
+        if not gpu.isdigit():
+            return gpu
+        if int(gpu) >= len(uuids):
+            sys.exit(f"--gpu {gpu}: only {len(uuids)} device(s) in nvidia-smi -L")
+        return uuids[int(gpu)]
+    if len(uuids) > 1:
+        return uuids[worker % len(uuids)]
+    return None
 
 
 def write_environment(maisi_dir, job_dir):
@@ -60,7 +85,7 @@ def parse_log(text):
     }
 
 
-def run_one(job, run_dir, maisi_dir, drop_raw_image=False):
+def run_one(job, run_dir, maisi_dir, drop_raw_image=False, device=None):
     job_dir = run_dir / "raw" / job["job_id"]
     if job_dir.exists():
         shutil.rmtree(job_dir)  # leftovers of an interrupted or failed attempt
@@ -81,8 +106,12 @@ def run_one(job, run_dir, maisi_dir, drop_raw_image=False):
     env = dict(os.environ)
     env["MONAI_DATA_DIRECTORY"] = str(maisi_dir / "temp_work_dir")
     env["HF_HUB_OFFLINE"] = "1"  # weights were downloaded by setup_maisi.sh; skip network calls per job
+    env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation; matters on 23 GB slices
+    if device is not None:
+        env["CUDA_VISIBLE_DEVICES"] = device
 
     record = {k: v for k, v in job.items() if k != "infer"}
+    record["device"] = device
     record["started"] = datetime.now().isoformat(timespec="seconds")
     t0 = time.time()
     with open(job_dir / "maisi.log", "w") as log:
@@ -129,6 +158,7 @@ def main():
     p.add_argument("--maisi-dir", type=Path, default=os.environ.get("MAISI_DIR"), help="NV-Generate-CTMR clone (default: $MAISI_DIR)")
     p.add_argument("--worker", type=int, default=0)
     p.add_argument("--num-workers", type=int, default=1)
+    p.add_argument("--gpu", default=None, help="device for this worker: index into `nvidia-smi -L` (MIG slices first) or a UUID")
     p.add_argument("--retry-failed", action="store_true")
     p.add_argument("--limit", type=int, default=None, help="stop after this many jobs (this worker)")
     p.add_argument("--only", nargs="+", default=None, help="run only these job ids")
@@ -148,6 +178,9 @@ def main():
     if args.only:
         jobs = [j for j in jobs if j.stem in set(args.only)]
 
+    device = pick_device(args.gpu, args.worker)
+    print(f"worker {args.worker}/{args.num_workers}: {len(jobs)} job(s), device {device or 'default'}", flush=True)
+
     done = 0
     for path in jobs:
         job = json.loads(path.read_text())
@@ -160,7 +193,7 @@ def main():
         if args.limit is not None and done >= args.limit:
             break
         print(f"[{datetime.now():%H:%M:%S}] start {job['job_id']} ({job['control']} {job['size']}, seed {job['seed']})", flush=True)
-        r = run_one(job, run_dir, maisi_dir, args.drop_raw_image)
+        r = run_one(job, run_dir, maisi_dir, args.drop_raw_image, device)
         m = r.get("metrics")
         line = f"[{datetime.now():%H:%M:%S}] {r['status']:>6} {job['job_id']}  {r['wall_s']:.0f}s  peak {r['peak_gpu_gb']} GB"
         if m:
