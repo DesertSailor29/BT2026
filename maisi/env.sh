@@ -11,7 +11,10 @@ export UV_INSTALL_DIR="$PROJ/tools"
 export UV_CACHE_DIR="$PROJ/.cache/uv"
 export UV_PYTHON_INSTALL_DIR="$PROJ/tools/python"
 export HF_HOME="$PROJ/.cache/huggingface"
-export PATH="$PROJ/tools:$PATH"
+export PATH="$PROJ/tools:$HOME/.local/bin:$PATH"
+# Claude Code (optional): the program is reinstalled per session into the ephemeral home, but login, settings and
+# history live here so you only log in once. Contains your login token: don't share this folder.
+export CLAUDE_CONFIG_DIR="$PROJ/.claude-config"
 
 mkdir -p "$PROJ/logs" "$MAISI_RUNS"
 

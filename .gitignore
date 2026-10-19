@@ -21,3 +21,7 @@ predictions*/
 charts/
 
 .DS_Store
+
+# Claude Code: per-machine files (CLAUDE.md and NOTES.md are shared on purpose)
+.claude/settings.local.json
+CLAUDE.local.md

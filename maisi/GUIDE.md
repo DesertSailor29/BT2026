@@ -287,6 +287,24 @@ git -C "$PROJ/BT2026" pull
 
 Everything else (venv, MAISI clone, weights, runs) is already in `/work`.
 
+## Optional: Claude Code on UCloud
+
+The home folder is wiped when a session ends, so the program is reinstalled each session (a few seconds). Your
+login and settings are kept in `$PROJ/.claude-config` (set by `env.sh`), so you log in only once.
+
+```bash
+source "$PROJ/BT2026/maisi/env.sh"
+curl -fsSL https://claude.ai/install.sh | bash
+git -C "$PROJ/BT2026" pull
+cd "$PROJ/BT2026" && claude
+```
+
+Start it inside `BT2026`: that is where it finds `CLAUDE.md` and `NOTES.md`, the project notes shared with the Mac.
+
+First time only: the machine has no browser. Claude Code prints a login URL: select it, open it in the browser
+on your own computer and sign in. The browser then shows a code; paste it into the terminal at
+`Paste code here if prompted`.
+
 ## Output layout
 
 ```
