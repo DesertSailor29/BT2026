@@ -8,7 +8,7 @@
 - Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud, full B200 session:** GUIDE step 4 smoke test again (MAISI clone already patched; job `$MAISI_RUNS/smoke/liver_0000` exists → rerun `run_jobs.py --run-dir $MAISI_RUNS/smoke --retry-failed`, no `--low-vram`). Record peak GB (decides how many workers fit on one B200: 180 GB / peak), time/volume, preview seams. Then update GUIDE (23 GB slices don't work for 512³; step 5 on a full B200).
+1. **Decide Path A geometry** (smoke on B200 done: 156 s, 33.5 GB, but anatomy half scale + padded, see log). Options: (a) generate at MAISI's native mask grid 256³ @ 1.5 mm (no shrink, coarse), (b) patch MAISI to give the 256³ mask its native 1.5 mm affine so it's resampled to 0.8/0.8/1.0 (FOV 410×410×512 mm), (c) check how the thesis NIM volumes (512³ @ 0.75) look. Then rerun smoke.
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
 3. **UCloud, full B200 session:** GUIDE steps 5–6 (trial10; workers per B200 from the smoke peak), report step 7 items.
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
@@ -30,6 +30,7 @@
 - 2026-10-18: Trial = 10 sizes 0.05..0.95 per target (probes the extremes), seeds 0–19; the pool will use the thesis grid 0.1..0.9. One MAISI subprocess per job (robust and resumable; the model-load overhead is acceptable). torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥2.8). Python via uv, everything in /work (UCloud home is ephemeral).
 
 ## Open questions
+- Path A at 512³ shrinks anatomy (mask 256³ relabelled with target spacing): did the thesis NIM volumes have the same issue? Is it intended upstream?
 - UCloud: ~~app, /work path, internet~~ (Terminal Ubuntu, `/work/Research`, GitHub/PyPI/HF reachable). Driver 615.71.09 / CUDA 13.4 on the GPU node (2026-10-20). Still open: job time limit.
 - ~~Is LiTS on UCloud?~~ yes, `$PROJ/nifti_data`. Are the 90 thesis MAISI volumes there? Where are the old NIM scripts?
 - How many synthetic volumes (target pool size)?
@@ -43,6 +44,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (UCloud, full B200): Smoke test **ran OK** (no OOM): 156 s wall (mask 48 s, DM/ControlNet 16 s, VAE decode 75 s with 64×64×48 window/8 splits) + 10 s postprocess; **peak 33.5 GB** (→ ~5 workers per B200); 1000 vols ≈ 46 h on 1 worker. Pair RAS, 512³ @ 0.8/0.8/1.0, 21 MB raw image, 16 MB pair. MAISI QC FAIL (lung median +71 HU). **Major problem: anatomy at ~half scale.** All content sits in the central 256³ voxel box (z 128–383), body only 181×172 mm, liver 382 ml, black padding around. Cause (MAISI sample.py `prepare_one_mask_and_meta_info`): the mask DM always makes a 256³ mask (native ~1.5 mm, ~384 mm FOV), MAISI stamps the *target* spacing on it, so `ensure_output_size_and_spacing` does no resampling and only pads 256→512. Anatomy shrinks by 0.8/1.5 in-plane, 1.0/1.5 in z. Tumour: 3.0 ml, 19 components, only 26% within 15 mm of the liver (lies in left lower abdomen). Preview: `$MAISI_RUNS/smoke/previews/liver_0000.png`.
 - 2026-10-20 (UCloud, full B200 session): GUIDE step 4 on a full B200 (MIG disabled, 191.5 GB; GPU check OK: torch 2.9.1+cu128, (10,0), sm_100, matmul ok). Smoke rerun started 13:45 (`--retry-failed`, same job: window 64×64×48, 8 splits), log `$PROJ/logs/maisi_smoke_b200_20261020_134507.log`.
 - 2026-10-20 (UCloud): Per user, reverted the uncommitted `--low-vram` option in `run_jobs.py` (full B200 next); committed + pushed everything. 1/7 session can be stopped.
 - 2026-10-20 (UCloud): Smoke run 3 (`--low-vram`) **OOM again** at the same place (image DM UNet up-block, 1st step) after the 119 s mask stage. So it's activations, not model residency: **512³ does not fit a 23 GB MIG slice** (with or without low-VRAM). Decision: generation on a full B200. User has a full B200 available now; this 1/7 session can be stopped. `run_jobs.py --low-vram` option reverted per user (not needed on a full B200).
