@@ -1,6 +1,7 @@
 # Project notes
 
 ## Current state (2026-10-20)
+- **trial10 complete** (16:11–16:40, 4 workers): 20/20 ok, MAISI QC 20/20 pass, ~88 s/vol throughput (≈24.5 h per 1000). Liver tumours often off-liver (4/10 below the thesis 90%-within-15 mm filter); pancreas 10/10 at 1.00.
 - **Workers (2026-10-20 bench):** full B200 → **4 workers** (102 s/vol, 28 h per 1000; 1 worker 162 s). `run_jobs.py` caps torch CPU threads at cgroup quota (48) / workers. MPS optional (98 s/vol). GUIDE updated for full B200 (step 0 speed table, step 4b `bench_workers.py`, step 5 N=4).
 - MAISI Path A half-scale fix merged to main (f967d39): `maisi/patches/mask_native_spacing.patch`, applied by `setup_maisi.sh`; live UCloud clone is patched. Smoke on full B200: 154 s/vol, peak 33.5 GB, realistic anatomy.
 - Direction: **Option B**. Sweep: **Option 1** (Path A, tumor-size sweep), 512³ @ 0.8×0.8×1.0 mm. Targets: liver (hepatic tumor) + pancreas (pancreatic tumor, eval on MSD Task07).
@@ -10,7 +11,7 @@
 - Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud, full B200:** trial10 (10 liver + 10 pancreas, N=4, no MPS) **running since 16:11**, logs `$PROJ/logs/maisi_trial10_w{0..3}_20261020_161107.log`. Then steps 6–7.
+1. **trial10 done** (20/20 ok, `$MAISI_RUNS/trial10/summary.md` + previews). Review previews + the liver tumour placement problem (below), then GUIDE step 7 (pairs → nnU-Net).
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
 3. Check tile seams in trial previews (window 64×64×48); consider NVIDIA 80g tiling now that only full B200s are used (would change memory/speed, re-bench).
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
@@ -48,6 +49,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (UCloud, full B200, new session after UCloud shut the previous one down): **trial10 had already finished** before the shutdown: all 4 workers ended 16:37–16:40 (5 jobs each), summarize ran 16:42 (22 previews). 20/20 ok, 40 pair files pass `gzip -t`, nothing to clean up, not rerun. Wall 29.3 min for 20 vols = **88 s/vol (≈24.5 h per 1000 on 4 workers)**; jobs 253–424 s (median 330; liver slower, ~380 vs ~300 s pancreas); peak 33.5 GB each. MAISI QC 20/20 pass. Liver: tumour 0.1–252 ml, ≤15 mm fraction 0.19/0.05/0.00/0.83/0.00/1.00/0.83/1.00/1.00/0.85 → only 4/10 pass the thesis ≥90% filter; tumour volume not monotonic in size (0.25 → 0.1 ml, 0.95 → 252 ml). Pancreas: tumour 1.1–13.6 ml, 1 component, 1.00 within 15 mm in all 10; organ 39–123 ml. Note: summary.md's '1000 vols on 1 worker 91.6 h' uses per-job time under 4-way sharing, not real throughput.
 - 2026-10-20 (UCloud, full B200): Pre-checks OK (B200 MIG disabled, 0 MiB used; MAISI clone dba166e with inference.py + sample.py patches). **trial10 started 16:11**, N=4 workers, no MPS, 12 CPU threads each. Logs `$PROJ/logs/maisi_trial10_w0_20261020_161107.log` … `_w3_20261020_161107.log`, run dir `$MAISI_RUNS/trial10`.
 - 2026-10-20 (UCloud): MPS 4 workers: 98.1 s/vol (vs 102.2 without), GPU mem max 123.6 GB (vs 148), util 60%. MPS daemon stopped. GUIDE rewritten for full B200 (machine table, measured speed table, step 4b bench, step 5 with N=4 + optional MPS, OOM row, multi-machine `--threads 12`). Committing GUIDE + run_jobs.py thread cap + bench_workers.py per user. GPU idle.
 - 2026-10-20 (UCloud): MPS bench 2 workers: 109.8 s/vol (vs 111.3 without MPS) → no real gain. Skipped MPS w3 (stopped; a self-matching pgrep made the first kill fail, so w3 and a w4 briefly ran together; both discarded as `w3_stopped`, `w4_incomplete_*`). Clean MPS 4-worker run: log `$PROJ/logs/maisi_bench_mps_w4_20261020_154345.log`. GUIDE being updated (uncommitted): full B200 as the machine, measured speed table, step 4b bench.
