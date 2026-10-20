@@ -1,0 +1,39 @@
+diff --git a/scripts/sample.py b/scripts/sample.py
+index 5374d32..023b389 100644
+--- a/scripts/sample.py
++++ b/scripts/sample.py
+@@ -60,6 +60,9 @@ from .sample_mask import (  # noqa: F401  (re-exported)
+ from .utils import get_body_region_index_from_mask
+ 
+ 
++# BT2026 patch: spacing the v2 mask model was trained for (its default in sample_mask.py), 256^3 voxels = 384 mm.
++MASK_NATIVE_SPACING = [1.5, 1.5, 1.5]
++
+ class LDMSampler:
+     """
+     A sampler class for generating synthetic medical images and masks using latent diffusion models.
+@@ -490,10 +493,12 @@ class LDMSampler:
+             tuple: A tuple containing the prepared mask and associated tensors.
+         """
+         combine_label_or = self.sample_one_mask(conditioning=anatomy_size_condition)
++        # BT2026 patch: the 256^3 mask is generated at the mask model's native spacing, so label it with that
++        # spacing; ensure_output_size_and_spacing then resamples it to self.spacing instead of only padding it.
+         affine = torch.zeros((4, 4))
+-        affine[0, 0] = self.spacing[0]
+-        affine[1, 1] = self.spacing[1]
+-        affine[2, 2] = self.spacing[2]
++        affine[0, 0] = MASK_NATIVE_SPACING[0]
++        affine[1, 1] = MASK_NATIVE_SPACING[1]
++        affine[2, 2] = MASK_NATIVE_SPACING[2]
+         affine[3, 3] = 1.0
+         combine_label_or = MetaTensor(combine_label_or, affine=affine)
+         combine_label_or = self.ensure_output_size_and_spacing(combine_label_or, check_contains_target_labels=False)
+@@ -527,7 +532,7 @@ class LDMSampler:
+             label_dict_remap_json=self.label_dict_remap_json,
+             num_inference_steps=self.mask_generation_num_inference_steps,
+             cfg_guidance_scale=self.mask_generation_cfg_guidance_scale,
+-            spacing=self.spacing,
++            spacing=MASK_NATIVE_SPACING,  # BT2026 patch: was self.spacing
+             autoencoder_sliding_window_infer_size=self.autoencoder_sliding_window_infer_size,
+             autoencoder_sliding_window_infer_overlap=self.autoencoder_sliding_window_infer_overlap,
+             low_vram=self.low_vram,

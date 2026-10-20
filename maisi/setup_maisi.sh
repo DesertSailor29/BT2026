@@ -30,7 +30,7 @@ if [ ! -d "$MAISI_DIR/.git" ]; then
     git clone "$MAISI_REPO" "$MAISI_DIR"
 fi
 git -C "$MAISI_DIR" fetch --quiet origin
-git -C "$MAISI_DIR" checkout --quiet -- scripts/inference.py  # drop our patch (below) so checkout + patch stay idempotent
+git -C "$MAISI_DIR" checkout --quiet -- scripts/inference.py scripts/sample.py  # drop our patches (below) so checkout + patch stay idempotent
 git -C "$MAISI_DIR" checkout --quiet "$MAISI_COMMIT"
 git -C "$MAISI_DIR" log --oneline -1
 # Upstream bug at dba166e (since 5cb04e8, #46): inference.py calls .to() on the mask model's scale_factor, but
@@ -40,6 +40,12 @@ sed -i 's|checkpoint_mask_generation_diffusion_unet\["scale_factor"\].to(model_d
 grep -q 'torch.as_tensor(checkpoint_mask_generation_diffusion_unet\["scale_factor"\])' "$MAISI_DIR/scripts/inference.py" \
     || { echo "scale_factor patch did not apply: check $MAISI_DIR/scripts/inference.py"; exit 1; }
 echo "patched scripts/inference.py (mask scale_factor float -> tensor)"
+# Path A geometry: MAISI generates the 256^3 mask (v2 model, native 1.5 mm) with our spacing as conditioning and then
+# stamps our spacing on it, so it is only padded to output_size -> anatomy at ~half scale for 512^3 @ 0.8 mm.
+# The patch generates it at 1.5 mm and labels it 1.5 mm, so MAISI resamples it to our spacing instead.
+git -C "$MAISI_DIR" apply "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/patches/mask_native_spacing.patch" \
+    || { echo "mask_native_spacing patch did not apply: check $MAISI_DIR/scripts/sample.py"; exit 1; }
+echo "patched scripts/sample.py (Path A mask at native 1.5 mm, resampled to target spacing)"
 
 echo "== 4/6 venv-maisi (Python $PYTHON_VERSION, torch $TORCH_VERSION+cu128, MONAI $MONAI_VERSION)"
 if [ ! -x "$VENV/bin/python" ]; then

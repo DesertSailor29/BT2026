@@ -83,6 +83,10 @@ setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
 - MAISI bug at `dba166e`: `scripts/inference.py` calls `.to()` on the v2 mask checkpoint's `scale_factor`, a float
   → AttributeError in every Path A run. `setup_maisi.sh` patches the clone (`torch.as_tensor(...)`); keep the patch
   if the pin moves, unless upstream fixes it.
+- MAISI Path A geometry bug at `dba166e`: the v2 mask model always makes a 256³ mask at native 1.5 mm, but `scripts/sample.py`
+  conditions it on and labels it with the target spacing, then only pads to `output_size` → at 512³ @ 0.8 mm the anatomy is
+  ~half scale (body ~180 mm). `maisi/patches/mask_native_spacing.patch` (applied by `setup_maisi.sh`) uses 1.5 mm for both,
+  so MAISI resamples the mask (nearest) to the target spacing: 480×480×384 voxels of content, padded to 512³.
 - rflow-ct needs `num_inference_steps` 30; the shipped 80g presets say 1000 (a DDPM value).
 - B200 (sm_100) needs a CUDA 12.8+ torch build: we use torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥ 2.8).
   The old nnU-Net `setup.sh` pins torch 2.3.0+cu121, which has no Blackwell kernels.
