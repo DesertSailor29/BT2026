@@ -1,6 +1,7 @@
 # Project notes
 
 ## Current state (2026-10-20)
+- **Workers (2026-10-20 bench):** full B200 → **4 workers** (102 s/vol, 28 h per 1000; 1 worker 162 s). `run_jobs.py` caps torch CPU threads at cgroup quota (48) / workers. MPS optional (98 s/vol). GUIDE updated for full B200 (step 0 speed table, step 4b `bench_workers.py`, step 5 N=4).
 - MAISI Path A half-scale fix merged to main (f967d39): `maisi/patches/mask_native_spacing.patch`, applied by `setup_maisi.sh`; live UCloud clone is patched. Smoke on full B200: 154 s/vol, peak 33.5 GB, realistic anatomy.
 - Direction: **Option B**. Sweep: **Option 1** (Path A, tumor-size sweep), 512³ @ 0.8×0.8×1.0 mm. Targets: liver (hepatic tumor) + pancreas (pancreatic tumor, eval on MSD Task07).
 - **Generation code: `maisi/`** (committed + pushed): `GUIDE.md` (step-by-step for a fresh UCloud Terminal session), `env.sh`, `setup_maisi.sh` (uv + Py3.11, torch 2.9.1+cu128, MONAI 1.6.1, NV-Generate-CTMR @ dba166e, weights), `make_jobs.py`, `run_jobs.py` (resumable, per-job subprocess, workers, `--drop-raw-image`), `postprocess.py` (132→0/1/2, nnU-Net naming, metrics incl. thesis 15 mm metric + recomputed MAISI QC), `summarize.py` (summary.md incl. measured disk/volume + 1000-vol projection, PNG previews), `orient.py` (RAS reorientation; pairs are saved RAS; CLI for LiTS/MSD07, verified bit-exact on 3 LiTS cases LPS/LAS/RAS). Tested end to end on the Mac with a fake MAISI (resume, retry, 2 workers, QC parsing, detached tumor). **Not yet run on real MAISI.**
@@ -9,15 +10,16 @@
 - Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud, full B200:** trial10 (10 liver + 10 pancreas) with **4 workers sharing the one GPU** (4 × 33.5 GB = 134 GB of 183; 5 would be tight). `run_jobs.py` already supports this (no MIG → all workers on the same GPU), but GUIDE step 5 sets N from the MIG count (→ 1 on a full B200): set N=4 by hand / update GUIDE. Measure throughput vs 1 worker (≈160 s/vol serial). Optional: test the 80g AE preset (window 80³, 4 splits) since VAE decode is ~half the time.
+1. **UCloud, full B200:** GUIDE step 5 trial10 (10 liver + 10 pancreas) with N=4 workers, ~35–40 min. Then steps 6–7.
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
-3. GUIDE steps 6–7 for trial10 (summary, previews, report).
+3. Check tile seams in trial previews (window 64×64×48); consider NVIDIA 80g tiling now that only full B200s are used (would change memory/speed, re-bench).
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
 5. venv-nnunet for B200 (rewrite `setup.sh`: torch cu128, nnunetv2 2.6.x). Can be installed in a CPU session.
 6. Filtering metrics module (candidates in Progression Ideas; basic ones are already in postprocess metrics).
 7. MSD Task07 download (pancreas eval set) + reorient.
 
 ## Decisions
+- 2026-10-20: **4 workers per full B200, no MPS by default.** Reason: bench (`$MAISI_RUNS/bench_threads`, `bench_mps`): s/vol 162/111/106/102/111 for 1–5 workers; MPS only 98 at 4 (4%) for an extra daemon. Thread cap = CPU quota / workers (48-core cgroup quota, torch otherwise starts 384 threads/process).
 - 2026-10-20: **Claude on UCloud commits + pushes NOTES.md (only) without asking** whenever it records a job's log path, results or a status change. Reason: the user wants the notes always up to date across machines; sessions die without warning. Code changes still need asking.
 - 2026-10-20: **Every long UCloud job is detached: `setsid nohup bash -c 'source env.sh && …' > $PROJ/logs/<name>_<ts>.log 2>&1 < /dev/null &`**, also when Claude runs it (never Claude's `run_in_background`). Reason: terminals close without warning and take attached processes (and Claude's background tasks) with them.
 - 2026-10-19: **CLAUDE.md + NOTES.md live in the repo** (BT2026/) so Claude on the Mac and on UCloud share them via git (replaces "notes outside the repo"). Research/CLAUDE.md on the Mac only imports BT2026/CLAUDE.md. The notes are public with the repo.
@@ -46,6 +48,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (UCloud): MPS 4 workers: 98.1 s/vol (vs 102.2 without), GPU mem max 123.6 GB (vs 148), util 60%. MPS daemon stopped. GUIDE rewritten for full B200 (machine table, measured speed table, step 4b bench, step 5 with N=4 + optional MPS, OOM row, multi-machine `--threads 12`). Committing GUIDE + run_jobs.py thread cap + bench_workers.py per user. GPU idle.
 - 2026-10-20 (UCloud): MPS bench 2 workers: 109.8 s/vol (vs 111.3 without MPS) → no real gain. Skipped MPS w3 (stopped; a self-matching pgrep made the first kill fail, so w3 and a w4 briefly ran together; both discarded as `w3_stopped`, `w4_incomplete_*`). Clean MPS 4-worker run: log `$PROJ/logs/maisi_bench_mps_w4_20261020_154345.log`. GUIDE being updated (uncommitted): full B200 as the machine, measured speed table, step 4b bench.
 - 2026-10-20 (UCloud): MPS works in the container as user: `CUDA_MPS_PIPE_DIRECTORY=/tmp/mps_pipe CUDA_MPS_LOG_DIRECTORY=/tmp/mps_log nvidia-cuda-mps-control -d` (clients need the same PIPE env; nvidia-smi shows them as M+C). MPS daemon left running for the bench. Bench under MPS, 2-5 workers: log `$PROJ/logs/maisi_bench_mps_20261020_153535.log`, root `$MAISI_RUNS/bench_mps`. Stop daemon after: `echo quit | CUDA_MPS_PIPE_DIRECTORY=/tmp/mps_pipe nvidia-cuda-mps-control`.
 - 2026-10-20 (UCloud): **Capped bench done** (`$MAISI_RUNS/bench_threads/bench.md`): s/vol 1w 161.6 · 2w 111.3 (1.45×) · 3w 105.6 (1.53×) · 4w **102.2 (1.58×, 28 h/1000)** · 5w 110.7 (1.46×); GPU mem max 37/67/104/148/161 GB of 179, no OOM even at 5 (peaks don't fully coincide). Best: 4 workers; 2–3 get most of the gain. Limit = GPU time-slicing between processes. Next: MPS test.

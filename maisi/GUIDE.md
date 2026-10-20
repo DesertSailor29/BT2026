@@ -1,7 +1,7 @@
 # MAISI-v2 generation on UCloud: trial run
 
 This guide goes from a brand-new UCloud session to **10 liver + 10 pancreas synthetic CT/label pairs** with varying
-tumour sizes. It uses NVIDIA's open MAISI-v2 (`rflow-ct`) running locally on B200 MIG slices (23 GB each, one worker per slice).
+tumour sizes. It uses NVIDIA's open MAISI-v2 (`rflow-ct`) running locally on **one full B200** (several workers share the GPU).
 
 Every command below can be copied as is. The only thing you type yourself is your folder name in step 1.
 
@@ -23,7 +23,7 @@ These settings are the same for every job:
 | Image diffusion steps | 30 | rflow-ct value (the 1000 in some presets is for DDPM) |
 | Mask diffusion steps / guidance | 100 / 2.0 | MAISI defaults |
 | Tumour guidance (`cfg_guidance_scale`) | 0 (off) | MAISI default; we can sweep it later |
-| Autoencoder tiling | window 64×64×48, overlap 0.4, 8 splits | NVIDIA's 24 GB preset for 512³ with more splits, to fit a 23 GB MIG slice (see step 0) |
+| Autoencoder tiling | window 64×64×48, overlap 0.4, 8 splits | NVIDIA's 24 GB preset for 512³ with more splits; chosen for 23 GB MIG slices and kept so all volumes match (see step 0) |
 
 **MAISI is used exactly as shipped.** After each image it runs its own check (the median HU of each organ must
 fall within real-CT ranges). In Path A, which we use, MAISI's code does **not** regenerate a volume that fails;
@@ -46,6 +46,8 @@ only, no resampling). Real data is converted the same way with `orient.py` (Step
 | `postprocess.py` | Remaps the 132-class mask to 0/1/2 and writes nnU-Net-named pairs. Computes metrics: volumes, connected components, tumour fraction within 15 mm of the organ, recomputed MAISI QC. |
 | `orient.py` | Converts NIfTI files to RAS orientation without changing any voxel value (used for the MAISI pairs, and as a CLI for LiTS / MSD Task07). |
 | `summarize.py` | Writes `summary.md` (including measured time and disk per volume and the projection for 1000) and PNG previews. |
+| `bench_workers.py` | Optional: measures how many workers fit on one GPU and how fast they are (step 4b). |
+| `patches/` | Our fixes to the MAISI clone, applied by `setup_maisi.sh`. |
 
 ---
 
@@ -59,40 +61,47 @@ in `$PROJ/tools` by its absolute path.
 2. **Machine type:**
    - Steps 1–3: any CPU-only machine type. If the Terminal app only offers GPU machines, take the smallest
      slice (`gpu-nvidia-b200-1-mig.1g`, 1/7 of a B200).
-   - Step 4 (smoke test): **1/7** (`gpu-nvidia-b200-1-mig.1g`). It shows whether one volume fits in 23 GB.
-   - Step 5 onwards: **4/7** (`gpu-nvidia-b200-4-mig.1g`), which runs 4 workers at once, one per slice.
-     If the smoke test runs out of memory even with the fallback, use **1** full B200 instead.
-3. **Time:** CPU session 1 hour (setup about 15–30 min). Smoke-test session 1 hour (one volume, roughly 5–10 min
-   on a slice). Trial session 3 hours (roughly 30–60 min on 4 slices). When the job ends, background processes are killed too. Files in `/work` stay.
+   - Step 4 onwards: **1 full B200** (slider at 1). A 512³ volume does **not** fit in a 23 GB MIG slice (the image
+     diffusion step runs out of memory, also with MAISI's `--low-vram`; tested 2026-10-20).
+3. **Time:** CPU session 1 hour (setup about 15–30 min). GPU session: smoke test about 5 min, trial (20 volumes,
+   4 workers) about 40 min, so 2 hours covers smoke test + trial. When the job ends, background processes are
+   killed too. Files in `/work` stay.
 4. **Folders:** click *Add folder* and choose the drive folder where the project should live (for example `Research`).
    It is mounted at `/work/Research`. Everything (code, venv, weights, outputs) goes there, so the next session
    can start straight away.
 5. Submit the job, then open the terminal when it is running.
 
-B200 machine types: a full B200 has about 180 GB of GPU memory and 7 compute units. The fractions on the slider
-are **groups of separate 1/7 slices** (MIG `1g.23gb`), not one bigger slice: "4/7" is four independent 23 GB GPUs.
-One process can use only one slice, so a volume always has to fit in 23 GB, and more slices means more workers
-in parallel. The RAM shown (36 GB per slice) is CPU memory.
+B200 machine types: a full B200 has about 180 GB of GPU memory. The fractions on the slider are **groups of
+separate 1/7 slices** (MIG `1g.23gb`), not one bigger slice: "4/7" is four independent 23 GB GPUs, and one process
+can use only one slice. The RAM shown is CPU memory.
 
 | Slider | What you get | Use for |
 |---|---|---|
-| 1/7 | 1 slice: 23 GB, 6 vCPU, 36 GB RAM | setup (if no CPU machine), smoke test |
-| 2/7–4/7 | 2–4 slices, 23 GB each | trial and pool: one worker per slice (4/7 = 4 volumes at a time) |
-| 1 | full B200, ~180 GB | fallback if one volume doesn't fit in 23 GB |
-| 2–8 | several full B200s | not needed |
+| 1/7 | 1 slice: 23 GB, 6 vCPU, 36 GB RAM | setup (if no CPU machine). Too small for 512³ generation |
+| 2/7–4/7 | 2–4 slices, 23 GB each | not usable for 512³ (each slice is too small) |
+| 1 | full B200, ~180 GB, CPU quota 48 cores, 2.2 TB RAM | smoke test, trial, pool: 4 workers share the GPU |
+| 2–8 | several full B200s | the pool, if one is too slow (see the end of this guide) |
 
-**Memory.** NVIDIA measured MAISI at 512³ on an A100 (`docs/performance.md`): the peak is in the autoencoder
-decoding, and it is 45.3 GB with their 80 GB preset (window 80³) and 22.8 GB with their 24 GB preset
-(window 64×64×48, 2 splits). A 23 GB slice holds slightly less than 23 GB, so we use the 24 GB preset with
-**8 splits**, which lowers the peak further. NVIDIA notes that more splits barely affect the image, while the
-smaller window (compared with 80³) can add faint seams between tiles, so look for seams in the previews. Fallback
-if it still runs out of memory: `--ae-splits 16`. All volumes of a study should use the same settings, so these
-are the `make_jobs.py` defaults now, also on a full GPU.
+**Memory.** One 512³ volume peaks at **33.5 GB** (measured on the B200 with our tiling: window 64×64×48, 8
+splits). NVIDIA's 80 GB preset (window 80³) peaks at about 45 GB on an A100 and may be faster, but we keep the
+small window so all volumes are made the same way. NVIDIA notes that the smaller window can add faint seams
+between tiles, so look for seams in the previews.
 
-**Speed.** Each slice has 1/7 of the B200's compute, so one volume takes several minutes; 4 slices make 4 at a
-time. If UCloud bills proportionally (check the price shown when submitting), the cost per volume is about the
-same as on a full GPU. For the big pool, several UCloud jobs can run in parallel on the same folder; see the end
-of this guide.
+**Speed (measured 2026-10-20, step 4b).** One worker alone makes a volume every ~160 s and leaves the GPU idle
+more than half the time (mask preparation, file writing and the stitching of the decoded image run on the CPU).
+Several workers on the same GPU overlap these phases:
+
+| workers | s per volume | 1000 volumes | GPU memory |
+|---|---|---|---|
+| 1 | 162 | 45 h | 37 GB |
+| 2 | 111 | 31 h | 67 GB |
+| 3 | 106 | 29 h | 104 GB |
+| **4** | **102** | **28 h** | 148 GB |
+| 5 | 111 | 31 h | 161 GB |
+
+So use **4 workers** on a full B200. More than ~2 give little because the processes take turns on the GPU.
+`run_jobs.py` gives each worker its share of the CPU quota as torch threads (48 / workers); without that, every
+process starts 384 threads (torch sees all host CPUs) and they slow each other down.
 
 ## Step 1: set your folder and check the machine
 
@@ -173,8 +182,8 @@ source "$PROJ/BT2026/maisi/env.sh"
 python -c "import torch; print(torch.__version__, torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0), torch.cuda.mem_get_info()[1]/1e9, 'GB', 'sm_100' in torch.cuda.get_arch_list()); x=torch.randn(4096,4096,device='cuda'); print('matmul ok:', float((x@x).abs().mean())>0)"
 ```
 
-It should print `2.9.1+cu128 NVIDIA B200 …` (on a slice the name ends in `MIG 1g.23gb`), `(10, 0)`, the GPU
-memory (about 23 on a slice, about 180 on a full B200), `True` and `matmul ok: True`. Then the smoke test:
+It should print `2.9.1+cu128 NVIDIA B200 …`, `(10, 0)`, the GPU memory (about 190 GB on a full B200; if the name
+ends in `MIG 1g.23gb` you are on a slice, which is too small), `True` and `matmul ok: True`. Then the smoke test:
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
@@ -196,42 +205,61 @@ python "$PROJ/BT2026/maisi/summarize.py" --run-dir "$MAISI_RUNS/smoke" --preview
 ```
 
 Check:
-- status `ok`, the wall time, and `peak GB` (on a slice it must stay below ~22; the closer, the riskier),
+- status `ok`, the wall time (about 150–170 s) and `peak GB` (about 33.5),
 - the `MAISI axcodes` column (the orientation MAISI writes; the pairs are converted to RAS regardless),
 - `$MAISI_RUNS/smoke/previews/liver_0000.png` (download it via the UCloud file browser). It should look like an
   abdominal CT with a green liver outline and a red tumour outline.
 
-If status is `error`, the last lines of `$MAISI_RUNS/smoke/raw/liver_0000/maisi.log` show why. If they say
-`OutOfMemoryError`, try the fallback with 16 splits:
+- the anatomy is full size: in the preview the body fills most of the frame (not a small box in the middle).
+  If it looks shrunk, the MAISI clone lacks our patch (see Troubleshooting).
+
+If status is `error`, the last lines of `$MAISI_RUNS/smoke/raw/liver_0000/maisi.log` show why; see Troubleshooting.
+
+## Step 4b (optional): how many workers fit and how fast they are
+
+Only needed on a new kind of machine (another GPU type or CPU quota); the numbers for a full B200 are in step 0.
+For each worker count it runs `workers × 2` liver volumes at once and writes a table to
+`$MAISI_RUNS/bench/bench.md`. It stops at the first worker count with a failed job (e.g. out of memory). It takes
+about 1 hour for 1–5 workers.
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
-python "$PROJ/BT2026/maisi/make_jobs.py" --run-dir "$MAISI_RUNS/smoke16" --targets liver --sizes 0.5 --ae-splits 16 --maisi-dir "$MAISI_DIR"
-setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/run_jobs.py" --run-dir "$MAISI_RUNS/smoke16"' > "$PROJ/logs/maisi_smoke16_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/bench_workers.py" --run-root "$MAISI_RUNS/bench" --workers 1 2 3 4 5 --maisi-dir "$MAISI_DIR"' > "$PROJ/logs/maisi_bench_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 ```
 
-If that works, add `--ae-splits 16` to every later `make_jobs.py` command. If it also runs out of memory, 23 GB
-is not enough: tell me, and we switch to a full B200. For other errors see Troubleshooting.
+Use the worker count with the lowest "s per volume" whose "GPU mem max" stays clearly below the GPU's total.
 
 ## Step 5: trial run, 10 liver + 10 pancreas
 
-On the 4/7 machine (4 slices). The first line counts the slices and starts one worker per slice; each worker is
-pinned to its own slice automatically. On a full B200 it starts a single worker.
+On a full B200, with **4 workers** sharing the GPU (see "Speed" in step 0). Each worker takes every 4th job and
+gets 12 of the 48 CPU threads automatically.
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
 python "$PROJ/BT2026/maisi/make_jobs.py" --run-dir "$MAISI_RUNS/trial10" --maisi-dir "$MAISI_DIR"
-N=$(nvidia-smi -L | grep -c MIG); [ "$N" -ge 1 ] || N=1; echo "$N worker(s)"
+N=4
 for i in $(seq 0 $((N-1))); do setsid nohup bash -c "source \"$PROJ/BT2026/maisi/env.sh\" && python \"$PROJ/BT2026/maisi/run_jobs.py\" --run-dir \"$MAISI_RUNS/trial10\" --num-workers $N --worker $i" > "$PROJ/logs/maisi_trial10_w${i}_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null & done
-tail -f $(ls -t $PROJ/logs/maisi_trial10_w*.log | head -$N)
+tail -n 5 $(ls -t $PROJ/logs/maisi_trial10_w*.log | head -$N)
 ```
 
-Each worker log starts with the slice it uses (`device MIG-…`), then prints one line per finished job: status,
-seconds, peak GB, MAISI QC pass/FAIL, tumour and organ volume.
+Each worker log starts with its device and CPU threads (`device default, 12 CPU threads`), then prints one line
+per finished job: status, seconds, peak GB, MAISI QC pass/FAIL, tumour and organ volume. With 4 workers each job
+takes about 6–7 min (they share the GPU), and the 20 volumes take about 35–40 min in total.
 
-**If the session ends or something crashes, run the same `N=…` and `for …` lines again** on a machine with the
-same number of slices (the job split depends on `N`). Finished jobs are skipped. Failed jobs are skipped too
-unless you add `--retry-failed` right after `--worker $i` (inside the quotes).
+**If the session ends or something crashes, run the same `N=4` and `for …` lines again** (keep `N`: the job
+split depends on it). Finished jobs are skipped. Failed jobs are skipped too unless you add `--retry-failed` right
+after `--worker $i` (inside the quotes).
+
+Optional, about 4% faster: NVIDIA MPS lets the workers' GPU work run at the same time instead of taking turns
+(measured: 98 instead of 102 s per volume with 4 workers, and 124 instead of 148 GB GPU memory). Start it before
+the loop and stop it when all workers are done:
+
+```bash
+export CUDA_MPS_PIPE_DIRECTORY=/tmp/mps_pipe CUDA_MPS_LOG_DIRECTORY=/tmp/mps_log
+mkdir -p $CUDA_MPS_PIPE_DIRECTORY $CUDA_MPS_LOG_DIRECTORY && nvidia-cuda-mps-control -d
+# ... the for loop from above, in the same terminal (the workers inherit the two variables) ...
+echo quit | nvidia-cuda-mps-control   # afterwards
+```
 
 ## Step 6: summary and previews
 
@@ -359,7 +387,7 @@ Fields in `result.json`:
 |---|---|
 | `no kernel image is available for execution on the device` / `sm_100` missing | The wrong torch build got installed. Check `$PROJ/venv-maisi-freeze.txt` has `torch==2.9.1+cu128`, delete `$PROJ/venv-maisi` and rerun setup. |
 | `CUDA driver version is insufficient` | The driver is older than 570. Tell me the `nvidia-smi` output so we can pick a matching torch build. |
-| `CUDA out of memory` | On a 23 GB slice: recreate the run with `--ae-splits 16` (see step 4). Still failing: use a full B200. |
+| `CUDA out of memory` | On a MIG slice: 512³ does not fit, use a full B200 (step 0). On a full B200 with several workers: use fewer workers (each needs ~35 GB). |
 | Hugging Face download fails during setup | Rerun setup (finished files are skipped). Check `curl -I https://huggingface.co`. |
 | `AttributeError: 'float' object has no attribute 'to'` at `inference.py` `mask_generation_scale_factor` | Upstream MAISI bug at `dba166e` (the v2 mask checkpoint stores `scale_factor` as a float). `setup_maisi.sh` patches it; an older clone lacks the patch: rerun `setup_maisi.sh` (CPU is fine, skips finished parts), then rerun the job with `--retry-failed`. |
 | Anatomy looks shrunk: body only ~180 mm wide, everything inside a central 256³ box with black padding, liver ~400 ml | MAISI Path A at `dba166e` stamps the target spacing on the 256³ generated mask (native 1.5 mm) and only pads it. `setup_maisi.sh` applies `patches/mask_native_spacing.patch` (mask generated + labelled at 1.5 mm, then resampled to the target spacing); an older clone lacks it: rerun `setup_maisi.sh`. Check with `git -C "$MAISI_DIR" diff --stat` (should list `scripts/sample.py`). |
@@ -382,7 +410,7 @@ The ~0.3–0.5 GB per raw float image is an estimate until then. If the projecti
 allocation, add `--drop-raw-image` to `run_jobs.py`: it deletes MAISI's float image once the int16 copy in
 `pairs/` is written. The raw 132-class label is always kept, because organ-level filter metrics need it.
 
-**Several UCloud jobs at once.** Workers are numbered across all jobs, and worker `i` uses slice `i mod (slices
-on its machine)`. Example with two 4/7 machines on the same folder: `--num-workers 8`, workers 0–3 on the first
-machine and 4–7 on the second (`for i in 0 1 2 3` and `for i in 4 5 6 7` in the loop from step 5). Keep the same
-`--num-workers` when resuming.
+**Several UCloud jobs at once.** Workers are numbered across all jobs. Example with two full-B200 machines on the
+same folder: `--num-workers 8`, workers 0–3 on the first machine and 4–7 on the second (`for i in 0 1 2 3` and
+`for i in 4 5 6 7` in the loop from step 5), and add `--threads 12` (the automatic share is 48 CPU threads divided
+by `--num-workers`, which would give only 6 here). Keep the same `--num-workers` when resuming.

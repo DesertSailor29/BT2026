@@ -7,7 +7,8 @@ raw/<job_id>/result.json and in the run-wide results.jsonl.
 Re-running the same command skips finished jobs. A job whose result has status != ok is retried only with
 --retry-failed. Several workers: --num-workers 2 --worker 0 / --worker 1. If the machine has several GPUs or MIG
 slices (e.g. UCloud's 4× B200-mig.1g.23gb), each worker is pinned to its own one (worker i -> device i), otherwise
-the workers share the single GPU. --gpu overrides the choice (index into `nvidia-smi -L`, or a UUID).
+the workers share the single GPU. --gpu overrides the choice (index into `nvidia-smi -L`, or a UUID). Each MAISI
+process gets CPU quota / --num-workers threads (--threads overrides).
 
     python run_jobs.py --run-dir $MAISI_RUNS/trial10
 """
@@ -40,6 +41,18 @@ def gpu_uuids():
     except (OSError, subprocess.CalledProcessError):
         return []
     return re.findall(r"UUID: (MIG-[^)\s]+)", out) or re.findall(r"UUID: (GPU-[^)\s]+)", out)
+
+
+def cpu_quota():
+    """CPUs this container may use: the cgroup quota (UCloud: 48 on a full B200) if set, else the visible CPUs.
+    os.cpu_count() and torch see all 384 host CPUs, so without a cap every MAISI process starts 384 threads."""
+    try:
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            return max(1, int(quota) // int(period))
+    except (OSError, ValueError):
+        pass
+    return len(os.sched_getaffinity(0))
 
 
 def pick_device(gpu, worker):
@@ -85,7 +98,7 @@ def parse_log(text):
     }
 
 
-def run_one(job, run_dir, maisi_dir, drop_raw_image=False, device=None):
+def run_one(job, run_dir, maisi_dir, drop_raw_image=False, device=None, threads=None):
     job_dir = run_dir / "raw" / job["job_id"]
     if job_dir.exists():
         shutil.rmtree(job_dir)  # leftovers of an interrupted or failed attempt
@@ -109,9 +122,12 @@ def run_one(job, run_dir, maisi_dir, drop_raw_image=False, device=None):
     env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation; matters on 23 GB slices
     if device is not None:
         env["CUDA_VISIBLE_DEVICES"] = device
+    if threads is not None:  # torch CPU threads; MAISI stitches the decoded 512^3 image on the CPU
+        env["OMP_NUM_THREADS"] = env["MKL_NUM_THREADS"] = str(threads)
 
     record = {k: v for k, v in job.items() if k != "infer"}
     record["device"] = device
+    record["threads"] = threads
     record["started"] = datetime.now().isoformat(timespec="seconds")
     t0 = time.time()
     with open(job_dir / "maisi.log", "w") as log:
@@ -159,6 +175,7 @@ def main():
     p.add_argument("--worker", type=int, default=0)
     p.add_argument("--num-workers", type=int, default=1)
     p.add_argument("--gpu", default=None, help="device for this worker: index into `nvidia-smi -L` (MIG slices first) or a UUID")
+    p.add_argument("--threads", type=int, default=None, help="CPU threads per MAISI process (default: CPU quota / --num-workers)")
     p.add_argument("--retry-failed", action="store_true")
     p.add_argument("--limit", type=int, default=None, help="stop after this many jobs (this worker)")
     p.add_argument("--only", nargs="+", default=None, help="run only these job ids")
@@ -179,7 +196,8 @@ def main():
         jobs = [j for j in jobs if j.stem in set(args.only)]
 
     device = pick_device(args.gpu, args.worker)
-    print(f"worker {args.worker}/{args.num_workers}: {len(jobs)} job(s), device {device or 'default'}", flush=True)
+    threads = args.threads or max(1, cpu_quota() // args.num_workers)
+    print(f"worker {args.worker}/{args.num_workers}: {len(jobs)} job(s), device {device or 'default'}, {threads} CPU threads", flush=True)
 
     done = 0
     for path in jobs:
@@ -193,7 +211,7 @@ def main():
         if args.limit is not None and done >= args.limit:
             break
         print(f"[{datetime.now():%H:%M:%S}] start {job['job_id']} ({job['control']} {job['size']}, seed {job['seed']})", flush=True)
-        r = run_one(job, run_dir, maisi_dir, args.drop_raw_image, device)
+        r = run_one(job, run_dir, maisi_dir, args.drop_raw_image, device, threads)
         m = r.get("metrics")
         line = f"[{datetime.now():%H:%M:%S}] {r['status']:>6} {job['job_id']}  {r['wall_s']:.0f}s  peak {r['peak_gpu_gb']} GB"
         if m:
