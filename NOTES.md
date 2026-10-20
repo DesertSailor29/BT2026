@@ -29,7 +29,7 @@
 - 2026-10-18: Trial = 10 sizes 0.05..0.95 per target (probes the extremes), seeds 0–19; the pool will use the thesis grid 0.1..0.9. One MAISI subprocess per job (robust and resumable; the model-load overhead is acceptable). torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥2.8). Python via uv, everything in /work (UCloud home is ephemeral).
 
 ## Open questions
-- UCloud: ~~app, /work path, internet~~ (Terminal Ubuntu, `/work/Research`, GitHub/PyPI/HF reachable). Still open: driver/CUDA version on a GPU node, job time limit.
+- UCloud: ~~app, /work path, internet~~ (Terminal Ubuntu, `/work/Research`, GitHub/PyPI/HF reachable). Driver 615.71.09 / CUDA 13.4 on the GPU node (2026-10-20). Still open: job time limit.
 - ~~Is LiTS on UCloud?~~ yes, `$PROJ/nifti_data`. Are the 90 thesis MAISI volumes there? Where are the old NIM scripts?
 - How many synthetic volumes (target pool size)?
 - **Leakage:** MAISI's diffusion model and ControlNet were trained on MSD Task03 Liver (88–105 vols), which is built from LiTS. AbdomenCT-1K, also in its training data, partly reuses LiTS as well. Our LiTS test cases may have been seen by MAISI.
@@ -42,6 +42,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (UCloud, 1/7 GPU session): GUIDE step 4. nvidia-smi: B200 MIG 1g.23gb, driver 615.71.09, CUDA 13.4. GPU check OK: torch 2.9.1+cu128, cap (10,0), 22.0 GB, sm_100 in arch list, matmul ok. Smoke test started 13:29 (detached), log `$PROJ/logs/maisi_smoke_20261020_132928.log`, run dir `$MAISI_RUNS/smoke`.
 - 2026-10-20 (Mac): Per user, CLAUDE.md Rules: standing permission on UCloud to commit + push NOTES.md alone after log-path/result updates (pull --rebase --autostash first). Committed + pushed all of today's changes.
 - 2026-10-20 (Mac): User asked whether Claude on UCloud can run + evaluate the smoke test: yes. Added CLAUDE.md section "Running jobs on UCloud" (setsid nohup + timestamped log, record log path in NOTES, poll the log, resumable, evaluate vs GUIDE checks). GUIDE: all detached commands now `setsid nohup … < /dev/null`; Claude section explains letting Claude run a step and `claude --continue` after a closed terminal.
 - 2026-10-19 (Mac): Read UCloud notes. GUIDE step 6b now uses `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`; Claude section: source env.sh first + optional `$PROJ/CLAUDE.md` pointer (`@BT2026/CLAUDE.md`). Next steps reordered: smoke test on 1/7 GPU, reorient on CPU.
