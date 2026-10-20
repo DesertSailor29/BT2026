@@ -10,7 +10,7 @@
 ## Next steps
 1. **UCloud, full B200 session:** GUIDE step 4 smoke test again (MAISI clone already patched; job `$MAISI_RUNS/smoke/liver_0000` exists → rerun `run_jobs.py --run-dir $MAISI_RUNS/smoke --retry-failed`, no `--low-vram`). Record peak GB (decides how many workers fit on one B200: 180 GB / peak), time/volume, preview seams. Then update GUIDE (23 GB slices don't work for 512³; step 5 on a full B200).
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
-3. **UCloud, 4/7 session:** GUIDE steps 5–6 (trial10, 4 workers), report step 7 items.
+3. **UCloud, full B200 session:** GUIDE steps 5–6 (trial10; workers per B200 from the smoke peak), report step 7 items.
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
 5. venv-nnunet for B200 (rewrite `setup.sh`: torch cu128, nnunetv2 2.6.x). Can be installed in a CPU session.
 6. Filtering metrics module (candidates in Progression Ideas; basic ones are already in postprocess metrics).
