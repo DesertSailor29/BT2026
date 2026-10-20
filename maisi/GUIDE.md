@@ -361,6 +361,7 @@ Fields in `result.json`:
 | `CUDA driver version is insufficient` | The driver is older than 570. Tell me the `nvidia-smi` output so we can pick a matching torch build. |
 | `CUDA out of memory` | On a 23 GB slice: recreate the run with `--ae-splits 16` (see step 4). Still failing: use a full B200. |
 | Hugging Face download fails during setup | Rerun setup (finished files are skipped). Check `curl -I https://huggingface.co`. |
+| `AttributeError: 'float' object has no attribute 'to'` at `inference.py` `mask_generation_scale_factor` | Upstream MAISI bug at `dba166e` (the v2 mask checkpoint stores `scale_factor` as a float). `setup_maisi.sh` patches it; an older clone lacks the patch: rerun `setup_maisi.sh` (CPU is fine, skips finished parts), then rerun the job with `--retry-failed`. |
 | Job `error`, log ends in a traceback from `scripts/…` | Send me the last ~30 lines of that `maisi.log`. |
 | Job `postprocess_error` | The raw output is fine. Send me the `error` field from `result.json`. After a fix: `python $PROJ/BT2026/maisi/postprocess.py --run-dir … --job <id> --maisi-dir $MAISI_DIR`. |
 | UCloud job ended mid-run | Start a new job with the same folder and run the "every later session" block, then the same `nohup` line. |

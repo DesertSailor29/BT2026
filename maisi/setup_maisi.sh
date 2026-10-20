@@ -30,8 +30,16 @@ if [ ! -d "$MAISI_DIR/.git" ]; then
     git clone "$MAISI_REPO" "$MAISI_DIR"
 fi
 git -C "$MAISI_DIR" fetch --quiet origin
+git -C "$MAISI_DIR" checkout --quiet -- scripts/inference.py  # drop our patch (below) so checkout + patch stay idempotent
 git -C "$MAISI_DIR" checkout --quiet "$MAISI_COMMIT"
 git -C "$MAISI_DIR" log --oneline -1
+# Upstream bug at dba166e (since 5cb04e8, #46): inference.py calls .to() on the mask model's scale_factor, but
+# mask_generation_diffusion_unet_v2.pt stores it as a float -> AttributeError in every Path A run. Wrap it in a tensor.
+sed -i 's|checkpoint_mask_generation_diffusion_unet\["scale_factor"\].to(model_device)|torch.as_tensor(checkpoint_mask_generation_diffusion_unet["scale_factor"]).to(model_device)|' \
+    "$MAISI_DIR/scripts/inference.py"
+grep -q 'torch.as_tensor(checkpoint_mask_generation_diffusion_unet\["scale_factor"\])' "$MAISI_DIR/scripts/inference.py" \
+    || { echo "scale_factor patch did not apply: check $MAISI_DIR/scripts/inference.py"; exit 1; }
+echo "patched scripts/inference.py (mask scale_factor float -> tensor)"
 
 echo "== 4/6 venv-maisi (Python $PYTHON_VERSION, torch $TORCH_VERSION+cu128, MONAI $MONAI_VERSION)"
 if [ ! -x "$VENV/bin/python" ]; then

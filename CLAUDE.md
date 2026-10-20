@@ -80,6 +80,9 @@ setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
   The thesis used the hosted NIM v1 API (docs.nvidia.com/nim/medical/maisi/api-reference), no seeds.
 - The v2 mask model accepts **only one** `controllable_anatomy_size` entry (the thesis used liver + tumour via NIM v1).
   Non-empty = Path A (mask generated; `body_region`/`anatomy_list` ignored). Empty = Path B (real mask from database).
+- MAISI bug at `dba166e`: `scripts/inference.py` calls `.to()` on the v2 mask checkpoint's `scale_factor`, a float
+  → AttributeError in every Path A run. `setup_maisi.sh` patches the clone (`torch.as_tensor(...)`); keep the patch
+  if the pin moves, unless upstream fixes it.
 - rflow-ct needs `num_inference_steps` 30; the shipped 80g presets say 1000 (a DDPM value).
 - B200 (sm_100) needs a CUDA 12.8+ torch build: we use torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥ 2.8).
   The old nnU-Net `setup.sh` pins torch 2.3.0+cu121, which has no Blackwell kernels.
