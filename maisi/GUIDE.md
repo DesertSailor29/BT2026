@@ -130,7 +130,7 @@ git -C "$PROJ/BT2026" pull
 ## Step 3: one-time setup (about 15–30 min)
 
 ```bash
-nohup bash "$PROJ/BT2026/maisi/setup_maisi.sh" > "$PROJ/logs/setup_maisi_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
+setsid nohup bash "$PROJ/BT2026/maisi/setup_maisi.sh" > "$PROJ/logs/setup_maisi_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 tail -f "$(ls -t $PROJ/logs/setup_maisi_*.log | head -1)"
 ```
 
@@ -179,7 +179,7 @@ memory (about 23 on a slice, about 180 on a full B200), `True` and `matmul ok: T
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
 python "$PROJ/BT2026/maisi/make_jobs.py" --run-dir "$MAISI_RUNS/smoke" --targets liver --sizes 0.5 --maisi-dir "$MAISI_DIR"
-nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/run_jobs.py" --run-dir "$MAISI_RUNS/smoke"' > "$PROJ/logs/maisi_smoke_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/run_jobs.py" --run-dir "$MAISI_RUNS/smoke"' > "$PROJ/logs/maisi_smoke_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 tail -f "$(ls -t $PROJ/logs/maisi_smoke_*.log | head -1)"
 ```
 
@@ -207,7 +207,7 @@ If status is `error`, the last lines of `$MAISI_RUNS/smoke/raw/liver_0000/maisi.
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
 python "$PROJ/BT2026/maisi/make_jobs.py" --run-dir "$MAISI_RUNS/smoke16" --targets liver --sizes 0.5 --ae-splits 16 --maisi-dir "$MAISI_DIR"
-nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/run_jobs.py" --run-dir "$MAISI_RUNS/smoke16"' > "$PROJ/logs/maisi_smoke16_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/run_jobs.py" --run-dir "$MAISI_RUNS/smoke16"' > "$PROJ/logs/maisi_smoke16_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 ```
 
 If that works, add `--ae-splits 16` to every later `make_jobs.py` command. If it also runs out of memory, 23 GB
@@ -222,7 +222,7 @@ pinned to its own slice automatically. On a full B200 it starts a single worker.
 source "$PROJ/BT2026/maisi/env.sh"
 python "$PROJ/BT2026/maisi/make_jobs.py" --run-dir "$MAISI_RUNS/trial10" --maisi-dir "$MAISI_DIR"
 N=$(nvidia-smi -L | grep -c MIG); [ "$N" -ge 1 ] || N=1; echo "$N worker(s)"
-for i in $(seq 0 $((N-1))); do nohup bash -c "source \"$PROJ/BT2026/maisi/env.sh\" && python \"$PROJ/BT2026/maisi/run_jobs.py\" --run-dir \"$MAISI_RUNS/trial10\" --num-workers $N --worker $i" > "$PROJ/logs/maisi_trial10_w${i}_$(date +%Y%m%d_%H%M%S).log" 2>&1 & done
+for i in $(seq 0 $((N-1))); do setsid nohup bash -c "source \"$PROJ/BT2026/maisi/env.sh\" && python \"$PROJ/BT2026/maisi/run_jobs.py\" --run-dir \"$MAISI_RUNS/trial10\" --num-workers $N --worker $i" > "$PROJ/logs/maisi_trial10_w${i}_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null & done
 tail -f $(ls -t $PROJ/logs/maisi_trial10_w*.log | head -$N)
 ```
 
@@ -259,7 +259,7 @@ python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --check
 Then convert (about 5–10 min for LiTS):
 
 ```bash
-nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --out "$PROJ/nifti_data_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 &
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --out "$PROJ/nifti_data_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 ```
 
 The log ends with `done, now all RAS` and the counts of the original orientations. Use the same command for
@@ -310,6 +310,15 @@ printf '@BT2026/CLAUDE.md\n' > "$PROJ/CLAUDE.md"
 First time only: the machine has no browser. Claude Code prints a login URL: select it, open it in the browser
 on your own computer and sign in. The browser then shows a code; paste it into the terminal at
 `Paste code here if prompted`.
+
+**Letting Claude run a step.** Claude can run the commands of a step itself (for example "run GUIDE step 4 and
+evaluate it"): it starts them detached with `setsid nohup` and a log in `$PROJ/logs` (rule in `CLAUDE.md`), reads
+the log, `result.json` and `summary.md`, looks at the preview PNGs, and writes the numbers into `NOTES.md`. You
+approve each command. Because the job is detached, it keeps running if the terminal or Claude closes.
+
+**If the terminal closes.** Open a new terminal in the same UCloud job; the generation is still running. Run the
+three install lines above again, then `claude --continue` to resume the previous conversation (it is stored in
+`$PROJ/.claude-config`). Claude finds the run through its log in `$PROJ/logs` and the path in `NOTES.md`.
 
 ## Output layout
 

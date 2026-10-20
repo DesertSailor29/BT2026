@@ -41,8 +41,37 @@ folder) is shared by both machines through git.
 ## Rules
 
 - Never add Claude as co-author or "Generated with Claude Code" to commits or PRs.
-- Commit only when asked, and don't push without asking.
-- Long-running UCloud commands must be copy-pasteable, run under `nohup`, and log to a timestamped file in `$PROJ/logs`.
+- Commit only when asked, and don't push without asking. **Exception on UCloud (standing permission from the
+  user):** whenever NOTES.md gets a started job's log path, a job's results or a status change, commit **only
+  NOTES.md** (`git add NOTES.md`, message like `notes: <what>`) and push it immediately, without asking. Pull first
+  (`git pull --rebase --autostash`) so the push doesn't fail on newer commits from the Mac. Code changes still need asking.
+- Long-running UCloud commands: see "Running jobs on UCloud" below. This holds for commands Claude runs itself and
+  for commands handed to the user.
+
+## Running jobs on UCloud (mandatory: terminals close without warning)
+
+A UCloud terminal (and a Claude session in it) can close at any moment, and every process attached to it dies
+with it. So **anything that runs longer than ~1 minute** (MAISI, postprocessing, reorienting, nnU-Net, installs,
+downloads) is started detached and logged, never in the foreground and never with Claude's own background tasks
+(`run_in_background`), which die together with Claude:
+
+```bash
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
+  > "$PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+```
+
+- `setsid` + `nohup` detach the job from the terminal; `source env.sh` inside the quotes, because the job gets a
+  fresh shell. Logs always go to a timestamped file in `$PROJ/logs` (persistent), never only to the screen.
+- Right after starting, check it is alive (`pgrep -af <script>` or `tail` of the log), write the log path into
+  the NOTES.md log, and **commit + push NOTES.md right away** (see Rules), so a new session or the Mac can pick it
+  up if this one dies. Same again when the job finishes and its results are in NOTES.md.
+- Follow progress by reading the log (`tail -n 30 <log>`), in short checks; don't block on `tail -f`.
+- Jobs must be resumable (re-running the same command skips finished work, as `run_jobs.py` does).
+- They still die when the UCloud **job** ends (time limit or stopped), only the terminal closing is survived. Check
+  the remaining session time before starting something long.
+- Claude on UCloud may run these itself (the user approves the commands). After a run it evaluates the output
+  against the "Check" list of the GUIDE step, copies the key numbers into NOTES.md, and says whether the GPU
+  session can be stopped.
 
 ## Key facts (so they don't need re-researching)
 

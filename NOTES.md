@@ -5,10 +5,10 @@
 - **Generation code: `maisi/`** (committed + pushed): `GUIDE.md` (step-by-step for a fresh UCloud Terminal session), `env.sh`, `setup_maisi.sh` (uv + Py3.11, torch 2.9.1+cu128, MONAI 1.6.1, NV-Generate-CTMR @ dba166e, weights), `make_jobs.py`, `run_jobs.py` (resumable, per-job subprocess, workers, `--drop-raw-image`), `postprocess.py` (132→0/1/2, nnU-Net naming, metrics incl. thesis 15 mm metric + recomputed MAISI QC), `summarize.py` (summary.md incl. measured disk/volume + 1000-vol projection, PNG previews), `orient.py` (RAS reorientation; pairs are saved RAS; CLI for LiTS/MSD07, verified bit-exact on 3 LiTS cases LPS/LAS/RAS). Tested end to end on the Mac with a fake MAISI (resume, retry, 2 workers, QC parsing, detached tumor). **Not yet run on real MAISI.**
 - Setup (GUIDE steps 1–3) now runs on a CPU-only session (GPU checks optional in `setup_maisi.sh`; GPU check moved to step 4). UCloud fractions are **k separate 1g.23gb MIG slices** (not 3g/4g profiles); one process = one slice, so a volume must fit 23 GB. Changes: `make_jobs.py` defaults now window 64×64×48 + 8 splits (NVIDIA 24 GB preset with more splits); `run_jobs.py` pins worker i to MIG slice i (`--gpu` override, `expandable_segments`); GUIDE step 5 loop starts one worker per slice.
 - **UCloud setup done** (GUIDE 1–3, CPU session): venv-maisi, MAISI @ dba166e, weights; git push works from UCloud (PAT expires 2026-12-18). LiTS split at `$PROJ/nifti_data`.
-- Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines.
+- Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud, 1/7 GPU session (1 h):** GUIDE step 4: `nvidia-smi` (driver/CUDA ≥ 12.8), GPU check, smoke test. Key result: does one 512³ volume fit in 23 GB (`peak GB`, fallback `--ae-splits 16`, else full B200)? Also time/volume and the preview (seams?).
+1. **UCloud, 1/7 GPU session (1 h):** (Claude on UCloud can run + evaluate it) GUIDE step 4: `nvidia-smi` (driver/CUDA ≥ 12.8), GPU check, smoke test. Key result: does one 512³ volume fit in 23 GB (`peak GB`, fallback `--ae-splits 16`, else full B200)? Also time/volume and the preview (seams?).
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
 3. **UCloud, 4/7 session:** GUIDE steps 5–6 (trial10, 4 workers), report step 7 items.
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
@@ -17,6 +17,8 @@
 7. MSD Task07 download (pancreas eval set) + reorient.
 
 ## Decisions
+- 2026-10-20: **Claude on UCloud commits + pushes NOTES.md (only) without asking** whenever it records a job's log path, results or a status change. Reason: the user wants the notes always up to date across machines; sessions die without warning. Code changes still need asking.
+- 2026-10-20: **Every long UCloud job is detached: `setsid nohup bash -c 'source env.sh && …' > $PROJ/logs/<name>_<ts>.log 2>&1 < /dev/null &`**, also when Claude runs it (never Claude's `run_in_background`). Reason: terminals close without warning and take attached processes (and Claude's background tasks) with them.
 - 2026-10-19: **CLAUDE.md + NOTES.md live in the repo** (BT2026/) so Claude on the Mac and on UCloud share them via git (replaces "notes outside the repo"). Research/CLAUDE.md on the Mac only imports BT2026/CLAUDE.md. The notes are public with the repo.
 - 2026-10-19: Setup on a CPU session (saves GPU hours). Generation on **23 GB MIG slices, one worker per slice** (full GPUs hard to get; 4/7 = 4 slices = 4 workers). AE tiling = NVIDIA 24 GB preset (window [64,64,48], overlap 0.4) with 8 splits instead of 2, used for ALL volumes (consistency across hardware). Trade-off: window 64×64×48 vs 80³ may give faint tile seams (NVIDIA docs); check previews. Fallback 16 splits, then full B200.
 - 2026-10-18: **Sweep = Option 1** (Path A, hepatic tumor size sweep). Geometry 512×512×512 at **0.8×0.8×1.0 mm** (LiTS median in-plane 0.77 mm, median slice 1.0 mm, from LiTS/scan_stats_all_planes.csv). Trial: 10 pairs per organ, then ~1000. Second target: **pancreas + pancreatic tumor** (Path A, `pancreatic tumor` size), evaluated on MSD Task07. UCloud app: Terminal (Ubuntu).
@@ -37,9 +39,11 @@
 
 ## Key facts
 - Stable facts (MAISI gotchas, thesis numbers) are in `CLAUDE.md`.
-- Run pattern on UCloud: `nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > <name>_$(date +%Y%m%d_%H%M%S).log 2>&1 &`
+- Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (Mac): Per user, CLAUDE.md Rules: standing permission on UCloud to commit + push NOTES.md alone after log-path/result updates (pull --rebase --autostash first). Committed + pushed all of today's changes.
+- 2026-10-20 (Mac): User asked whether Claude on UCloud can run + evaluate the smoke test: yes. Added CLAUDE.md section "Running jobs on UCloud" (setsid nohup + timestamped log, record log path in NOTES, poll the log, resumable, evaluate vs GUIDE checks). GUIDE: all detached commands now `setsid nohup … < /dev/null`; Claude section explains letting Claude run a step and `claude --continue` after a closed terminal.
 - 2026-10-19 (Mac): Read UCloud notes. GUIDE step 6b now uses `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`; Claude section: source env.sh first + optional `$PROJ/CLAUDE.md` pointer (`@BT2026/CLAUDE.md`). Next steps reordered: smoke test on 1/7 GPU, reorient on CPU.
 - 2026-10-19 (UCloud): Git push from UCloud works: repo-local identity Seb <sedea23@student.sdu.dk>, credential.helper = store in `$PROJ/.git-credentials` (outside repo, chmod 600; fine-grained PAT, BT2026 Contents read/write, expires 2026-12-18). First push gave 403 until the token got write access.
 - 2026-10-19 (UCloud, CPU session): Install check. MAISI setup (GUIDE 1–3) complete: log setup_maisi_20261019_134830.log has no errors; venv-maisi = Py 3.11.16, torch 2.9.1+cu128 (CUDA 12.8), MONAI 1.6.1, nibabel/scipy/matplotlib import OK; NV-Generate-CTMR @ dba166e; 5 rflow-ct weights (4.7 GB). uv comes from the image (/usr/local/bin). Data: `$PROJ/nifti_data` = LiTS split (91 Tr / 40 Ts + split_mapping.csv); `$PROJ/LiTS/` has only empty folders. Not yet: GPU check (no GPU here), venv-nnunet, MSD07.
