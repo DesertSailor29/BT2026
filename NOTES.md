@@ -10,7 +10,7 @@
 - Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud, full B200:** GUIDE step 5 trial10 (10 liver + 10 pancreas) with N=4 workers, ~35–40 min. Then steps 6–7.
+1. **UCloud, full B200:** trial10 (10 liver + 10 pancreas, N=4, no MPS) **running since 16:11**, logs `$PROJ/logs/maisi_trial10_w{0..3}_20261020_161107.log`. Then steps 6–7.
 2. **UCloud, CPU session (can run any time):** GUIDE step 6b, `orient.py --check` then convert `$PROJ/nifti_data` → `$PROJ/nifti_data_RAS`.
 3. Check tile seams in trial previews (window 64×64×48); consider NVIDIA 80g tiling now that only full B200s are used (would change memory/speed, re-bench).
 4. Based on the trial: fix the pool size/workers and decide whether 1000 is per target or total; decide on tumor `cfg_guidance_scale`.
@@ -48,6 +48,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-10-20 (UCloud, full B200): Pre-checks OK (B200 MIG disabled, 0 MiB used; MAISI clone dba166e with inference.py + sample.py patches). **trial10 started 16:11**, N=4 workers, no MPS, 12 CPU threads each. Logs `$PROJ/logs/maisi_trial10_w0_20261020_161107.log` … `_w3_20261020_161107.log`, run dir `$MAISI_RUNS/trial10`.
 - 2026-10-20 (UCloud): MPS 4 workers: 98.1 s/vol (vs 102.2 without), GPU mem max 123.6 GB (vs 148), util 60%. MPS daemon stopped. GUIDE rewritten for full B200 (machine table, measured speed table, step 4b bench, step 5 with N=4 + optional MPS, OOM row, multi-machine `--threads 12`). Committing GUIDE + run_jobs.py thread cap + bench_workers.py per user. GPU idle.
 - 2026-10-20 (UCloud): MPS bench 2 workers: 109.8 s/vol (vs 111.3 without MPS) → no real gain. Skipped MPS w3 (stopped; a self-matching pgrep made the first kill fail, so w3 and a w4 briefly ran together; both discarded as `w3_stopped`, `w4_incomplete_*`). Clean MPS 4-worker run: log `$PROJ/logs/maisi_bench_mps_w4_20261020_154345.log`. GUIDE being updated (uncommitted): full B200 as the machine, measured speed table, step 4b bench.
 - 2026-10-20 (UCloud): MPS works in the container as user: `CUDA_MPS_PIPE_DIRECTORY=/tmp/mps_pipe CUDA_MPS_LOG_DIRECTORY=/tmp/mps_log nvidia-cuda-mps-control -d` (clients need the same PIPE env; nvidia-smi shows them as M+C). MPS daemon left running for the bench. Bench under MPS, 2-5 workers: log `$PROJ/logs/maisi_bench_mps_20261020_153535.log`, root `$MAISI_RUNS/bench_mps`. Stop daemon after: `echo quit | CUDA_MPS_PIPE_DIRECTORY=/tmp/mps_pipe nvidia-cuda-mps-control`.
