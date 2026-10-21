@@ -132,7 +132,7 @@ def make_previews(run_dir, results):
     for target, items in by_target.items():
         cols = min(5, len(items))
         rows = (len(items) + cols - 1) // cols
-        fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3.2 * rows), dpi=110, squeeze=False)
+        fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3.4 * rows + 0.4), dpi=110, squeeze=False)
         for ax in axes.ravel():
             ax.axis("off")
         for ax, (r, (_, img, lab, aspect)) in zip(axes.ravel(), items):
@@ -140,7 +140,7 @@ def make_previews(run_dir, results):
             ax.axis("on")
             ax.set_title(f"{r['job_id']} s={r['size']:.2f} {fmt((r.get('metrics') or {}).get('tumor_ml'), '.1f')} ml", fontsize=7)
         fig.suptitle(f"{target}, axial slice at max tumour area. {CAPTION}", fontsize=9)
-        fig.tight_layout()
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
         fig.savefig(out / f"overview_{target}.png")
         plt.close(fig)
 
