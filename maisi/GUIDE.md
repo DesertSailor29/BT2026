@@ -45,6 +45,8 @@ only, no resampling). Real data is converted the same way with `orient.py` (Step
 | `run_jobs.py` | Runs the jobs one by one. Resumable. Keeps the raw output and logs time, peak VRAM, MAISI QC result and mask retries. |
 | `postprocess.py` | Remaps the 132-class mask to 0/1/2 and writes nnU-Net-named pairs. Computes metrics: volumes, connected components, tumour fraction within 15 mm of the organ, recomputed MAISI QC. |
 | `orient.py` | Converts NIfTI files to RAS orientation without changing any voxel value (used for the MAISI pairs, and as a CLI for LiTS / MSD Task07). |
+| `fix_lits_headers.py` + `lits_headers_28_47.json` | Repairs the identity headers in the LiTS release (volume-28..47 image + label, labels 48..52). Run once before `orient.py` (Step 6b). |
+| `notify.py` | Emails you during a long run: milestones (e.g. 250/500/950) with the projected finish time, and alerts if it stalls, workers die or jobs fail. |
 | `summarize.py` | Writes `summary.md` (including measured time and disk per volume and the projection for 1000) and PNG previews. |
 | `viz.py` | Shared figure style (window, colours, radiological orientation) used by every script that draws CT slices. |
 | `msd07_overview.py` | Checks MSD Task07 Pancreas, writes `stats.csv` and overview figures. |
@@ -280,10 +282,22 @@ Download these through the UCloud file browser (*Files → your folder → maisi
 
 Writes a converted copy. The originals are never touched, file names stay the same, and running it again
 skips files already done. Real data lives in `$PROJ/raw_data/`: `LiTS/` (the 91/40 split) and `Task07_Pancreas/`
-(MSD, already all RAS, nothing to convert). First see what orientations LiTS has:
+(MSD, already all RAS, nothing to convert).
+
+LiTS first needs its broken headers repaired: in the released files, volume-28..47 (the 20 3D-IRCADb-01 cases)
+have an identity affine in image and label (1 mm isotropic, L/R mirrored), and the labels of volume-48..52 too.
+`fix_lits_headers.py` writes the true affines (from `lits_headers_28_47.json`, derived from the IRCAD DICOMs) into
+these 45 files in place. Only the header changes, the voxels are verified bit-exact, and rerunning skips fixed files:
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
+python "$PROJ/BT2026/maisi/fix_lits_headers.py" --lits "$PROJ/raw_data/LiTS" --dry-run   # expect 'would fix' or 'ok' for 45 files
+python "$PROJ/BT2026/maisi/fix_lits_headers.py" --lits "$PROJ/raw_data/LiTS"
+```
+
+Then see what orientations LiTS has (after the fix: no identity headers left, 28–47 count as LAS):
+
+```bash
 python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/raw_data/LiTS" --check
 ```
 
@@ -350,6 +364,50 @@ approve each command. Because the job is detached, it keeps running if the termi
 **If the terminal closes.** Open a new terminal in the same UCloud job; the generation is still running. Run the
 three install lines above again, then `claude --continue` to resume the previous conversation (it is stored in
 `$PROJ/.claude-config`). Claude finds the run through its log in `$PROJ/logs` and the path in `NOTES.md`.
+
+## Optional: email notifier for long runs
+
+`notify.py` watches a run directory and mails you at milestones, each with progress, failures, the rate and the
+projected finish time (Copenhagen time), so you know when to log in. It also mails when nothing has finished for
+30 min, when no worker is running any more, when jobs fail, and (with `--session-end`) when the run won't finish
+before the UCloud job ends. It only reads `result.json` files, so it can be started, stopped and restarted at any
+time without affecting the workers; milestones already sent are not sent again.
+
+**One-time: credentials** in `$PROJ/.notify.env` (outside the repo, the repo is public). With Gmail: turn on
+2-step verification, create an app password (Google account → Security → App passwords), then:
+
+```bash
+cat > "$PROJ/.notify.env" <<'X'
+NOTIFY_TO=you@example.com
+NOTIFY_SMTP_USER=you@gmail.com
+NOTIFY_SMTP_PASS=abcdabcdabcdabcd
+# optional dead-man switch, see below
+# NOTIFY_HC_URL=https://hc-ping.com/<uuid>
+X
+chmod 600 "$PROJ/.notify.env"
+python "$PROJ/BT2026/maisi/notify.py" --run-dir "$MAISI_RUNS/trial10" --test
+```
+
+The `--test` line sends one progress mail right away. If it fails with a timeout, UCloud blocks outgoing SMTP: use
+ntfy instead (plain HTTPS, no account): add `NOTIFY_NTFY_TOPIC=<long random name>` to the file and add
+`--via ntfy` to the commands. ntfy.sh forwards each message to `NOTIFY_TO` by email, and you can also subscribe
+to the topic in the ntfy phone app for push notifications. Anyone who knows the topic name can read the
+messages (they only contain progress numbers), so make it hard to guess.
+
+**Start it** (detached, like the workers), right after starting the workers:
+
+```bash
+setsid nohup bash -c "source \"$PROJ/BT2026/maisi/env.sh\" && python \"$PROJ/BT2026/maisi/notify.py\" --run-dir \"$MAISI_RUNS/pool1000\" --milestones 250 500 750 950 --session-end '2026-10-23 14:00'" > "$PROJ/logs/notify_pool1000_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+```
+
+`--milestones` takes counts or percentages (default 25 % 50 % 75 % 95 %); a mail for "finished" is always sent.
+`--session-end` is when the UCloud job ends (shown in the UCloud job page). The projection uses the rate of the
+last 2 h (`--window-h`) and also gives the range against the overall rate.
+
+**Limit: it dies with the UCloud job**, so it can't tell you the job itself ended. For that, create a free check
+on healthchecks.io (period = 15 min, grace = 15 min, email integration), put its ping URL in `NOTIFY_HC_URL`. The
+notifier pings it every poll; when the pings stop (job ended, machine gone), healthchecks.io emails you. It also
+pings `/fail` on a stall or when no workers are running.
 
 ## Output layout
 

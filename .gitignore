@@ -25,3 +25,6 @@ charts/
 # Claude Code: per-machine files (CLAUDE.md and NOTES.md are shared on purpose)
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Notifier credentials (normally in $PROJ, outside the repo)
+.notify.env
