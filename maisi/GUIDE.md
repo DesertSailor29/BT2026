@@ -277,21 +277,22 @@ Download these through the UCloud file browser (*Files → your folder → maisi
 ## Step 6b: reorient the real data to RAS (once per dataset)
 
 Writes a converted copy. The originals are never touched, file names stay the same, and running it again
-skips files already done. LiTS (the 91/40 split) is in `$PROJ/nifti_data`. First see what orientations it has:
+skips files already done. Real data lives in `$PROJ/raw_data/`: `LiTS/` (the 91/40 split) and `Task07_Pancreas/`
+(MSD, already all RAS, nothing to convert). First see what orientations LiTS has:
 
 ```bash
 source "$PROJ/BT2026/maisi/env.sh"
-python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --check
+python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/raw_data/LiTS" --check
 ```
 
 Then convert (about 5–10 min for LiTS):
 
 ```bash
-setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/nifti_data" --out "$PROJ/nifti_data_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && python "$PROJ/BT2026/maisi/orient.py" --in "$PROJ/raw_data/LiTS" --out "$PROJ/raw_data/LiTS_RAS"' > "$PROJ/logs/orient_lits_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 ```
 
 The log ends with `done, now all RAS` and the counts of the original orientations. Use the same command for
-MSD Task07 once it is downloaded. nnU-Net's mirroring augmentation already covers flips to some degree, so this
+any other dataset that `--check` shows is not all RAS. nnU-Net's mirroring augmentation already covers flips to some degree, so this
 is cheap insurance rather than a fix, but it removes orientation as a variable from the comparison.
 
 ## Step 7: send me the results

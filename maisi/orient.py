@@ -3,7 +3,7 @@
 Only flips/permutes voxel axes (no resampling, values unchanged); the affine is updated so every voxel
 keeps its world position. Used by postprocess.py for MAISI pairs, and as a CLI for real datasets:
 
-    python orient.py --in  /work/Research/LiTS/split_data --out /work/Research/LiTS/split_data_RAS
+    python orient.py --in  /work/Research/raw_data/LiTS --out /work/Research/raw_data/LiTS_RAS
     python orient.py --in  <dir> --check        # only report the orientations found
 
 Mirrors the folder structure of --in, keeps file names, on-disk data types and compression.
