@@ -46,6 +46,8 @@ only, no resampling). Real data is converted the same way with `orient.py` (Step
 | `postprocess.py` | Remaps the 132-class mask to 0/1/2 and writes nnU-Net-named pairs. Computes metrics: volumes, connected components, tumour fraction within 15 mm of the organ, recomputed MAISI QC. |
 | `orient.py` | Converts NIfTI files to RAS orientation without changing any voxel value (used for the MAISI pairs, and as a CLI for LiTS / MSD Task07). |
 | `summarize.py` | Writes `summary.md` (including measured time and disk per volume and the projection for 1000) and PNG previews. |
+| `viz.py` | Shared figure style (window, colours, radiological orientation) used by every script that draws CT slices. |
+| `msd07_overview.py` | Checks MSD Task07 Pancreas, writes `stats.csv` and overview figures. |
 | `bench_workers.py` | Optional: measures how many workers fit on one GPU and how fast they are (step 4b). |
 | `patches/` | Our fixes to the MAISI clone, applied by `setup_maisi.sh`. |
 

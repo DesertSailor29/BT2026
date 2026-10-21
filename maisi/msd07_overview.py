@@ -26,14 +26,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
-from matplotlib.patches import Patch
 from scipy import ndimage
 
-from orient import axcodes, reorient_array, spacing_of
+from orient import axcodes, spacing_of
+from viz import CAPTION, display, draw, legend_handles, to_ras
 
-WINDOW = (40 - 200, 40 + 200)  # W400 / L40
-COLORS = {1: (0.0, 0.85, 0.0), 2: (1.0, 0.1, 0.1)}  # pancreas green, tumour red
-ALPHA = 0.4
 MARGIN_MM = 25
 EXPECTED = {"imagesTr": 281, "labelsTr": 281, "imagesTs": 139}
 EXPECTED_LABELS = {"0": "background", "1": "pancreas", "2": "cancer"}
@@ -45,11 +42,6 @@ def nii_files(folder):
 
 def case_id(path):
     return path.name[: -len(".nii.gz")]
-
-
-def display(slice2d):
-    """RAS axial slice (x, y) -> image rows anterior..posterior, columns patient right..left (radiological)."""
-    return slice2d.T[::-1, ::-1]
 
 
 def analyse(args):
@@ -74,9 +66,7 @@ def analyse(args):
     row.update(hu_min=float(image.min()), hu_max=float(image.max()), label_values=" ".join(map(str, values)))
     tile = None
     if img.shape == lab.shape:
-        image, affine = reorient_array(image, img.affine)
-        label, _ = reorient_array(label, lab.affine)
-        sx, sy, sz = spacing_of(affine)
+        image, label, (sx, sy, sz) = to_ras(image, label, img.affine)
         ml = sx * sy * sz / 1000
         tumour = label == 2
         n_comp = int(ndimage.label(tumour, structure=np.ones((3, 3, 3), bool))[1]) if tumour.any() else 0
@@ -106,18 +96,6 @@ def make_tile(cid, image, label, spacing, row):
             "crop": (x0, x1, y0, y1), "pancreas_ml": row["pancreas_ml"], "tumour_ml": row["tumour_ml"]}
 
 
-def draw(ax, image, label, aspect):
-    ax.imshow(image, cmap="gray", vmin=WINDOW[0], vmax=WINDOW[1], aspect=aspect, interpolation="nearest")
-    rgba = np.zeros(label.shape + (4,), np.float32)
-    for v, c in COLORS.items():
-        rgba[label == v] = (*c, ALPHA)
-    ax.imshow(rgba, aspect=aspect, interpolation="nearest")
-    for v, c in COLORS.items():
-        if (label == v).any():
-            ax.contour(label == v, levels=[0.5], colors=[c], linewidths=0.6)
-    ax.set_xticks([]), ax.set_yticks([])
-
-
 def title(t):
     return f"{t['case']}  z {t['z']}/{t['nz']}\npanc {t['pancreas_ml']:.0f} ml · tum {t['tumour_ml']:.1f} ml"
 
@@ -136,8 +114,8 @@ def contact_sheets(tiles, out_dir, per_page):
             ax.axis("on")
             ax.set_title(title(t), fontsize=7)
         fig.suptitle(f"MSD Task07 Pancreas, axial slice at max tumour area (max pancreas if no tumour), cropped to "
-                     f"label + {MARGIN_MM} mm, W400/L40, radiological (patient right = image left). "
-                     f"Green pancreas, red tumour. Page {p + 1}/{pages}", fontsize=10)
+                     f"label + {MARGIN_MM} mm, "
+                     f"{CAPTION.replace('organ', 'pancreas')} Page {p + 1}/{pages}", fontsize=10)
         fig.tight_layout(rect=(0, 0, 1, 0.98))
         path = out_dir / f"contact_sheet_{p + 1:02d}.png"
         fig.savefig(path, dpi=110)
@@ -157,10 +135,9 @@ def single_figure(t, out_dir):
     a.text(0.5, 0.99, "A", transform=a.transAxes, color="yellow", fontsize=14, ha="center", va="top")
     draw(b, t["image"], t["label"], t["aspect"])
     b.set_title(f"zoom: label bbox + {MARGIN_MM} mm", fontsize=11)
-    b.legend(handles=[Patch(color=COLORS[1], label="pancreas"), Patch(color=COLORS[2], label="tumour")],
-             loc="lower right", fontsize=10)
+    b.legend(handles=legend_handles("pancreas"), loc="lower right", fontsize=10)
     fig.suptitle(f"{title(t).replace(chr(10), '  ·  ')}  ·  W400/L40, radiological convention", fontsize=13)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     path = out_dir / f"single_{t['case']}.png"
     fig.savefig(path, dpi=120)
     plt.close(fig)

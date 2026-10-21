@@ -45,6 +45,17 @@ folder) is shared by both machines through git.
   user):** whenever NOTES.md gets a started job's log path, a job's results or a status change, commit **only
   NOTES.md** (`git add NOTES.md`, message like `notes: <what>`) and push it immediately, without asking. Pull first
   (`git pull --rebase --autostash`) so the push doesn't fail on newer commits from the Mac. Code changes still need asking.
+- **One visual style for every CT figure** (previews, overviews, contact sheets, paper figures; real and synthetic
+  alike, so they can be compared side by side). Implemented once in **`maisi/viz.py`** (`to_ras`, `plane`,
+  `draw`, `legend_handles`, `CAPTION`); every figure script imports it, never restyles:
+  - contrast: CT window **W400/L40** (−160..240 HU), gray colormap, `interpolation="nearest"`;
+  - shading: organ (liver/pancreas, label 1) **green (0, 0.85, 0)**, tumour (label 2) **red (1, 0.1, 0.1)**, filled at
+    **alpha 0.4**;
+  - contours: same colours, `levels=[0.5]`, linewidth **0.6**, on top of the fill;
+  - orientation: reorient to RAS in memory, then show in **radiological convention** (patient right on image left;
+    axial anterior up, coronal/sagittal superior up); aspect from the voxel spacing, so anatomy is not stretched;
+  - labelling: case id + slice index in the title, volumes in ml where useful; a legend or caption names the colours,
+    the window and the convention.
 - Long-running UCloud commands: see "Running jobs on UCloud" below. This holds for commands Claude runs itself and
   for commands handed to the user.
 

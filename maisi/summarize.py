@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-WINDOW = (-160, 240)  # abdominal soft-tissue window in HU
+from viz import CAPTION, draw, plane, to_ras
 
 
 def load_results(run_dir):
@@ -78,11 +78,6 @@ def totals(results):
     return "\n".join(lines)
 
 
-def window(img):
-    lo, hi = WINDOW
-    return np.clip((img - lo) / (hi - lo), 0, 1)
-
-
 def center_slice(label):
     """Per axis, the slice with the most tumour voxels (else organ voxels, else the volume centre).
     Works for detached tumours, where the centroid can fall between the pieces."""
@@ -93,23 +88,10 @@ def center_slice(label):
     return tuple(s // 2 for s in label.shape)
 
 
-def planes(image, label, c):
-    # nibabel arrays are (x, y, z); transpose so rows run along the second axis, shown with origin="lower".
-    return [
-        ("axial", image[:, :, c[2]].T, label[:, :, c[2]].T),
-        ("coronal", image[:, c[1], :].T, label[:, c[1], :].T),
-        ("sagittal", image[c[0], :, :].T, label[c[0], :, :].T),
-    ]
-
-
-def draw(ax, img, lab, title):
-    ax.imshow(window(img), cmap="gray", origin="lower", interpolation="nearest")
-    if (lab == 1).any():
-        ax.contour(lab == 1, levels=[0.5], colors="lime", linewidths=0.6, origin="lower")
-    if (lab == 2).any():
-        ax.contour(lab == 2, levels=[0.5], colors="red", linewidths=0.8, origin="lower")
-    ax.set_title(title, fontsize=7)
-    ax.axis("off")
+def planes(image, label, spacing, c):
+    """Axial, coronal and sagittal slice through c, in the shared radiological display style (viz.py)."""
+    return [(name, *plane(image, label, spacing, name, c[axis]))
+            for name, axis in (("axial", 2), ("coronal", 1), ("sagittal", 0))]
 
 
 def make_previews(run_dir, results):
@@ -126,16 +108,19 @@ def make_previews(run_dir, results):
         m = r.get("metrics") or {}
         if r["status"] != "ok" or not m.get("pair_image"):
             continue
-        image = np.asarray(nib.load(m["pair_image"]).dataobj, dtype=np.float32)
+        nii = nib.load(m["pair_image"])
+        image = np.asarray(nii.dataobj, dtype=np.float32)
         label = np.asarray(nib.load(m["pair_label"]).dataobj, dtype=np.uint8)
+        image, label, spacing = to_ras(image, label, nii.affine)
         c = center_slice(label)
-        views = planes(image, label, c)
+        views = planes(image, label, spacing, c)
         fig, axes = plt.subplots(1, 3, figsize=(12, 4.4), dpi=110)
-        for ax, (name, img, lab) in zip(axes, views):
-            draw(ax, img, lab, name)
+        for ax, (name, img, lab, aspect) in zip(axes, views):
+            draw(ax, img, lab, aspect)
+            ax.set_title(name, fontsize=7)
         fig.suptitle(
             f"{r['job_id']}  size {r['size']:.2f}  seed {r['seed']}  tumour {fmt(m.get('tumor_ml'), '.1f')} ml  "
-            f"QC {'pass' if r.get('maisi_qc_pass') else 'FAIL'}  {m.get('axcodes')}",
+            f"QC {'pass' if r.get('maisi_qc_pass') else 'FAIL'}  slice x/y/z {c[0]}/{c[1]}/{c[2]}\n{CAPTION}",
             fontsize=9,
         )
         fig.tight_layout()
@@ -150,8 +135,11 @@ def make_previews(run_dir, results):
         fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3.2 * rows), dpi=110, squeeze=False)
         for ax in axes.ravel():
             ax.axis("off")
-        for ax, (r, (_, img, lab)) in zip(axes.ravel(), items):
-            draw(ax, img, lab, f"{r['job_id']} s={r['size']:.2f} {fmt((r.get('metrics') or {}).get('tumor_ml'), '.1f')} ml")
+        for ax, (r, (_, img, lab, aspect)) in zip(axes.ravel(), items):
+            draw(ax, img, lab, aspect)
+            ax.axis("on")
+            ax.set_title(f"{r['job_id']} s={r['size']:.2f} {fmt((r.get('metrics') or {}).get('tumor_ml'), '.1f')} ml", fontsize=7)
+        fig.suptitle(f"{target}, axial slice at max tumour area. {CAPTION}", fontsize=9)
         fig.tight_layout()
         fig.savefig(out / f"overview_{target}.png")
         plt.close(fig)
