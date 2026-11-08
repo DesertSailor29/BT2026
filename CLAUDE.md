@@ -76,6 +76,11 @@ setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
 - Right after starting, check it is alive (`pgrep -af <script>` or `tail` of the log), write the log path into
   the NOTES.md log, and **commit + push NOTES.md right away** (see Rules), so a new session or the Mac can pick it
   up if this one dies. Same again when the job finishes and its results are in NOTES.md.
+- **Every detached job gets a status file** at the top of `$PROJ` whose name says what runs and its projected finish
+  (`<NAME>__<done>of<total>__ETA_<day-time>_CET.txt` → `DONE_…` / `STOPPED_…`), started detached right after the
+  job: `job_status.py` (generic: output glob + total + `--pid`), or the richer `maisi/status_file.py` /
+  `nnunet/train_status.py`. Rough ETAs are fine. Finished status files go to `$PROJ/status_done/` (`job_status.py`
+  moves them on start).
 - Follow progress by reading the log (`tail -n 30 <log>`), in short checks; don't block on `tail -f`.
 - Jobs must be resumable (re-running the same command skips finished work, as `run_jobs.py` does).
 - They still die when the UCloud **job** ends (time limit or stopped), only the terminal closing is survived. Check
