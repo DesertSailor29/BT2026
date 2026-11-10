@@ -104,10 +104,27 @@ Resample the pool so tumour size, lesion count and location match real statistic
 Never tune on the 111 test cases. Diagnose the `all` model's errors (are false tumours inside or outside the liver?)
 on the validation cases, not the test cases.
 
-## Recommendation (Claude, 2026-11-08)
+## Recommendation (Claude, 2026-11-08; repair promoted 2026-11-10 per user)
 
-1. **CPU first:** compute families 1–3 + 4b/4d for all 999 into one CSV. Look at ~50 random volumes and label each
-   good/bad by eye → how well each metric catches what a human calls bad, before any GPU time. Useful in the paper too.
-2. **GPU arms:** 15 mm rule (thesis replication); label–image consistency (AUC or contrast); 4b or a combination;
-   rejects of the best filter; optionally "delete off-liver components" as the repair arm. That's 4–5 runs
-   (≈ 20–24 GPU h), which fits before 3 Dec.
+**Why repair is a main arm, not optional:**
+- **No size confound.** A reject arm changes two things at once (fewer volumes *and* cleaner labels). Repair keeps
+  N = 999 and changes only the labels, so a gain over `all` can only come from label quality.
+- **Aims at the main error.** `all` over-predicts tumours and has false positives in tumour-free cases. Volumes whose
+  only tumour is off-liver become tumour-free training cases after repair; the pool has almost none of those now.
+- **Covers both failure types:** off-liver tumour → background (the correct LiTS target); tumour label on
+  normal-looking liver (low per-component separability AUC) → liver, or `ignore`.
+- **2×2 design for the paper:** criterion (geometry vs label–image consistency) × action (reject vs repair), plus a
+  natural "repair what can be fixed, reject the rest" arm.
+- **Limits:** repair fixes labels, not images (a globally bad image stays). Labels change → new dataset (Dataset102)
+  + preprocessing ≈ 1 CPU h; copy Dataset101's plans instead of re-planning so patch size/spacing match; same 20 real
+  validation cases. `ignore` must be the highest label value → its own arm, not mixed with plain relabelling.
+
+**Order:**
+0. **Repair split (done in code, run on UCloud):** `maisi/filter_metrics.py` splits the 378 thesis-rule fails into
+   `repaired` (tumour stays in the liver) / `tumour_free` / `clean` (straddles the 15 mm line). If most fails are
+   `repaired` or `tumour_free`, the repair arm differs from the reject arm and is worth a run.
+1. **CPU:** extend the CSV with families 2–3 + 4b/4d for all 999. Label ~50 random volumes good/bad by eye → how well
+   each metric catches what a human calls bad, before any GPU time. Useful in the paper too.
+2. **GPU arms (≈ 4.8 h each):** reject by the 15 mm rule (thesis replication); **repair off-liver components**
+   (Dataset102); reject by label–image consistency (AUC or contrast); repair by consistency (relabel or `ignore`);
+   rejects of the best filter as a control. 5 runs ≈ 24 GPU h, fits before 3 Dec.
