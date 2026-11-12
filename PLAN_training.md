@@ -1,83 +1,89 @@
-# Plan: filtering + nnU-Net training on the MAISI pool (draft 2026-11-07)
+# Plan: filtering + nnU-Net training on the MAISI pool (rewritten 2026-11-12)
 
-Goal: does filtering bad synthetic volumes (Option B) beat using all of them, for LiTS liver/tumour segmentation?
-Liver only for now (999 synthetic liver volumes); the pancreas half (MSD07) uses the same code later.
+Question: does a synthetic training set with the faulty volumes **removed (reject)** or **fixed (repair)** beat training
+on all 999 synthetic liver volumes, for real LiTS liver/tumour segmentation? Liver first; pancreas (MSD07) later with
+the same code. Decisions with dates and reasons are in NOTES.md "Decisions"; candidate filters with arguments in
+`PLAN_filtering_options.md`.
 
-## Phase 1: CPU session (start now, while the pool finishes on the GPU session)
+## Design (fixed)
 
-Nothing here needs a GPU. The GPU session's 48 cores are busy with the 4 MAISI workers, so heavy CPU work
-(header fix, metrics, nnU-Net preprocessing) goes into a separate CPU session; ask for many cores and
-≥ 256 GB RAM (nnU-Net preprocessing of 512³ volumes needs several GB per process).
+- **Training data: synthetic only** (MAISI pool, 999 liver volumes, 512³ @ 0.8×0.8×1.0, cropped only at MAISI's constant
+  padding to 480×480×384). Arms differ only in which synthetic volumes / labels they use.
+- **Validation: 20 real LiTS cases** (thesis train split, seed 42), used by nnU-Net during training. **Test: the other
+  111 LiTS cases** (incl. the 40 thesis test cases), never used for any choice. `checkpoint_final` for test (no
+  selection on val), default `nnUNetTrainer`, 3d_fullres, 1000 epochs, `nnUNet_compile=f`, Dataset101's plans.
+- **One preprocessed dataset per label set:** an arm that only selects volumes is a new fold of Dataset101
+  (`make_splits.py`, append-only `arms.json`); an arm that changes labels gets its own dataset with Dataset101's
+  plans copied (same patch size, spacing, normalisation) and the same 20 val cases.
+- **Filtered arm = every volume that passes** (no fixed K). Beating all 999 with fewer volumes is itself the argument;
+  a size-matched random arm only if needed (backlog).
+- **Noise floor** (arm `all` trained twice): per case |Δ Dice| ≈ 0.03, mean differences < 0.01 (liver p 0.50,
+  tumour p 0.07). An arm's gain has to clear this.
+- **Thresholds never come from the test set.** The 15 mm rule is the thesis' fixed rule; the AUC cut comes from the
+  20 real validation cases.
 
-1. **LiTS header fix + RAS** (old Next step 0, GUIDE 6b): `fix_lits_headers.py` (dry run → 40 fix + 5 ok),
-   `orient.py --check`, convert to `$PROJ/raw_data/LiTS_RAS`. Everything below uses LiTS_RAS.
-2. **venv-nnunet** for B200: rewrite `setup.sh` → `nnunet/setup_nnunet.sh` (uv, Py 3.11, torch 2.9.1+cu128,
-   nnunetv2 2.6.x, paths in `$PROJ`, `env.sh`-style `nnunet/env.sh` that sets nnUNet_raw/preprocessed/results).
-3. **Filter metrics** `maisi/filter_metrics.py` → `$MAISI_RUNS/pool/filter_metrics.csv`, one row per volume,
-   resumable, parallel. Already in `results.jsonl`: MAISI QC, tumour present, components, largest share, organ/tumour
-   median HU, 15 mm fraction. New (cheap, CPU):
-   - tumour–liver contrast: ΔHU, CNR = |μ_liver − μ_tumour| / σ_liver; tumour HU in soft-tissue range;
-   - topology: liver components/holes (Euler number), tumour fraction inside the liver mask, stray labels outside the body;
-   - image sanity: HU percentiles in the body, air inside the liver, tile-seam score (intensity jumps at the
-     VAE window period 64/64/48);
-   - mask–image consistency: liver HU histogram vs real LiTS liver HU (from LiTS_RAS).
-   The model-agreement metric (Phase 3) is added to the same CSV later.
-4. **Dataset builder** `nnunet/build_datasets.py`:
-   - real: LiTS_RAS train 91 → fixed 20 for validation (seed 42, same idea as the thesis), 71 train; test 40 untouched.
-   - synthetic liver pairs (labels already 0/1/2, RAS): **crop in z** to the liver bbox ± margin before adding
-     (MAISI makes a whole 512 mm torso, LiTS is mostly abdominal crops; cropping cuts disk + preprocessing ~2–3×
-     and matches the real FOV). Decision needed (D3).
-   - **one nnU-Net dataset with everything** (Dataset100_LiTSMaisiPool), preprocessed **once**; each experiment arm is
-     a fold in `splits_final.json` (train = 71 real + the arm's synthetic ids, val = the same 20 real). Saves
-     preprocessing and disk N-fold, and all arms share one plan.
-   - plans from the **real data only** (Dataset099_LiTS: plan_and_preprocess), then transferred to Dataset100
-     (`nnUNetv2_move_plans_between_datasets`), so spacing/patch size/normalisation don't depend on which synthetic
-     volumes are in. Dataset099 is also the LiTS-only baseline.
-5. **Preprocess** Dataset099 + Dataset100 (detached, logged). Estimate disk first on ~20 volumes.
-6. **Eval script** `nnunet/evaluate.py`: predict the 40 LiTS test cases per arm, per-case Dice liver + tumour,
-   tumour Dice on the case level and lesion-wise detection (F1), paired Wilcoxon vs baseline and vs "all",
-   tables + figures in the shared style (`viz.py`). Reuse `compare_predictions.py` where it fits.
+## Arms
 
-All of this is tested on a few volumes in the CPU session (nnU-Net can run a 1-epoch CPU smoke train).
+| fold / dataset | arm | training data | status |
+|---|---|---|---|
+| D101 f0 | `all` | 999 synthetic | done: liver 0.870, tumour 0.301 (111 test) |
+| D101 f1 | `all_rep2` | same, second run (noise floor) | done: liver 0.876, tumour 0.305 |
+| D103 f0 | **`repair`** | 999, tumour components with < 50% of voxels within 15 mm of the liver → background | queued (1st) |
+| D101 f2 | **`reject15mm`** | volumes with ≥ 90% of tumour voxels within 15 mm of the liver (thesis rule, ~621) | queued (2nd) |
+| D101 f3 | **`rejectAUC`** | volumes whose tumour is visible in the image: volume-weighted separability AUC ≥ 5th percentile of real lesions | queued (3rd) |
 
-## Phase 2: GPU, baselines
+The fold numbers are assigned in this order by the queue (they are looked up by arm name, never assumed).
+2×2 view for the paper: criterion (geometry vs label–image consistency) × action (reject vs repair). This session
+runs three of the four cells; `repair by consistency` (invisible tumour → liver or nnU-Net `ignore`) and
+`train on the rejects` (control) are the next candidates.
 
-| arm | training data |
-|---|---|
-| R | 71 real (Dataset099) |
-| A | 71 real + all 999 synthetic |
-| A-K | 71 real + K random synthetic (size control, see D1) |
+### Separability AUC (family 2, `maisi/filter_metrics.py`)
 
-3d_fullres, 1000 epochs (as the thesis), `checkpoint_final` (no selection on val). Measure s/epoch on the B200
-first; several trainings can share one B200 (180 GB), so check 2–4 in parallel the way `bench_workers.py` did.
+Per tumour component: core = component eroded by one voxel (MAISI label edges are 1.5 mm steps); shell = voxels
+2–10 mm outside it, not tumour, restricted to the liver if the liver is ≥ 25% of the shell. AUC = P(core HU > shell
+HU) on integer HU, sep = max(AUC, 1 − AUC) ∈ [0.5, 1] (hypo- and hyperdense both count; 0.5 = invisible). Components
+with < 10 measurable voxels get no score. Volume score = voxel-weighted mean of the component seps. The same code on
+each lesion of the 20 real val cases gives the reference; **cut = its 5th percentile** ("less visible than 95% of
+real tumours"). Volumes with no scored tumour pass (nothing to judge).
 
-## Phase 3: filtering arms (same K synthetic each, so only the selection differs)
+### Evaluation (`nnunet/predict_test.py eval`)
 
-| arm | rule | passes now (liver, of 999) |
+Per case Dice liver / liver+tumour / tumour, global tumour Dice; **lesion-wise** (26-connected tumour components;
+detected = any overlap): recall (all, ≥ 1 ml), precision, FP components and FP volume per case, tumour-free cases
+with any predicted tumour. Every arm vs `all` f0, paired per case + Wilcoxon; `all_rep2` vs `all` is the noise row.
+Both on all 111 and on the 40 thesis test cases. Output: `$nnUNet_results/test_eval_liver/summary.md`.
+
+## The GPU session (full B200, ~23 h, can be extended)
+
+One command, everything else is automatic and resumable (`nnunet/run_queue.py`):
+
+```bash
+cd "$PROJ/BT2026" && git pull
+source nnunet/env.sh && python nnunet/run_queue.py --dry-run      # check the plan
+setsid nohup bash -c 'source "$PROJ/BT2026/nnunet/env.sh" && python "$PROJ/BT2026/nnunet/run_queue.py"' \
+  > "$PROJ/logs/queue_liver_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+```
+
+| step | what | time |
 |---|---|---|
-| F-15mm | thesis rule: ≥ 90% tumour within 15 mm of the liver | 621 |
-| F-rules | 15 mm + tumour present + ≤ 3 tumour components + organ 1 component | ~400 |
-| F-contrast | 15 mm + tumour ≥ 10 HU darker than liver (or CNR threshold) | 492 |
-| F-agree | model agreement: R predicts each synthetic volume, keep the top K by Dice(prediction, MAISI mask) | rank-based |
-| F-combo | best of the above combined | — |
+| eval-all | lesion-wise re-evaluation of `all` f0/f1 | minutes |
+| metrics | `filter_metrics.py` families 1a + 2 → `ids_thesis15mm.json`, `ids_auc.json` | ~20–30 min |
+| build | Dataset103 raw (repaired labels, hard-linked images) + Dataset101 plans | ~10 min |
+| preprocess | `nnUNetv2_preprocess -d 103` (+69 GB) | ~25 min |
+| repair | train D103 f0 → predict 111 → eval | ~4.9 + 2 h |
+| reject15mm | train D101 f2 → predict → eval | ~4.9 + 2 h |
+| rejectAUC | train D101 f3 → predict → eval | ~4.9 + 2 h |
 
-(MAISI QC alone removes 6/999: not worth an arm.) F-agree needs R trained first, then ~999 predictions
-(~1–2 GPU h). Every arm is compared with the random arm of the same size (A-K), otherwise "filtering helps" can just
-mean "fewer synthetic volumes help".
+GPU idles for the first ~1 h (accepted, so repair stays first). Watch: the status file
+`$PROJ/QUEUE_liver_arms__<k>of16_<step>__ETA_…_CET.txt`, the training status files `NNUNET_D10x_…`, and
+`$PROJ/queue_liver/progress.md` (step times, pass counts, val Dice, test tables) → copy the key numbers into
+NOTES.md. A failed step skips only what depends on it. After a session end: run the same command again.
+While `repair` trains, check `filter_metrics/liver/summary.md` (repair split, AUC distributions, cut); if the AUC
+arm looks wrong, fix it before the queue reaches it (`--arms` limits the queue).
 
-## Decisions needed
+## Later
 
-- **D1 size control.** Fixed budget K per arm (e.g. K = 300 so every filter has enough passes; filter = ranking +
-  cut) vs "everything that passes" (N differs per arm). Recommend fixed K plus the "all" arm.
-- **D2 real:synthetic ratio.** 999 synthetic vs 71 real means ~93% of patches are synthetic. Option: a small custom
-  trainer that draws 50% of each batch from real cases. Recommend: first plain sampling with K = 300 (~1:4), add
-  the trainer only if A is clearly worse than R.
-- **D3 z-crop of synthetic volumes** to the liver ± margin (recommend yes, e.g. ± 50 mm).
-- **D4 runs per arm.** 1 seed per arm is noisy; 2–3 seeds for the main arms (R, A-K, best filter) if GPU hours allow.
-- **D5 epochs**: 1000 (thesis) or fewer for screening (e.g. 300 for all arms, 1000 for the final ones).
-
-## Known caveats
-
-- Leakage: MAISI was trained on MSD Task03 (= LiTS); some LiTS test cases may have been seen by MAISI.
-- Synthetic labels are 1.5 mm steps (nearest upsampling), real labels are fine.
-- The thesis baseline trained on broken headers for 28–47; R here is the corrected baseline.
+- Pancreas: Dataset102 (MSD07 val/test split, real reference for the AUC cut), `all` + the best liver arms.
+- More arms if the first three are informative: repair by consistency, train on the rejects, a second run of the best arm.
+- Paper caveats: leakage (MAISI trained on MSD Task03 = LiTS, shared by every arm), 1.5 mm label steps in synthetic
+  masks, thesis baseline trained on broken LiTS headers (28–47), synthetic-only training (defence in NOTES 2026-11-07).

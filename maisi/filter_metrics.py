@@ -17,14 +17,28 @@ and the summary cross-tabs this against the thesis rule (keep a volume if >= 90%
 mm (nearest organ boundary voxel, KD-tree), the same quantity as postprocess.tumor_fraction_near_organ; the volume
 value is cross-checked against raw/<id>/result.json when that exists.
 
-Inputs: <pool>/pairs/<target>/labelsTr/<target>_*.nii.gz (RAS, organ 1, tumour 2; postprocess.py).
-Outputs in --out (default <pool>/filter_metrics/<target>):
-    per_volume/<id>.json   per-volume cache incl. the component list (resumable: existing files are skipped)
-    metrics.csv            one row per volume          components.csv   one row per tumour component
-    summary.md             counts + cross-tab           ids_thesis15mm.json   passing ids + scores (make_splits --ids)
+Family 2, label-image consistency (needs the images; skip with --no-image): for every tumour component the
+**separability AUC** of the image HU between the tumour and its surroundings: core = the component eroded by one voxel
+(the label edge is a 1.5 mm step in MAISI masks, so edge voxels are unreliable), shell = voxels 2..10 mm outside the
+component, not tumour, restricted to the organ when the organ makes up >= 25% of the shell (else any tissue).
+AUC = P(core HU > shell HU) (+ half the ties), exact on integer HU; sep = max(AUC, 1 - AUC) in [0.5, 1], so hypo- and
+hyperdense lesions count alike and 0.5 = the label is invisible in the image. Components with < 10 measurable voxels
+get no score. Volume score = voxel-weighted mean of the component seps (volumes without a scored component: no score).
+The same score per lesion on the **real validation cases** (Dataset101 labelsTr/lits_*, the 20 real val cases; the
+test cases are never read) gives the reference distribution; cut = its --auc-pct (5th) percentile. A volume passes the
+AUC filter if its score >= cut or it has no score (nothing to judge) -> ids_auc.json.
 
-Memory ~1.5 GB per worker on a 512^3 label (a 12 GB CPU session: --workers 4). Run detached (CLAUDE.md):
-    python filter_metrics.py --target liver --workers 8
+Inputs: <pool>/pairs/<target>/labelsTr/<target>_*.nii.gz (RAS, organ 1, tumour 2; postprocess.py) and imagesTr.
+Outputs in --out (default <pool>/filter_metrics/<target>):
+    per_volume/<id>.json   per-volume cache incl. the component list (resumable: existing files are skipped,
+                           volumes cached without family 2 get it added)
+    real_reference/<case>.json   per-lesion scores of the real val cases (cached)
+    metrics.csv            one row per volume          components.csv   one row per tumour component
+    summary.md             counts + cross-tabs          ids_thesis15mm.json, ids_auc.json   passing ids + scores
+                                                        (make_splits --ids)
+
+Memory ~2.5 GB per worker on a 512^3 pair (a 12 GB CPU session: --workers 3). Run detached (CLAUDE.md):
+    python filter_metrics.py --target liver --workers 16
 """
 import argparse
 import csv
@@ -47,6 +61,9 @@ from orient import spacing_of  # noqa: E402
 ORGAN, TUMOR = 1, 2
 THESIS_MM, THESIS_FRAC = 15.0, 0.9
 STRUCT26 = np.ones((3, 3, 3), bool)
+AUC_GAP_MM, AUC_SHELL_MM, AUC_MIN_VOX, AUC_ORGAN_SHARE = 2.0, 10.0, 10, 0.25
+AUC_PARAMS = f"core=erode1 shell={AUC_GAP_MM:g}-{AUC_SHELL_MM:g}mm organ>={AUC_ORGAN_SHARE:g} min={AUC_MIN_VOX}"
+HU_LO, HU_HI = -1024, 3071
 
 
 def distance_to_organ_mm(organ, points, spacing):
@@ -109,17 +126,83 @@ def repair_class(rows):
     return "clean" if kept == len(rows) else "tumour_free" if kept == 0 else "repaired"
 
 
+def auc_int(a, b):
+    """P(a > b) + 0.5 P(a == b) for HU samples rounded to integers: the exact Mann-Whitney AUC with ties, O(n)."""
+    n = HU_HI - HU_LO + 1
+    ha = np.bincount(np.clip(np.rint(a), HU_LO, HU_HI).astype(np.int64) - HU_LO, minlength=n)
+    hb = np.bincount(np.clip(np.rint(b), HU_LO, HU_HI).astype(np.int64) - HU_LO, minlength=n)
+    below = np.cumsum(hb) - hb
+    return float((ha * (below + 0.5 * hb)).sum() / (ha.sum() * hb.sum()))
+
+
+def component_separability(img, label, comp, spacing):
+    """{component id: scores or None} for every tumour component (family 2, see the module docstring)."""
+    organ, tumor = label == ORGAN, label == TUMOR
+    sp = np.asarray(spacing, float)
+    pad = np.ceil((AUC_SHELL_MM + 1) / sp).astype(int)
+    out = {}
+    for c, box in enumerate(ndimage.find_objects(comp), 1):
+        if box is None:
+            continue
+        sl = tuple(slice(max(s.start - p, 0), min(s.stop + p, dim)) for s, p, dim in zip(box, pad, comp.shape))
+        cc = comp[sl] == c
+        core = ndimage.binary_erosion(cc, border_value=0)
+        eroded = core.sum() >= AUC_MIN_VOX
+        if not eroded:
+            core = cc
+        d = ndimage.distance_transform_edt(~cc, sampling=sp)
+        shell = (d > AUC_GAP_MM) & (d <= AUC_SHELL_MM) & ~tumor[sl]
+        on_organ = shell & organ[sl]
+        kind = "organ" if on_organ.sum() >= max(AUC_MIN_VOX, AUC_ORGAN_SHARE * shell.sum()) else "any"
+        if kind == "organ":
+            shell = on_organ
+        if core.sum() < AUC_MIN_VOX or shell.sum() < AUC_MIN_VOX:
+            out[c] = None
+            continue
+        im = img[sl]
+        t, s = im[core], im[shell]
+        auc = auc_int(t, s)
+        out[c] = {"auc": round(auc, 4), "sep": round(max(auc, 1 - auc), 4), "shell": kind, "core_eroded": bool(eroded),
+                  "core_vox": int(t.size), "shell_vox": int(s.size),
+                  "core_hu": round(float(np.median(t)), 1), "shell_hu": round(float(np.median(s)), 1)}
+    return out
+
+
+def weighted_sep(rows):
+    """Voxel-weighted mean sep over the scored components, and the share of tumour voxels that were scored."""
+    scored = [r for r in rows if r.get("sep") is not None]
+    tot = sum(r["voxels"] for r in rows)
+    if not scored:
+        return None, 0.0 if tot else None
+    w = np.array([r["voxels"] for r in scored], float)
+    return round(float((w * [r["sep"] for r in scored]).sum() / w.sum()), 4), round(float(w.sum() / tot), 4)
+
+
+def load_image(path, shape):
+    nii = nib.load(path)
+    img = nii.get_fdata(dtype=np.float32, caching="unchanged")
+    assert img.shape == shape, (path, img.shape, shape)
+    return img
+
+
 def measure(args):
-    path, out_dir, pool, max_mm, keep_frac = args
+    path, out_dir, pool, max_mm, keep_frac, with_image = args
     vid = os.path.basename(path)[: -len(".nii.gz")]
     cache = Path(out_dir) / "per_volume" / f"{vid}.json"
-    if cache.exists():
+    old = json.loads(cache.read_text()) if cache.exists() else None
+    if old is not None and (not with_image or old.get("auc_params") == AUC_PARAMS):
         return vid, "skip"
     nii = nib.load(path)
     label = np.asarray(nii.dataobj).astype(np.uint8)
     spacing = spacing_of(nii.affine)
     voxel_ml = float(np.prod(spacing)) / 1000.0
-    rows, _, dist = tumour_components(label, spacing, max_mm, keep_frac)
+    rows, comp, dist = tumour_components(label, spacing, max_mm, keep_frac)
+    if with_image:
+        img_path = path.replace("/labelsTr/", "/imagesTr/")[: -len(".nii.gz")] + "_0000.nii.gz"
+        sep = component_separability(load_image(img_path, label.shape), label, comp, spacing)
+        for r in rows:
+            r.update(sep.get(r["component"]) or {"auc": None, "sep": None})
+    del comp
     on = [r for r in rows if r["on_organ"]]
     tumor_vox = int(dist.size)
     thesis = float((dist <= THESIS_MM).mean()) if tumor_vox else None
@@ -138,26 +221,58 @@ def measure(args):
         "repair_class": repair_class(rows),
         "max_mm": max_mm,
         "keep_frac": keep_frac,
-        "components": rows,
     }
+    if with_image:
+        score, share = weighted_sep(rows)
+        rec.update({"auc_score": score, "auc_scored_share": share, "auc_params": AUC_PARAMS})
+    rec["components"] = rows
     res = Path(pool) / "raw" / vid / "result.json"
     if res.exists():
         m = json.loads(res.read_text()).get("metrics") or {}
         rec["result_json_frac15"] = m.get("tumor_frac_within_15mm")
         rec["maisi_qc_pass"] = m.get("maisi_qc_recomputed_pass")
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps(rec, indent=1))
-    os.replace(tmp, cache)
-    return vid, rec["repair_class"]
+    write_json(cache, rec)
+    return vid, rec["repair_class"] + (f" sep={rec['auc_score']}" if with_image else "")
 
 
-def write_tables(out_dir, target):
+def write_json(path, obj):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj, indent=1))
+    os.replace(tmp, path)
+
+
+def measure_real(args):
+    """Per-lesion family-2 scores of one real validation case (same code path as the synthetic volumes)."""
+    label_path, out_dir = args
+    case = os.path.basename(label_path)[: -len(".nii.gz")]
+    cache = Path(out_dir) / "real_reference" / f"{case}.json"
+    if cache.exists() and json.loads(cache.read_text()).get("auc_params") == AUC_PARAMS:
+        return case, "skip"
+    nii = nib.load(label_path)
+    label = np.asarray(nii.dataobj).astype(np.uint8)
+    spacing = spacing_of(nii.affine)
+    rows, comp, _ = tumour_components(label, spacing, THESIS_MM, 0.5)
+    img_path = label_path.replace("/labelsTr/", "/imagesTr/")[: -len(".nii.gz")] + "_0000.nii.gz"
+    sep = component_separability(load_image(img_path, label.shape), label, comp, spacing)
+    for r in rows:
+        r.update(sep.get(r["component"]) or {"auc": None, "sep": None})
+    write_json(cache, {"case": case, "spacing": spacing, "auc_params": AUC_PARAMS, "lesions": rows})
+    return case, f"{len(rows)} lesions"
+
+
+def union_keys(dicts, skip=()):
+    keys = []
+    for d in dicts:
+        keys += [k for k in d if k not in keys and k not in skip]
+    return keys
+
+
+def write_tables(out_dir, target, auc_pct):
     recs = [json.loads(p.read_text()) for p in sorted((Path(out_dir) / "per_volume").glob("*.json"))]
     if not recs:
         return
-    vol_keys = [k for k in recs[0] if k != "components"]
-    vol_keys += [k for k in ("result_json_frac15", "maisi_qc_pass") if k not in vol_keys]
+    vol_keys = union_keys(recs, skip=("components",))
     with open(Path(out_dir) / "metrics.csv", "w", newline="") as f:
         w = csv.DictWriter(f, vol_keys, extrasaction="ignore")
         w.writeheader()
@@ -165,7 +280,7 @@ def write_tables(out_dir, target):
     comp_rows = [{"id": r["id"], **c} for r in recs for c in r["components"]]
     if comp_rows:
         with open(Path(out_dir) / "components.csv", "w", newline="") as f:
-            w = csv.DictWriter(f, list(comp_rows[0]))
+            w = csv.DictWriter(f, union_keys(comp_rows))
             w.writeheader()
             w.writerows(comp_rows)
 
@@ -208,8 +323,50 @@ def write_tables(out_dir, target):
     if chk:
         diff = max(abs(a - b) for a, b in chk)
         lines += ["", f"Cross-check vs result.json tumor_frac_within_15mm: {len(chk)} volumes, max |diff| {diff:.4f}."]
+    lines += auc_section(out_dir, recs, auc_pct)
     (Path(out_dir) / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+
+
+def auc_section(out_dir, recs, auc_pct):
+    """Family 2: real reference, cut, ids_auc.json, and how the AUC filter overlaps the thesis rule and repair."""
+    if not all(r.get("auc_params") == AUC_PARAMS for r in recs):
+        return ["", "Family 2 (separability AUC): not computed for every volume (--no-image?), no ids_auc.json."]
+    real = [json.loads(p.read_text()) for p in sorted((Path(out_dir) / "real_reference").glob("*.json"))]
+    lesions = [l for c in real for l in c["lesions"] if l.get("sep") is not None]
+    if len(lesions) < 5:
+        return ["", f"Family 2: only {len(lesions)} scored real lesions, no cut, no ids_auc.json."]
+    real_sep = np.array([l["sep"] for l in lesions])
+    cut = float(np.percentile(real_sep, auc_pct))
+    passing = {r["id"]: r["auc_score"] for r in recs if r["auc_score"] is None or r["auc_score"] >= cut}
+    (Path(out_dir) / "ids_auc.json").write_text(json.dumps({
+        "rule": f"volume-weighted separability AUC >= {cut:.4f} = {auc_pct:g}th percentile of {len(lesions)} real "
+                f"lesions ({len(real)} real val cases); volumes without a scored tumour pass",
+        "cut": cut, "pct": auc_pct, "auc_params": AUC_PARAMS, "n_pass": len(passing), "n_total": len(recs),
+        "ids": sorted(passing), "scores": passing}, indent=1))
+    syn = np.array([r["auc_score"] for r in recs if r["auc_score"] is not None])
+    q = lambda v: " / ".join(f"{np.percentile(v, p):.3f}" for p in (5, 25, 50, 75, 95))  # noqa: E731
+    unscored_real = sum(l.get("sep") is None for c in real for l in c["lesions"])
+    kinds = Counter(c.get("shell") for r in recs for c in r["components"] if c.get("sep") is not None)
+    lines = ["", "## Family 2: label-image consistency (separability AUC)", "",
+             f"Params: {AUC_PARAMS}. sep = max(AUC, 1 - AUC); 0.5 = tumour label invisible in the image.", "",
+             "| | n | p5 / p25 / median / p75 / p95 |", "|---|---|---|",
+             f"| real val lesions ({len(real)} cases) | {len(real_sep)} | {q(real_sep)} |",
+             f"| synthetic volumes (weighted) | {len(syn)} | {q(syn) if len(syn) else '-'} |", "",
+             f"Real lesions without a score (< {AUC_MIN_VOX} measurable voxels): {unscored_real}. "
+             f"Synthetic shells: organ {kinds['organ']}, any tissue {kinds['any']}.",
+             f"**Cut = real p{auc_pct:g} = {cut:.4f}. Pass: {len(passing)}/{len(recs)}** "
+             f"(incl. {sum(v is None for v in passing.values())} without a scored tumour).", "",
+             "| | AUC pass | AUC fail |", "|---|---|---|"]
+    for name, f_ in (("thesis pass", lambda r: r["thesis_pass"] is True), ("thesis fail", lambda r: r["thesis_pass"] is False),
+                     ("no tumour", lambda r: r["thesis_pass"] is None)):
+        sub = [r for r in recs if f_(r)]
+        lines.append(f"| {name} | {sum(r['id'] in passing for r in sub)} | {sum(r['id'] not in passing for r in sub)} |")
+    lines += ["", "| repair class | AUC pass | AUC fail |", "|---|---|---|"]
+    for c in ["no_tumour", "clean", "repaired", "tumour_free"]:
+        sub = [r for r in recs if r["repair_class"] == c]
+        lines.append(f"| {c} | {sum(r['id'] in passing for r in sub)} | {sum(r['id'] not in passing for r in sub)} |")
+    return lines
 
 
 def main():
@@ -221,9 +378,14 @@ def main():
     ap.add_argument("--keep-frac", type=float, default=0.5, help="on-organ if this share of a component is within --max-mm")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=0, help="only the first N volumes (testing)")
+    ap.add_argument("--no-image", action="store_true", help="family 1a only (labels), no separability AUC")
+    ap.add_argument("--real-dir", help="nnU-Net raw dataset with the real val cases in imagesTr/labelsTr "
+                    "(default $nnUNet_raw/Dataset101_LiverSynth for liver)")
+    ap.add_argument("--auc-pct", type=float, default=5.0, help="cut = this percentile of the real lesion seps")
     a = ap.parse_args()
 
     out = a.out or f"{a.pool}/filter_metrics/{a.target}"
+    with_image = not a.no_image
     files = sorted(glob.glob(f"{a.pool}/pairs/{a.target}/labelsTr/{a.target}_*.nii.gz"))
     if a.limit:
         files = files[: a.limit]
@@ -233,13 +395,26 @@ def main():
              if (lambda r: (r["max_mm"], r["keep_frac"]) != (a.max_mm, a.keep_frac))(json.loads(p.read_text()))]
     if stale:
         raise SystemExit(f"{len(stale)} cached volumes in {out} used other --max-mm/--keep-frac; use another --out")
-    print(f"{len(files)} labels -> {out} ({a.workers} workers)", flush=True)
-    jobs = [(f, out, a.pool, a.max_mm, a.keep_frac) for f in files]
+    real_jobs = []
+    if with_image:
+        if a.target != "liver" and not a.real_dir:
+            raise SystemExit("--real-dir is required for pancreas")
+        raw = os.environ.get("nnUNet_raw", f"{os.environ.get('PROJ', '/work/Research')}/nnunet_data/raw")
+        real_dir = a.real_dir or f"{raw}/Dataset101_LiverSynth"
+        # labelsTr holds only the real *validation* cases; the test cases live in labelsTs_real and are never read
+        real_jobs = [(f, out) for f in sorted(glob.glob(f"{real_dir}/labelsTr/lits_*.nii.gz"))]
+        if not real_jobs:
+            raise SystemExit(f"no real val labels in {real_dir}/labelsTr")
+    print(f"{len(files)} labels -> {out} ({a.workers} workers, family 2 {'on' if with_image else 'off'}, "
+          f"{len(real_jobs)} real val cases)", flush=True)
+    jobs = [(f, out, a.pool, a.max_mm, a.keep_frac, with_image) for f in files]
     with Pool(a.workers) as pool:
+        for case, msg in pool.imap_unordered(measure_real, real_jobs):
+            print(f"[real] {case}: {msg}", flush=True)
         for i, (vid, cls) in enumerate(pool.imap_unordered(measure, jobs), 1):
             if cls != "skip" or i == len(jobs):
                 print(f"[{i}/{len(jobs)}] {vid}: {cls}", flush=True)
-    write_tables(out, a.target)
+    write_tables(out, a.target, a.auc_pct)
 
 
 if __name__ == "__main__":

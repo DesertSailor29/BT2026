@@ -1,5 +1,7 @@
 # Answer to hand back to the user (written 2026-11-07 16:50, UCloud)
 
+> **Answered 2026-11-07** (NOTES.md Decisions); the current plan is `PLAN_training.md`. Kept for the record.
+
 Show this to the user verbatim at the start of the next session, then wait for their answers.
 
 ## CPU in this session

@@ -8,6 +8,7 @@ Folds are append-only: an arm keeps its fold number forever (arms.json maps fold
   python make_splits.py --target liver --arm all_rep2                  # same cases again: run-to-run variation
   python make_splits.py --target liver --arm f15mm --ids f15mm.json    # filter output (JSON list or {"ids": [...]})
   python make_splits.py --target liver --arm f15mm_k300 --ids f15mm.json --k 300 --seed 0   # random K of a list
+  python make_splits.py --target liver --dataset-id 103 --arm repair --all-synth   # every case of another dataset
   python make_splits.py --target liver --list
 Then train:  nnUNetv2_train <id> 3d_fullres <fold>
 """
@@ -28,10 +29,16 @@ def main():
     ap.add_argument("--k", type=int, default=0, help="random K of the list (0 = all)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--dataset-id", type=int, help="another dataset of this target (e.g. 103 = repaired labels)")
+    ap.add_argument("--all-synth", action="store_true", help="every synthetic case (like --arm all)")
     a = ap.parse_args()
 
     did, name, _, _ = TARGETS[a.target]
     ds = f"Dataset{did:03d}_{name}"
+    if a.dataset_id:
+        found = glob.glob(f"{os.environ['nnUNet_raw']}/Dataset{a.dataset_id:03d}_*")
+        assert len(found) == 1, f"Dataset{a.dataset_id:03d}_* in nnUNet_raw: {found}"
+        ds = os.path.basename(found[0])
     raw, pre = f"{os.environ['nnUNet_raw']}/{ds}", f"{os.environ['nnUNet_preprocessed']}/{ds}"
     arms_f, splits_f = f"{pre}/arms.json", f"{pre}/splits_final.json"
     arms = json.load(open(arms_f)) if os.path.exists(arms_f) else []
@@ -53,7 +60,8 @@ def main():
         missing = set(ids) - set(synth)
         assert not missing, f"{len(missing)} ids not in the dataset, e.g. {sorted(missing)[:3]}"
     else:
-        assert a.arm == "all" or a.arm.startswith("all_rep"), "--ids is required unless --arm all / all_repN"
+        assert a.all_synth or a.arm == "all" or a.arm.startswith("all_rep"), \
+            "--ids is required unless --all-synth or --arm all / all_repN"
         ids = synth
     if a.k:
         assert a.k <= len(ids), (a.k, len(ids))
