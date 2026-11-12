@@ -1,0 +1,5 @@
+{
+ "_doc": "Real val lesions left out of the filter reference (PLAN_training.md sanity checks 1-2). Only for label errors seen in a figure; each entry: {\"case\": \"lits_007\", \"component\": 3, \"reason\": \"...\", \"date\": \"YYYY-MM-DD\"}. Changes the AUC cut, so the repair datasets must be rebuilt.",
+ "liver": [],
+ "pancreas": []
+}

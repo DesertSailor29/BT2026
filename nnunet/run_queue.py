@@ -1,20 +1,26 @@
 #!/usr/bin/env python
-"""Unattended queue for the liver filter arms (decided 2026-11-12): prepare, then train + test one arm after another.
+"""Unattended queue for the liver filter arms (PLAN_training.md, 2026-11-12): prepare, then train + test each arm.
+
+CPU session first (`--prep-only`: everything up to the preprocessed repair datasets, then look at the sanity checks),
+then the GPU session with the same command without the flag (done prep steps are skipped):
 
     setsid nohup bash -c 'source "$PROJ/BT2026/nnunet/env.sh" && python "$PROJ/BT2026/nnunet/run_queue.py"' \
       > "$PROJ/logs/queue_liver_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 
 Steps, in order (each one skips what is already done, so the same command resumes after a session end):
   eval-all     lesion-wise re-evaluation of the existing `all` runs (Dataset101 folds 0 + 1)       CPU, minutes
-  metrics      maisi/filter_metrics.py, families 1a + 2 -> ids_thesis15mm.json, ids_auc.json      CPU, ~15-30 min
-  build        build_repair_dataset.py --plans -> Dataset103 raw (repaired labels) + Dataset101's plans
-  preprocess   nnUNetv2_preprocess -d 103 (Dataset101 plans)                                       CPU, ~30 min
-  per arm, in ARMS order (repair -> reject15mm -> rejectAUC):
+  metrics      maisi/filter_metrics.py (touch + separability, real reference, cut)
+               -> ids_rejectTouch.json, ids_rejectAUC.json, rules.json                             CPU, ~15-30 min
+  figures      maisi/filter_figures.py: contact sheets for the sanity checks                       CPU, minutes
+  build-X      build_repair_dataset.py --criterion X --plans -> Dataset103 (touch) / 104 (auc)     CPU, ~10 min
+  preprocess-X nnUNetv2_preprocess -d 103 / 104 (Dataset101 plans)                                 CPU, ~30 min
+  per arm, in ARMS order (repairTouch -> rejectTouch -> repairAUC -> rejectAUC):
     split      make_splits.py (registered once; the fold number is looked up by arm name)
     train      nnUNetv2_train <d> 3d_fullres <fold> --c (+ train_status.py status file)            GPU, ~4.9 h
     predict    predict_test.py predict (111 real LiTS test cases, checkpoint_final)                GPU, ~2 h
     eval       predict_test.py eval over every finished run (reference = `all` fold 0)             CPU, minutes
-A failed step skips what depends on it (e.g. a failed metrics step skips both reject arms) and the queue goes on.
+A failed step skips what depends on it (e.g. a failed metrics step skips every arm) and the queue goes on.
+Only the prep steps the selected arms need are run.
 
 Status: one file at the top of $PROJ, e.g. QUEUE_liver_arms__4of15_train-repair__ETA_Fri-13-Nov_09-30_CET.txt
 (-> __DONE_ / __STOPPED_ at the end; ETA from rough per-step estimates, the training watcher has the exact one).
@@ -22,7 +28,8 @@ Progress lines with times + results: $PROJ/queue_liver/progress.md (copy the key
 Training settings as for `all`: default nnUNetTrainer, 1000 epochs, nnUNet_compile=f, nnUNet_n_proc_DA=24.
 
   python run_queue.py --dry-run          # what would run, what is done
-  python run_queue.py --arms repair      # only some arms (prep steps they need still run)
+  python run_queue.py --prep-only        # CPU session: prep steps only, no training
+  python run_queue.py --arms repairTouch rejectTouch   # only some arms (prep steps they need still run)
 """
 import argparse
 import glob
@@ -46,12 +53,16 @@ TZ = ZoneInfo("Europe/Copenhagen")
 PY = sys.executable
 
 ARMS = [  # name, dataset id, ids file (None = every synthetic case), prep step it needs
-    ("repair", 103, None, "preprocess"),
-    ("reject15mm", 101, f"{FM}/ids_thesis15mm.json", "metrics"),
-    ("rejectAUC", 101, f"{FM}/ids_auc.json", "metrics"),
+    ("repairTouch", 103, None, "preprocess-touch"),
+    ("rejectTouch", 101, f"{FM}/ids_rejectTouch.json", "metrics"),
+    ("repairAUC", 104, None, "preprocess-auc"),
+    ("rejectAUC", 101, f"{FM}/ids_rejectAUC.json", "metrics"),
 ]
-HOURS = {"eval-all": 0.1, "metrics": 0.5, "build": 0.2, "preprocess": 0.5, "split": 0.0, "train": 4.9,
+REPAIR_DS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC")}
+HOURS = {"eval-all": 0.1, "metrics": 0.5, "figures": 0.1, "build": 0.2, "preprocess": 0.5, "split": 0.0, "train": 4.9,
          "predict": 2.0, "eval": 0.1}
+DEPENDS = {"figures": "metrics", "build-touch": "metrics", "build-auc": "metrics",
+           "preprocess-touch": "build-touch", "preprocess-auc": "build-auc"}
 WORKERS = int(os.environ.get("QUEUE_CPU_WORKERS", "16"))
 
 
@@ -60,11 +71,15 @@ def now():
 
 
 class Queue:
-    def __init__(self, arms, dry):
+    def __init__(self, arms, dry, prep_only=False):
         self.dry = dry
-        self.steps = [("eval-all", None), ("metrics", None), ("build", None), ("preprocess", None)]
-        for a in arms:
-            self.steps += [(s, a) for s in ("split", "train", "predict", "eval")]
+        self.steps = [("eval-all", None), ("metrics", None), ("figures", None)]
+        for crit in REPAIR_DS:
+            if any(a[3] == f"preprocess-{crit}" for a in arms):
+                self.steps += [(f"build-{crit}", None), (f"preprocess-{crit}", None)]
+        if not prep_only:
+            for a in arms:
+                self.steps += [(s, a) for s in ("split", "train", "predict", "eval")]
         self.failed = set()
         self.dir = PROJ / "queue_liver"
         self.status = None
@@ -146,25 +161,40 @@ class Queue:
         if name == "metrics":
             self.run([PY, REPO / "maisi/filter_metrics.py", "--target", "liver", "--pool", POOL, "--workers", WORKERS],
                      "filter_metrics_liver")
-            for f in ("ids_thesis15mm.json", "ids_auc.json"):
-                if not self.dry:
-                    d = json.load(open(f"{FM}/{f}"))
-                    self.log(f"metrics: {f} passes {d['n_pass']}/{d['n_total']}" + (f", cut {d['cut']:.4f}" if "cut" in d else ""))
-            return
-        if name == "build":
-            self.run([PY, HERE / "build_repair_dataset.py", "--workers", WORKERS, "--plans"], "build_ds103")
             if not self.dry:
-                s = open(f"{os.environ['nnUNet_raw']}/Dataset103_LiverSynthRepair/repair_summary.md").read()
-                self.log("build: " + " ".join(l for l in s.splitlines() if l.startswith(("Volumes changed", "Tumour-free"))))
+                r = json.load(open(f"{FM}/rules.json"))
+                self.log(f"metrics: real lesions {r['real_lesions']} ({r['real_lesions_scored']} scored), "
+                         f"AUC cut {r['auc_cut']}")
+                for f in ("ids_rejectTouch.json", "ids_rejectAUC.json", "ids_thesis15mm.json"):
+                    d = json.load(open(f"{FM}/{f}"))
+                    self.log(f"metrics: {f} passes {d['n_pass']}/{d['n_total']}")
             return
-        if name == "preprocess":
-            pre = Path(os.environ["nnUNet_preprocessed"]) / "Dataset103_LiverSynthRepair"
-            n = json.load(open(f"{os.environ['nnUNet_raw']}/Dataset103_LiverSynthRepair/dataset.json"))["numTraining"] if not self.dry else 0
-            if not self.dry and len(list((pre / "nnUNetPlans_3d_fullres").glob("*.pkl"))) == n:
-                self.log(f"preprocess: Dataset103 already done ({n} cases)")
+        if name == "figures":
+            fig, rules = Path(FM) / "figures" / "real_least_visible.png", Path(FM) / "rules.json"
+            if not self.dry and fig.exists() and fig.stat().st_mtime > rules.stat().st_mtime:
+                self.log("figures: up to date")
                 return
-            self.run(["nnUNetv2_preprocess", "-d", "103", "-plans_name", "nnUNetPlans", "-c", "3d_fullres", "-np", WORKERS],
-                     "preprocess_ds103")
+            self.run([PY, REPO / "maisi/filter_figures.py", "--metrics", FM, "--pool", POOL, "--target", "liver"],
+                     "filter_figures_liver")
+            return
+        if name.startswith("build-"):
+            crit = name.split("-", 1)[1]
+            did, ds = REPAIR_DS[crit]
+            self.run([PY, HERE / "build_repair_dataset.py", "--criterion", crit, "--metrics", FM, "--workers", WORKERS,
+                      "--plans"], f"build_ds{did}")
+            if not self.dry:
+                s = open(f"{os.environ['nnUNet_raw']}/{ds}/repair_summary.md").read()
+                self.log(f"build {ds}: " + " ".join(l for l in s.splitlines() if l.startswith(("Volumes changed", "Tumour-free"))))
+            return
+        if name.startswith("preprocess-"):
+            did, ds = REPAIR_DS[name.split("-", 1)[1]]
+            pre = Path(os.environ["nnUNet_preprocessed"]) / ds
+            n = json.load(open(f"{os.environ['nnUNet_raw']}/{ds}/dataset.json"))["numTraining"] if not self.dry else 0
+            if not self.dry and len(list((pre / "nnUNetPlans_3d_fullres").glob("*.pkl"))) == n:
+                self.log(f"preprocess: {ds} already done ({n} cases)")
+                return
+            self.run(["nnUNetv2_preprocess", "-d", did, "-plans_name", "nnUNetPlans", "-c", "3d_fullres", "-np", WORKERS],
+                     f"preprocess_ds{did}")
             if not self.dry:
                 got = len(list((pre / "nnUNetPlans_3d_fullres").glob("*.pkl")))
                 assert got == n, f"preprocessed {got} of {n}"
@@ -232,7 +262,7 @@ class Queue:
         self.log(f"queue start ({len(self.steps)} steps, dry={self.dry})")
         for i, (name, arm) in enumerate(self.steps):
             label = f"{name}-{arm[0]}" if arm else name
-            needs = arm[3] if arm else {"preprocess": "build"}.get(name)
+            needs = arm[3] if arm else DEPENDS.get(name)
             if needs in self.failed or (arm and arm[0] in self.failed):
                 self.log(f"skip {label} (depends on a failed step)")
                 self.failed.add(arm[0] if arm else name)
@@ -255,9 +285,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--arms", nargs="+", choices=[a[0] for a in ARMS])
+    ap.add_argument("--prep-only", action="store_true", help="CPU session: prep steps only (no split/train/predict)")
     a = ap.parse_args()
     arms = [x for x in ARMS if not a.arms or x[0] in a.arms]
-    q = Queue(arms, a.dry_run)
+    q = Queue(arms, a.dry_run, a.prep_only)
 
     def stop(sig, _frame):
         q.log(f"signal {sig}: stopping")

@@ -8,7 +8,7 @@ Folds are append-only: an arm keeps its fold number forever (arms.json maps fold
   python make_splits.py --target liver --arm all_rep2                  # same cases again: run-to-run variation
   python make_splits.py --target liver --arm f15mm --ids f15mm.json    # filter output (JSON list or {"ids": [...]})
   python make_splits.py --target liver --arm f15mm_k300 --ids f15mm.json --k 300 --seed 0   # random K of a list
-  python make_splits.py --target liver --dataset-id 103 --arm repair --all-synth   # every case of another dataset
+  python make_splits.py --target liver --dataset-id 103 --arm repairTouch --all-synth   # every case of another dataset
   python make_splits.py --target liver --list
 Then train:  nnUNetv2_train <id> 3d_fullres <fold>
 """

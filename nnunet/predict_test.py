@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Predict the real LiTS test cases with trained arms (folds of Dataset101 or Dataset103) and score them.
+"""Predict the real LiTS test cases with trained arms (folds of Dataset101, or of the repair datasets 103 / 104) and score them.
 
 Test cases = real_split.json "test" (111 LiTS cases: thesis train split minus the 20 val cases + the 40 thesis test
 cases), read from the RAS copy (raw_data/LiTS_RAS) into Dataset101's imagesTs_real / labelsTs_real; every dataset of

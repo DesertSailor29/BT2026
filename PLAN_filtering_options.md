@@ -1,7 +1,8 @@
 # Filtering options for the MAISI pool (draft 2026-11-08)
 
-Candidate filters (and repairs) for Option B, with arguments for and against each. Nothing chosen yet; the pick goes
-into `PLAN_training.md` and `maisi/filter_metrics.py`.
+Candidate filters (and repairs) for Option B, with arguments for and against each. **The pick (2026-11-12) is in
+`PLAN_training.md` "Filter rules"**: one per-component criterion drives both a reject and a repair arm; touch (family 1)
+and separability AUC (family 2), cut = the least visible real lesion. The recommendation at the end is superseded.
 
 ## Context (as of 2026-11-08)
 
