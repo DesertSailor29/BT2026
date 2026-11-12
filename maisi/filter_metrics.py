@@ -9,6 +9,7 @@ Criteria (a component fails if it is unlike every real lesion):
     touch   fails if none of its voxels is 26-adjacent to an organ voxel.                   repair -> background
     auc     fails if its separability sep < cut = the minimum sep over the real val lesions.  repair -> organ if >= 50%
             of its outer 26-neighbour shell is organ, else background. Unscored components pass.
+    both    fails if it fails touch or auc (follow-up arm).           repair -> background if it fails touch, else as auc
 Separability: core = the component eroded by one voxel (MAISI label edges are 1.5 mm steps, so edge voxels are
 unreliable), shell = voxels 2..10 mm outside it, not tumour, restricted to the organ when the component sits in the
 organ (contact >= 50%, the same "surroundings" as the auc repair) or the organ is >= 25% of the shell; else any tissue. AUC = P(core HU > shell HU) (+ half the ties), exact on integer HU; sep = max(AUC, 1 - AUC)
@@ -27,7 +28,7 @@ Outputs in --out (default <pool>/filter_metrics/<target>):
     per_volume/<id>.json, real_reference/<case>.json   caches (no decisions in them, so the cut can change freely;
                                                        resumable: existing files of the same VERSION are skipped)
     metrics.csv  components.csv  real_lesions.csv      tables incl. the decisions
-    ids_rejectTouch.json  ids_rejectAUC.json  ids_thesis15mm.json   passing ids (make_splits --ids)
+    ids_rejectTouch.json  ids_rejectAUC.json  ids_rejectBoth.json  ids_thesis15mm.json   passing ids (make_splits --ids)
     rules.json                                         cut + version, read by build_repair_dataset.py
     summary.md                                         real reference, classes per criterion, cross-tabs, sanity checks
 
@@ -61,7 +62,7 @@ SURROUND_SHARE = 0.5  # contact >= this: the component's surroundings are the or
 VERSION = (f"cc3 touch=adj26 auc: core=erode1 shell={AUC_GAP_MM:g}-{AUC_SHELL_MM:g}mm organ if contact>={SURROUND_SHARE:g} "
            f"or organ>={AUC_ORGAN_SHARE:g} min={AUC_MIN_VOX}")
 NOIMG = " noimage"
-CRITERIA = {"touch": "Touch", "auc": "AUC"}  # criterion -> arm suffix (rejectTouch, repairAUC, ...)
+CRITERIA = {"touch": "Touch", "auc": "AUC", "both": "Both"}  # criterion -> arm suffix (rejectTouch, repairAUC, ...)
 EXCLUSIONS = Path(__file__).resolve().parent / "real_reference_exclusions.json"
 HU_LO, HU_HI = -1024, 3071
 MIN_REJECT_KEEP, MIN_REPAIR_CHANGE = 100, 20  # sanity check 4
@@ -161,16 +162,17 @@ def fails(c, criterion, cut=None):
     """Does tumour component row `c` fail `criterion`? (PLAN_training.md "Filter rules")"""
     if criterion == "touch":
         return not c["touches"]
-    if criterion == "auc":
+    if criterion in ("auc", "both"):
         if cut is None:
-            raise ValueError("criterion auc needs the cut (rules.json)")
-        return c.get("sep") is not None and c["sep"] < cut
+            raise ValueError(f"criterion {criterion} needs the cut (rules.json)")
+        invisible = c.get("sep") is not None and c["sep"] < cut
+        return invisible or (criterion == "both" and not c["touches"])
     raise ValueError(criterion)
 
 
 def repair_value(c, criterion):
-    """New label of a failing component: background for touch; the surroundings' label for auc."""
-    if criterion == "touch":
+    """New label of a failing component: background if it fails touch; otherwise (auc) the surroundings' label."""
+    if criterion == "touch" or (criterion == "both" and not c["touches"]):
         return 0
     return ORGAN if c["contact"] >= SURROUND_SHARE else 0
 
@@ -321,7 +323,7 @@ def write_tables(out_dir, target, exclusions_path):
     if with_image and len(scored) >= 5:
         low = min(scored, key=lambda l: l["sep"])
         cut, cut_from = low["sep"], {k: low[k] for k in ("case", "component", "ml", "sep", "core_hu", "shell_hu")}
-    crits = ["touch"] + (["auc"] if cut is not None else [])
+    crits = ["touch"] + (["auc", "both"] if cut is not None else [])
 
     # decisions
     for r in recs:
@@ -355,8 +357,11 @@ def write_tables(out_dir, target, exclusions_path):
         ids_file("ids_rejectAUC.json", f"every scored tumour component has sep >= {cut} (minimum of the real val "
                  "lesions); unscored components and tumour-free volumes pass",
                  [r["id"] for r in recs if r["pass_rejectAUC"]], {"version": VERSION, "cut": cut})
+        ids_file("ids_rejectBoth.json", f"every tumour component touches the organ and has sep >= {cut} (or no score)",
+                 [r["id"] for r in recs if r["pass_rejectBoth"]], {"version": VERSION, "cut": cut})
     else:
-        (out / "ids_rejectAUC.json").unlink(missing_ok=True)
+        for f in ("ids_rejectAUC.json", "ids_rejectBoth.json"):
+            (out / f).unlink(missing_ok=True)
     write_json(out / "rules.json", {
         "version": VERSION, "target": target, "auc_cut": cut, "auc_cut_from": cut_from,
         "real_cases": len(real), "real_lesions": len(real_rows), "real_lesions_scored": len(scored),
@@ -371,8 +376,9 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
     n = len(recs)
     L = [f"# Filter metrics: {target} ({n} synthetic volumes, {len(real)} real val cases)", "",
          "Rules: PLAN_training.md \"Filter rules\". A component fails touch if no voxel is 26-adjacent to the organ; "
-         "it fails auc if its sep < the minimum sep of the real val lesions. reject = keep volumes without a failing "
-         "component; repair = relabel the failing components (touch -> background, auc -> surroundings' label).", "",
+         "it fails auc if its sep < the minimum sep of the real val lesions; both = either. reject = keep volumes "
+         "without a failing component; repair = relabel the failing components (fails touch -> background, otherwise "
+         "auc -> surroundings' label).", "",
          "## Real reference (sanity checks 1 + 2)", ""]
     touch_real = [l for l in real_rows if not l["excluded"]]
     nt = sum(l["touches"] for l in touch_real)

@@ -6,6 +6,7 @@ same cached measurements, same cut from rules.json), so a repair arm and its rej
     --criterion touch -> Dataset103_LiverSynthRepairTouch: components not touching the liver -> background
     --criterion auc   -> Dataset104_LiverSynthRepairAUC:   invisible components (sep < real min) -> liver if >= 50%
                                                             of their outer shell is liver, else background
+    --criterion both  -> Dataset105_LiverSynthRepairBoth:  either rule fails; not touching -> background, else as auc
 N stays 999, only labels change. Each Dataset101 label is relabelled with filter_metrics.apply_repair, which recomputes
 the components and checks them against the metrics cache (Dataset101 labels are the pool labels cropped at MAISI's
 empty padding, so the components and their numbering are the same). Images and the 20 real validation cases are
@@ -43,7 +44,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maisi"))
 from filter_metrics import CRITERIA, ORGAN, TUMOR, VERSION, apply_repair, fails, repair_value, volume_class  # noqa: E402
 
 SRC_ID, SRC = 101, "Dataset101_LiverSynth"
-DATASETS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC")}
+DATASETS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC"),
+            "both": (105, "Dataset105_LiverSynthRepairBoth")}
 POOL = os.environ.get("MAISI_RUNS", f"{os.environ.get('PROJ', '/work/Research')}/maisi_runs") + "/pool"
 
 
@@ -113,10 +115,11 @@ def main():
     rules = json.load(open(f"{a.metrics}/rules.json"))
     assert rules["version"] == VERSION, f"rules.json is from another filter_metrics version: {rules['version']}"
     cut = rules["auc_cut"]
-    if a.criterion == "auc" and cut is None:
+    uses_cut = a.criterion in ("auc", "both")
+    if uses_cut and cut is None:
         raise SystemExit("rules.json has no AUC cut (filter_metrics ran without images?)")
-    used = {"criterion": a.criterion, "version": VERSION, "auc_cut": cut if a.criterion == "auc" else None,
-            "excluded": rules["excluded"] if a.criterion == "auc" else None}
+    used = {"criterion": a.criterion, "version": VERSION, "auc_cut": cut if uses_cut else None,
+            "excluded": rules["excluded"] if uses_cut else None}
 
     raw_src, raw_dst = f"{os.environ['nnUNet_raw']}/{SRC}", f"{os.environ['nnUNet_raw']}/{name}"
     pre_dst = f"{os.environ['nnUNet_preprocessed']}/{name}"
@@ -139,7 +142,7 @@ def main():
         link(f, f"{raw_dst}/labelsTr/{os.path.basename(f)}")
     shutil.copy(f"{raw_src}/real_split.json", f"{raw_dst}/real_split.json")
     print(f"{name}: {len(imgs)} images linked, {len(real)} real labels linked, {len(synth)} synthetic labels "
-          f"(criterion {a.criterion}{f', cut {cut}' if a.criterion == 'auc' else ''})", flush=True)
+          f"(criterion {a.criterion}{f', cut {cut}' if uses_cut else ''})", flush=True)
 
     jobs = []
     for f in synth:
@@ -157,8 +160,10 @@ def main():
 
     n = len(glob.glob(f"{raw_dst}/labelsTr/*.nii.gz"))
     assert n == len(labs) == len(imgs), (n, len(labs), len(imgs))
-    what = ("tumour components not touching the liver relabelled to background" if a.criterion == "touch" else
-            f"tumour components with separability < {cut} (real val minimum) relabelled to their surroundings' label")
+    what = {"touch": "tumour components not touching the liver relabelled to background",
+            "auc": f"tumour components with separability < {cut} (real val minimum) relabelled to their surroundings' label",
+            "both": f"tumour components not touching the liver relabelled to background, and those with separability "
+                    f"< {cut} to their surroundings' label"}[a.criterion]
     json.dump(dict(src_ds, numTraining=n, description=f"{src_ds.get('description', SRC)}; {what} "
                    f"(repair{CRITERIA[a.criterion]} arm)"), open(f"{raw_dst}/dataset.json", "w"), indent=1)
 

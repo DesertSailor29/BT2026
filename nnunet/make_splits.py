@@ -9,6 +9,7 @@ Folds are append-only: an arm keeps its fold number forever (arms.json maps fold
   python make_splits.py --target liver --arm f15mm --ids f15mm.json    # filter output (JSON list or {"ids": [...]})
   python make_splits.py --target liver --arm f15mm_k300 --ids f15mm.json --k 300 --seed 0   # random K of a list
   python make_splits.py --target liver --dataset-id 103 --arm repairTouch --all-synth   # every case of another dataset
+  python make_splits.py --target liver --arm rejectTouch_rep2 --same-as rejectTouch    # second run: identical train set
   python make_splits.py --target liver --list
 Then train:  nnUNetv2_train <id> 3d_fullres <fold>
 """
@@ -31,6 +32,7 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--dataset-id", type=int, help="another dataset of this target (e.g. 103 = repaired labels)")
     ap.add_argument("--all-synth", action="store_true", help="every synthetic case (like --arm all)")
+    ap.add_argument("--same-as", help="copy the train cases of this registered arm (a second run of it)")
     a = ap.parse_args()
 
     did, name, _, _ = TARGETS[a.target]
@@ -54,7 +56,11 @@ def main():
     real = json.load(open(f"{raw}/real_split.json"))
     val = [f"lits_{i:03d}" for i in real["val"]]
     synth = sorted(os.path.basename(f)[: -len(".nii.gz")] for f in glob.glob(f"{raw}/labelsTr/{a.target}_*.nii.gz"))
-    if a.ids:
+    if a.same_as:
+        src = [i for i, x in enumerate(arms) if x["arm"] == a.same_as]
+        assert src, f"arm {a.same_as} is not registered in {arms_f}"
+        ids = list(splits[src[0]]["train"])
+    elif a.ids:
         d = json.load(open(a.ids))
         ids = sorted(d["ids"] if isinstance(d, dict) else d)
         missing = set(ids) - set(synth)
@@ -63,12 +69,12 @@ def main():
         assert a.all_synth or a.arm == "all" or a.arm.startswith("all_rep"), \
             "--ids is required unless --all-synth or --arm all / all_repN"
         ids = synth
-    if a.k:
+    if a.k and not a.same_as:
         assert a.k <= len(ids), (a.k, len(ids))
         ids = sorted(random.Random(a.seed).sample(ids, a.k))
 
     splits.append({"train": ids, "val": val})
-    arms.append({"arm": a.arm, "n_train": len(ids), "ids_file": a.ids, "k": a.k, "seed": a.seed})
+    arms.append({"arm": a.arm, "n_train": len(ids), "ids_file": a.ids, "k": a.k, "seed": a.seed, "same_as": a.same_as})
     json.dump(splits, open(splits_f, "w"), indent=1)
     json.dump(arms, open(arms_f, "w"), indent=1)
     print(f"fold {len(splits) - 1}: {a.arm}, {len(ids)} train, {len(val)} val")

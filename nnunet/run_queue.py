@@ -14,7 +14,7 @@ Steps, in order (each one skips what is already done, so the same command resume
   figures      maisi/filter_figures.py: contact sheets for the sanity checks                       CPU, minutes
   build-X      build_repair_dataset.py --criterion X --plans -> Dataset103 (touch) / 104 (auc)     CPU, ~10 min
   preprocess-X nnUNetv2_preprocess -d 103 / 104 (Dataset101 plans)                                 CPU, ~30 min
-  per arm, in ARMS order (repairTouch -> rejectTouch -> repairAUC -> rejectAUC):
+  per arm, in ARMS order (default: repairTouch -> rejectTouch -> repairAUC -> rejectAUC; follow-ups by name):
     split      make_splits.py (registered once; the fold number is looked up by arm name)
     train      nnUNetv2_train <d> 3d_fullres <fold> --c (+ train_status.py status file)            GPU, ~4.9 h
     predict    predict_test.py predict (111 real LiTS test cases, checkpoint_final)                GPU, ~2 h
@@ -30,6 +30,8 @@ Training settings as for `all`: default nnUNetTrainer, 1000 epochs, nnUNet_compi
   python run_queue.py --dry-run          # what would run, what is done
   python run_queue.py --prep-only        # CPU session: prep steps only, no training
   python run_queue.py --arms repairTouch rejectTouch   # only some arms (prep steps they need still run)
+  python run_queue.py --arms repairBoth rejectBoth     # follow-up: combined touch + AUC (builds Dataset105)
+  python run_queue.py --second-run rejectTouch         # follow-up: a second run of an arm (same train cases)
 """
 import argparse
 import glob
@@ -58,11 +60,18 @@ ARMS = [  # name, dataset id, ids file (None = every synthetic case), prep step 
     ("repairAUC", 104, None, "preprocess-auc"),
     ("rejectAUC", 101, f"{FM}/ids_rejectAUC.json", "metrics"),
 ]
-REPAIR_DS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC")}
+MAIN = [a[0] for a in ARMS]  # the Holm family of the main comparison (PLAN_training.md "Evaluation and analysis")
+FOLLOW_UPS = [
+    ("repairBoth", 105, None, "preprocess-both"),
+    ("rejectBoth", 101, f"{FM}/ids_rejectBoth.json", "metrics"),
+]
+BASELINE = [(101, 0), (101, 1)]  # `all` and `all_rep2`
+REPAIR_DS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC"),
+             "both": (105, "Dataset105_LiverSynthRepairBoth")}
 HOURS = {"eval-all": 0.1, "metrics": 0.5, "figures": 0.1, "build": 0.2, "preprocess": 0.5, "split": 0.0, "train": 4.9,
          "predict": 2.0, "eval": 0.1}
-DEPENDS = {"figures": "metrics", "build-touch": "metrics", "build-auc": "metrics",
-           "preprocess-touch": "build-touch", "preprocess-auc": "build-auc"}
+DEPENDS = {"figures": "metrics", **{f"build-{c}": "metrics" for c in REPAIR_DS},
+           **{f"preprocess-{c}": f"build-{c}" for c in REPAIR_DS}}
 WORKERS = int(os.environ.get("QUEUE_CPU_WORKERS", "16"))
 
 
@@ -73,6 +82,7 @@ def now():
 class Queue:
     def __init__(self, arms, dry, prep_only=False):
         self.dry = dry
+        self.arms = arms
         self.steps = [("eval-all", None), ("metrics", None), ("figures", None)]
         for crit in REPAIR_DS:
             if any(a[3] == f"preprocess-{crit}" for a in arms):
@@ -102,7 +112,7 @@ class Queue:
     def set_status(self, i, label, end=None):
         if self.dry:
             return
-        left = sum(HOURS[s] for s, _ in self.steps[i:])
+        left = sum(HOURS.get(s, HOURS.get(s.split("-")[0], 0.0)) for s, _ in self.steps[i:])
         when = end or f"ETA_{(now() + timedelta(hours=left)):%a-%d-%b_%H-%M}_CET"
         name = f"QUEUE_liver_arms__{i + 1 if not end else i}of{len(self.steps)}_{label}__{when}.txt"
         new = PROJ / name
@@ -147,8 +157,10 @@ class Queue:
         return len(json.load(open(f"{os.environ['nnUNet_raw']}/Dataset101_LiverSynth/real_split.json"))["test"])
 
     def finished_runs(self):
-        runs = [(101, 0), (101, 1)]
-        for arm, did, _, _ in ARMS:
+        """Every arm with a complete test prediction (the baseline runs are passed separately)."""
+        runs = []
+        known = ARMS + FOLLOW_UPS + [a for a in self.arms if a not in ARMS + FOLLOW_UPS]
+        for arm, did, _, _ in known:
             fold = self.fold_of(arm, did)
             if fold is not None and len(glob.glob(f"{self.fold_dir(did, fold)}/test_final/lits_*.nii.gz")) == self.n_test():
                 runs.append((did, fold))
@@ -205,7 +217,10 @@ class Queue:
                 return
             cmd = [PY, HERE / "make_splits.py", "--target", "liver", "--arm", arm_name]
             cmd += ["--dataset-id", did] if did != 101 else []
-            cmd += ["--ids", ids] if ids else ["--all-synth"]
+            if isinstance(ids, tuple):  # ("same-as", arm): a second run of a registered arm
+                cmd += ["--same-as", ids[1]]
+            else:
+                cmd += ["--ids", ids] if ids else ["--all-synth"]
             self.run(cmd)
             if not self.dry:
                 self.log(f"split: {arm_name} = D{did} fold {self.fold_of(arm_name, did)}")
@@ -250,12 +265,14 @@ class Queue:
             self.log(f"train: {arm_name} done, val Dice (20 real) {dice}")
 
     def eval(self):
-        runs = self.finished_runs() if not self.dry else [(101, 0), (101, 1)]
-        self.run([PY, HERE / "predict_test.py", "eval", "--runs", *[f"{d}:{f}" for d, f in runs], "--workers", WORKERS], "eval_liver")
+        runs = self.finished_runs() if not self.dry else []
+        self.run([PY, HERE / "predict_test.py", "eval", "--baseline", *[f"{d}:{f}" for d, f in BASELINE],
+                  *(["--runs", *[f"{d}:{f}" for d, f in runs]] if runs else []), "--family", *MAIN,
+                  "--workers", WORKERS], "eval_liver")
         if not self.dry:
             out = Path(os.environ["nnUNet_results"]) / "test_eval_liver" / "summary.md"
             rows = [l for l in out.read_text().splitlines() if l.startswith("| D")]
-            self.log(f"eval ({len(runs)} runs): see `{out}`\n" + "\n".join("  " + r for r in rows[: 2 * len(runs)]))
+            self.log(f"eval (baseline + {len(runs)} arms): see `{out}`\n" + "\n".join("  " + r for r in rows[: 2 + len(runs)]))
 
     # --- main loop ---------------------------------------------------------------------------------------------
     def go(self):
@@ -284,10 +301,18 @@ class Queue:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--arms", nargs="+", choices=[a[0] for a in ARMS])
+    ap.add_argument("--arms", nargs="+", choices=[a[0] for a in ARMS + FOLLOW_UPS],
+                    help="default: the 4 main arms; follow-ups only by name")
+    ap.add_argument("--second-run", nargs="+", default=[], metavar="ARM",
+                    help="a second run <ARM>_rep2 of these arms (same train cases, new seed of nnU-Net's randomness)")
     ap.add_argument("--prep-only", action="store_true", help="CPU session: prep steps only (no split/train/predict)")
     a = ap.parse_args()
-    arms = [x for x in ARMS if not a.arms or x[0] in a.arms]
+    arms = [x for x in ARMS + FOLLOW_UPS if x[0] in a.arms] if a.arms else ([] if a.second_run else list(ARMS))
+    for name in a.second_run:
+        base = next((x for x in ARMS + FOLLOW_UPS if x[0] == name), None)
+        if base is None:
+            raise SystemExit(f"--second-run {name}: unknown arm")
+        arms.append((f"{name}_rep2", base[1], ("same-as", name), base[3]))
     q = Queue(arms, a.dry_run, a.prep_only)
 
     def stop(sig, _frame):

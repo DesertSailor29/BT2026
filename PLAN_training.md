@@ -74,25 +74,44 @@ rule avoid that.
 | D101 f2 | **`rejectTouch`** | volumes in which every component touches the liver | queued (2nd) |
 | D104 f0 | **`repairAUC`** | 999, invisible components → liver / background (surroundings) | queued (3rd) |
 | D101 f3 | **`rejectAUC`** | volumes without an invisible component | queued (4th) |
+| later | `repairBoth` (D105), `rejectBoth`; `<best>_rep2` | see "Later" | after the first 4 |
 
 The queue assigns fold numbers by arm name (it looks them up and never assumes them). For the paper this is a 2×2:
 criterion (geometry vs label–image consistency) × action (reject vs repair). Dropped for now: the thesis 15 mm reject
 arm. Its ids are still written (`ids_thesis15mm.json`) for comparison.
 
-### Evaluation (`nnunet/predict_test.py eval`)
+### Evaluation and analysis (decided 2026-11-12; `nnunet/predict_test.py eval`)
 
-Per case Dice liver / liver+tumour / tumour, global tumour Dice; **lesion-wise** (26-connected tumour components;
-detected = any overlap): recall (all, ≥ 1 ml), precision, FP components and FP volume per case, tumour-free cases
-with any predicted tumour. Every arm vs `all` f0, paired per case + Wilcoxon; `all_rep2` vs `all` is the noise row;
-repair C vs reject C as the action comparison. Both on all 111 and on the 40 thesis test cases. Output:
+The study is **exploratory**: no predictions are written down in advance (synthetic data can behave unexpectedly);
+mechanisms seen here become hypotheses for future work. We compare from as many sides as possible, but name one
+main comparison so that a single win can't be called cherry-picked:
+
+- **Main metric: per-case tumour Dice on all 111 test cases** (comparable with the thesis).
+- **Baseline: the per-case mean of the two `all` runs** (f0, f1). It uses both runs, has less noise, and involves no
+  choice made on test data (picking "the better run" would be one, and that run is partly lucky). Each arm is also
+  reported against f0 and f1 separately.
+- **Clear win** = paired Wilcoxon (arm vs baseline, per case) significant after **Holm** over the 4 arms (sort the
+  p-values, the smallest must be < 0.05/4, the next < 0.05/3, …, stop at the first that fails) **and** a mean
+  difference above the noise floor (> 0.01; `all_rep2` vs `all` gave < 0.01). Every difference also gets a paired
+  bootstrap 95% CI, which shows how large the effect is.
+- **Secondary, exploratory** (no correction, labelled as such): liver and liver+tumour Dice, global tumour Dice,
+  lesion-wise recall (all, ≥ 1 ml), precision, FP components and FP volume per case, tumour-free cases with predicted
+  tumour, the 40 thesis test cases, and repair C vs reject C (the action at a fixed criterion).
+
+Implemented in `predict_test.py eval` (`--baseline 101:0 101:1`, `--family` = the 4 main arms; the queue passes both).
+The summary also shows the noise row (`all_rep2` − `all` with its CI) and each arm against each `all` run separately.
+Lesion-wise metrics: 26-connected tumour components; detected = any overlap. Output:
 `$nnUNet_results/test_eval_liver/summary.md`.
 
 ## The CPU session (first; no GPU)
 
-`nnunet/run_queue.py --prep-only`: filter metrics (pool + real val) → sanity-check figures → build Dataset103 and
-Dataset104 (repaired labels, hard-linked images, Dataset101 plans) → preprocess both (+69 GB each). Then we read
-`filter_metrics/liver/summary.md` and the figures and go through the sanity checks above **before** booking the GPU.
-Book a CPU session with enough RAM for the preprocessing (~4 GB per worker).
+Two CPU sessions, so no preprocessing is wasted if a sanity check changes a rule:
+1. **Measure only** (16 cores / 48 GB, `QUEUE_CPU_WORKERS=14`, ~40 min):
+   `run_queue.py --prep-only --arms rejectTouch rejectAUC` = re-evaluation of `all`, filter metrics (pool + real
+   val), sanity-check figures. Then we read `filter_metrics/liver/summary.md` and `figures/` and go through the
+   sanity checks above.
+2. **Build** (32 cores / 96 GB, `QUEUE_CPU_WORKERS=24`, ~1 h), once the rules hold: `run_queue.py --prep-only` =
+   build + preprocess Dataset103 and Dataset104 (repaired labels, hard-linked images, Dataset101 plans, +69 GB each).
 
 ## The GPU session (full B200, ~28 h, can be extended)
 
@@ -113,7 +132,17 @@ same command again.
 
 ## Later
 
-- Combined arm (repair touch + AUC), train on the rejects (control), a second run of the best arm.
+- **Follow-up arms (decided 2026-11-12), after the first 4 results are in** (in code: `run_queue.py --arms repairBoth
+  rejectBoth`, `run_queue.py --second-run <arm>`):
+  - **combined touch + AUC**, reject and repair. A component fails if it fails either rule; the label is background
+    if it fails touch, otherwise its surroundings' label. This asks whether stacking filters costs more data than it
+    gains in quality. The measure-only session already gives the counts (touch × AUC table).
+  - **a second run of the best arm** (is its result run-to-run luck?).
+- Backlog:
+  - **Where does `all` put its false-positive tumours?** On the 20 real validation predictions (no test data): FP
+    components inside vs outside the liver, their size and contrast. Tells whether a filter that wins removed the
+    kind of error the model makes. Cheap, CPU; fits the measure-only session.
+  - Random subset of the best reject arm's size (quantity vs quality); train on the rejects (control).
 - Pancreas: Dataset102 (MSD07 val/test split, real reference from its val cases), `all` + the best liver arms.
 - Paper caveats: leakage (MAISI trained on MSD Task03 = LiTS, shared by every arm), 1.5 mm label steps in synthetic
   masks, thesis baseline trained on broken LiTS headers (28–47), synthetic-only training (defence in NOTES 2026-11-07).
