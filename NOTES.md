@@ -15,7 +15,7 @@
 - Optional Claude Code on UCloud (GUIDE section; login kept in `$PROJ/.claude-config`). CLAUDE.md + NOTES.md are in the repo for both machines. Claude on UCloud may run GUIDE steps itself and evaluate them; long jobs always `setsid nohup` + log in `$PROJ/logs` (CLAUDE.md "Running jobs on UCloud").
 
 ## Next steps
-1. **UCloud CPU session, measure only (16 cores / 48 GB, ~40 min).** Nothing to build or preprocess yet.
+1. **RUNNING since 2026-11-13 21:15** (log `$PROJ/logs/queue_liver_measure_20261113_211525.log`). **UCloud CPU session, measure only (16 cores / 48 GB, ~40 min).** Nothing to build or preprocess yet.
    ```bash
    cd "$PROJ/BT2026" && git pull
    source nnunet/env.sh && python nnunet/run_queue.py --prep-only --arms rejectTouch rejectAUC --dry-run
@@ -77,6 +77,7 @@
 - Run pattern on UCloud (see CLAUDE.md "Running jobs on UCloud"): `setsid nohup bash -c 'source venv/bin/activate && export nnUNet_raw=... nnUNet_preprocessed=... nnUNet_results=... && <cmd>' > $PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log 2>&1 < /dev/null &`
 
 ## Log
+- 2026-11-13 21:15 (UCloud, CPU session 16 cores / 48 GB): git pull (f601e05). Started Next step 1, measure-only queue (`run_queue.py --prep-only --arms rejectTouch rejectAUC`, QUEUE_CPU_WORKERS=14): eval-all → filter metrics → figures. Log `$PROJ/logs/queue_liver_measure_20261113_211525.log` (eval sub-log `eval_liver_20261113_211525.log`), status `$PROJ/QUEUE_liver_arms__*.txt`, ETA ~21:57.
 - 2026-11-12 (Kali VM): Supervisor doc: HU and AUC explained before first use; PDF re-exported. Next steps rewritten for the UCloud pickup (stale items dropped, still-open ones in the backlog).
 - 2026-11-12 (Kali VM): Per user rewrote the supervisor doc (claude.ai/artifact/UBHmWwPop8ZisdTPimgMoG, now "Liver filter arms: plan": setup, rules, arms, analysis, checks, schedule, later; diagram redrawn) and exported it to `Research/Liver filter arms - plan.pdf` (4 pages, Mac/VM only, outside the repo); old queue PDF removed. Committed + pushed the code.
 - 2026-11-12 (Kali VM): Per user implemented the analysis plan + follow-ups, fake-tested: `predict_test.py eval` (baseline = per-case mean of 101:0 + 101:1, main = tumour Dice, Holm over the 4 main arms, clear win = Holm p < 0.05 + diff > 0.01, paired bootstrap CIs, noise row, vs each `all` run, secondary exploratory tables, repair vs reject; planted better arm → clear win, worse arm significant but not a win, Holm checked by hand); combined criterion `both` (filter_metrics, `ids_rejectBoth.json` = touch ∩ auc, Dataset105 repair = union of components); `make_splits.py --same-as` + `run_queue.py --second-run`; follow-ups only by name; fixed an ETA KeyError for the renamed build/preprocess steps. Val-FP measurement added to the backlog.
