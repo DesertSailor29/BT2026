@@ -73,12 +73,19 @@ from orient import spacing_of  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 PROJ = os.environ.get("PROJ", "/work/Research")
 CORE_MM, GRAD_SIGMA_MM = 2.0, 1.0
+# border: signed distance to the main liver's surface (mm, < 0 inside); inner / outer shell for the local HU step,
+# Gaussian weight LOCAL_SIGMA_MM; edge profile = mean |grad| per 1 mm distance bin within +-BAND_MM;
+# voxels within TUMOUR_GAP_MM of tumour are left out (a tumour edge is not the liver's edge)
+BAND_MM, SHELL_MM, LOCAL_SIGMA_MM, TUMOUR_GAP_MM = 6, (1.0, 4.0), 3.0, 3.0
 FAT_HU, AIR_HU, BONE_HU, BODY_HU = -30, -200, 300, -500
 RAW_CLASSES = {"aorta": (6,), "ivc": (7,), "portal_vein": (17,), "hepatic_vessel": (25,), "spleen": (3,),
                "kidney": (5, 14)}  # MAISI configs/label_dict.json at dba166e
 PHASE_NONCON_AORTA, PHASE_ART_RATIO, PHASE_PV_AORTA = 100, 0.7, 150  # rough phase rule (see docstring)
-LVERSION = f"liver2 phase cc26 core={CORE_MM:g}mm grad_sigma={GRAD_SIGMA_MM:g}mm fat<{FAT_HU} air<{AIR_HU} bone>{BONE_HU}"
-# (key, description, decimals). FLAG = measures whose real val range defines "flagged" for the blind review.
+LVERSION = f"liver3 border band={BAND_MM}mm shell={SHELL_MM[0]:g}-{SHELL_MM[1]:g}mm local={LOCAL_SIGMA_MM:g}mm phase cc26 core={CORE_MM:g}mm grad_sigma={GRAD_SIGMA_MM:g}mm fat<{FAT_HU} air<{AIR_HU} bone>{BONE_HU}"
+# (key, description, decimals). FLAG = measures whose real val range defines "flagged" for the blind review:
+# only "is the label on liver tissue, and does it follow the liver's edge" (tissue + border). Size, position, extent
+# and pieces vary between real livers (the old liver2 flag used them and flagged 71/111 real test livers); they
+# stay descriptive.
 MEASURES = [
     ("liver_ml", "liver volume (ml, all pieces)", 0),
     ("main_share", "main piece / all liver label", 4),
@@ -89,10 +96,18 @@ MEASURES = [
     ("frac_bone", f"core share > {BONE_HU} HU (bone)", 4),
     ("edge_grad", "edge gradient median (HU/mm)", 1),
     ("edge_ratio", "edge / core gradient", 3),
+    ("border_step_hu", "border: median local |HU inside - HU outside|", 1),
+    ("edge_offset_mm", "border: strongest edge vs label border (mm, + = outside)", 2),
+    ("edge_peak_ratio", "border: edge profile peak / flank (|d| 4-6 mm)", 3),
     ("right_mm", "liver centroid right of body centroid (mm)", 1),
     ("cc_extent_mm", "main liver craniocaudal extent (mm)", 1),
 ]
-FLAG = [m for m, _, _ in MEASURES if m != "edge_grad"]  # raw gradient depends on noise/resolution; the ratio doesn't
+# Each flag measure only flags in the "less liver-like" direction ("abs": |x| beyond the largest real |x|). MAISI draws
+# the image from the mask, so its edge sits exactly on the label and is sharper than on real labels (LiTS labels lie
+# 1-5 mm inside the visible edge): "too exact" is not "not liver", so low offset / high peak ratio don't flag.
+FLAG_SIDE = {"hu_median": "both", "hu_iqr": "high", "frac_fat": "high", "frac_air": "high", "frac_bone": "high",
+             "border_step_hu": "low", "edge_offset_mm": "abs", "edge_peak_ratio": "low"}
+FLAG = list(FLAG_SIDE)
 
 
 # --- measurement ---------------------------------------------------------------------------------------------------
@@ -132,7 +147,7 @@ def liver_record(label, img, spacing):
     if not fg.any():
         rec.update(liver_ml=0.0, n_pieces=0, pieces=[], tumours=[])
         return rec
-    margin = np.ceil(4 * GRAD_SIGMA_MM / sp).astype(int) + 3
+    margin = np.ceil(max(4 * GRAD_SIGMA_MM, BAND_MM + 2 * LOCAL_SIGMA_MM) / sp).astype(int) + 2
     box = ndimage.find_objects(fg.astype(np.uint8))[0]
     sl = tuple(slice(max(b.start - m, 0), min(b.stop + m, n)) for b, m, n in zip(box, margin, label.shape))
     off = np.array([s.start for s in sl])
@@ -200,6 +215,8 @@ def liver_record(label, img, spacing):
     surface &= ~ndimage.binary_dilation(tumor[ls], STRUCT26, iterations=2)
     edge = float(np.median(g[surface])) if surface.any() else None
     core_g = float(np.median(g[core[ls]]))
+    border = border_measures(img[tuple(slice(s.start + o, s.stop + o) for s, o in zip(ls, off))], g, mm,
+                             tumor[ls], sp)
     del g
     sub = img[::4, ::4, ::4] > BODY_HU
     wx = sub.sum(axis=(1, 2))
@@ -218,6 +235,7 @@ def liver_record(label, img, spacing):
         "frac_bone": round(float((v > BONE_HU).mean()), 4),
         "edge_grad": None if edge is None else round(edge, 1), "core_grad": round(core_g, 1),
         "edge_ratio": None if edge is None or core_g <= 0 else round(edge / core_g, 3),
+        **border,
         "right_mm": round((body_cx - liver_cx) * sp[0], 1),
         "cc_extent_mm": round(float(zs[-1] - zs[0] + 1) * sp[2], 1),
         "z_liver": z_best(main_mask, off[2]), "y_liver": cy,
@@ -225,6 +243,61 @@ def liver_record(label, img, spacing):
         "pieces": prow, "tumours": trow,
     })
     return rec
+
+
+def border_measures(im, g, mm, tumor, sp):
+    """Does the label follow the liver's edge? `im` HU, `g` |grad| (HU/mm), `mm` main liver, `tumor`, same crop.
+    sd = signed distance to the label border (mm, < 0 inside; first layers at -+1 voxel). Voxels within
+    TUMOUR_GAP_MM of tumour are left out.
+      border_step_hu  median over the border of |mean HU in the inner shell - mean HU in the outer shell|, both
+                      local (Gaussian LOCAL_SIGMA_MM, shells SHELL_MM from the border). A label on the liver has a
+                      visible step along most of its border (liver vs fat, lung, bowel, kidney); a label that covers
+                      other tissue or none sits in uniform tissue -> small steps.
+      edge_offset_mm  where the mean |grad| per 1 mm sd bin peaks (parabolic fit), relative to the border. ~0 when
+                      the label follows the edge; a shifted / too big / too small label peaks inside or outside.
+      edge_peak_ratio the peak over the flanks (mean of the bins with 4 <= |sd| <= BAND_MM): a sharp edge on the
+                      border vs no particular edge there."""
+    ok = np.ones(mm.shape, bool)
+    if tumor.any():
+        ok = ndimage.distance_transform_edt(~tumor, sampling=sp) >= TUMOUR_GAP_MM
+    sd = ndimage.distance_transform_edt(~mm, sampling=sp).astype(np.float32)
+    sd -= ndimage.distance_transform_edt(mm, sampling=sp).astype(np.float32)
+    res = {"border_step_hu": None, "edge_offset_mm": None, "edge_peak_ratio": None}
+    surface = mm & ~ndimage.binary_erosion(mm, border_value=0) & ok
+    if surface.sum() < 50:
+        return res
+    sig = [LOCAL_SIGMA_MM / s for s in sp]
+    lo, hi = SHELL_MM
+    means = []
+    for shell in ((sd <= -lo) & (sd >= -hi) & ok, (sd >= lo) & (sd <= hi) & ok):
+        w = shell.astype(np.float32)
+        den = ndimage.gaussian_filter(w, sig)[surface]
+        num = ndimage.gaussian_filter(im * w, sig)[surface]
+        means.append((num, den))
+    (ni, di), (no, do) = means
+    good = (di > 0.05) & (do > 0.05)
+    if good.sum() >= 50:
+        res["border_step_hu"] = round(float(np.median(np.abs(ni[good] / di[good] - no[good] / do[good]))), 1)
+    band = ok & (np.abs(sd) <= BAND_MM)
+    b = np.floor(sd[band]).astype(int) + BAND_MM  # bin k covers sd in [k - BAND_MM, k - BAND_MM + 1)
+    cnt = np.bincount(b, minlength=2 * BAND_MM + 1)
+    prof = np.bincount(b, weights=g[band], minlength=2 * BAND_MM + 1) / np.maximum(cnt, 1)
+    centres = np.arange(len(prof)) - BAND_MM + 0.5
+    valid = cnt >= 20
+    inner = valid & (np.abs(centres) <= BAND_MM - 1)  # peak search away from the band's ends
+    if inner.sum() >= 3:
+        k = int(np.flatnonzero(inner)[np.argmax(prof[inner])])
+        off = centres[k]
+        if 0 < k < len(prof) - 1 and valid[k - 1] and valid[k + 1]:
+            y0, y1, y2 = prof[k - 1], prof[k], prof[k + 1]
+            den = y0 - 2 * y1 + y2
+            if den < 0:
+                off += 0.5 * (y0 - y2) / den
+        flank = valid & (np.abs(centres) >= 4)
+        res["edge_offset_mm"] = round(float(off), 2)
+        if flank.any() and prof[flank].mean() > 0:
+            res["edge_peak_ratio"] = round(float(prof[k] / prof[flank].mean()), 3)
+    return res
 
 
 def vessel_hu(raw_path, img, label):
@@ -365,9 +438,13 @@ def outside(rec, rng):
     for m in FLAG:
         if m in rng and rec.get(m) is not None:
             lo, hi = rng[m]
-            if rec[m] < lo:
+            side = FLAG_SIDE[m]
+            if side == "abs":
+                if abs(rec[m]) > max(abs(lo), abs(hi)):
+                    out.append((m, "low" if rec[m] < 0 else "high", rec[m]))
+            elif rec[m] < lo and side in ("both", "low"):
                 out.append((m, "low", rec[m]))
-            elif rec[m] > hi:
+            elif rec[m] > hi and side in ("both", "high"):
                 out.append((m, "high", rec[m]))
     return out
 
@@ -483,7 +560,10 @@ def tables(out, metrics_dir, cuts):
     # 4. liver measures
     L += ["## 4. Is the liver label liver? Measures vs the 20 real val livers", "",
           "A pool volume is *outside* if a measure is below the min or above the max of the real val livers (same "
-          "principle as the AUC cut: unlike every real liver). Flag measures: " + ", ".join(FLAG) + ".", "",
+          "principle as the AUC cut: unlike every real liver), counted only in the less liver-like direction: "
+          + ", ".join(f"{m} ({FLAG_SIDE[m]})" for m in FLAG) + " (abs = |x| beyond the largest real |x|). MAISI's edge "
+          "sits exactly on its label and is sharper than on real labels (drawn from the mask), so a low edge offset "
+          "or a high peak ratio does not flag. 'pool below / above' count every value beyond the range.", "",
           "| measure | real val min / max | real test p5 / median / p95 | pool p5 / median / p95 | pool below | "
           "pool above | real test outside |", "|---|---|---|---|---|---|---|"]
     for m, desc, d in MEASURES:
@@ -493,6 +573,9 @@ def tables(out, metrics_dir, cuts):
         below = sum(r.get(m) is not None and r[m] < lo for r in pool)
         above = sum(r.get(m) is not None and r[m] > hi for r in pool)
         tout = sum(r.get(m) is not None and not lo <= r[m] <= hi for r in test)
+        if m in FLAG_SIDE:
+            tout = sum(any(mm == m for mm, _, _ in r["outside"]) for r in test)
+            desc += f" [flag: {FLAG_SIDE[m]}]"
         L.append(f"| {desc} | {lo:.{d}f} / {hi:.{d}f} | {pct([r.get(m) for r in test], d=d)} | "
                  f"{pct([r.get(m) for r in pool], d=d)} | {below} | {above} | {tout}/{len(test)} |")
     flagged = [r for r in pool if r["outside"]]
