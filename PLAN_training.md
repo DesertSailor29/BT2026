@@ -196,6 +196,11 @@ same command again.
     components inside vs outside the liver, their size and contrast. Tells whether a filter that wins removed the
     kind of error the model makes. Cheap, CPU; fits the measure-only session.
   - Random subset of the best reject arm's size (quantity vs quality); train on the rejects (control).
+  - **Contrast phase (2026-11-14):** MAISI has no phase input (`modality` 1 = generic CT; 2/3 = without/with
+    contrast exist in its mapping but are undocumented for rflow-ct). `liver_metrics.py` measures the pool's phase mix
+    from vessel HU. Later: estimate the phase of the 111 LiTS test cases (TotalSegmentator) → tumour Dice per phase;
+    phase-relative liver HU check (liver vs spleen/aorta); test whether MAISI reacts to modality 2/3 (same mask +
+    seed, GPU, minutes).
 - Pancreas: Dataset102 (MSD07 val/test split, real reference from its val cases), `all` + the best liver arms.
 - Paper caveats: leakage (MAISI trained on MSD Task03 = LiTS, shared by every arm), 1.5 mm label steps in synthetic
   masks, thesis baseline trained on broken LiTS headers (28–47), synthetic-only training (defence in NOTES 2026-11-07).

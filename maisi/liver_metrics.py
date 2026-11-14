@@ -16,6 +16,12 @@ described only), measured by the same code:
            Edge: median HU gradient (HU/mm, Gaussian 1 mm) on the main liver's surface (not next to tumour), and its
            ratio to the core's median gradient (a label that follows no organ edge has a weak edge). Shape: liver
            ml, main share, centroid relative to the body centroid (mm to the patient's right), craniocaudal extent.
+  phase    pool only (needs MAISI's raw 132-class mask, kept in <pool>/raw/<id>/sample_*_label.nii.gz): median HU of
+           aorta (6), IVC (7), portal + splenic vein (17), hepatic vessels (25), spleen (3), kidneys (5, 14), each on
+           its mask eroded by one voxel. MAISI has no phase input (we generate with modality 1 = generic CT), so this
+           shows which contrast phases it actually draws. Rough rule (tables only, editable): aorta < 100 HU
+           non-contrast; portal vein < 0.7 x aorta arterial; aorta >= 150 portal venous; else late. Real LiTS has no
+           vessel masks, so its phase needs a segmenter (TotalSegmentator; backlog).
 
 Counts (summary.md): for each tumour rule (touch v1, touch v2, AUC at --cuts, touch v2 or AUC) the volumes that stay
 unchanged / get repaired with tumour left / are tumour-free after repair (deleted under "repair, delete tumour-free")
@@ -60,7 +66,10 @@ REPO = Path(__file__).resolve().parent.parent
 PROJ = os.environ.get("PROJ", "/work/Research")
 CORE_MM, GRAD_SIGMA_MM = 2.0, 1.0
 FAT_HU, AIR_HU, BONE_HU, BODY_HU = -30, -200, 300, -500
-LVERSION = f"liver1 cc26 core={CORE_MM:g}mm grad_sigma={GRAD_SIGMA_MM:g}mm fat<{FAT_HU} air<{AIR_HU} bone>{BONE_HU}"
+RAW_CLASSES = {"aorta": (6,), "ivc": (7,), "portal_vein": (17,), "hepatic_vessel": (25,), "spleen": (3,),
+               "kidney": (5, 14)}  # MAISI configs/label_dict.json at dba166e
+PHASE_NONCON_AORTA, PHASE_ART_RATIO, PHASE_PV_AORTA = 100, 0.7, 150  # rough phase rule (see docstring)
+LVERSION = f"liver2 phase cc26 core={CORE_MM:g}mm grad_sigma={GRAD_SIGMA_MM:g}mm fat<{FAT_HU} air<{AIR_HU} bone>{BONE_HU}"
 # (key, description, decimals). FLAG = measures whose real val range defines "flagged" for the blind review.
 MEASURES = [
     ("liver_ml", "liver volume (ml, all pieces)", 0),
@@ -210,6 +219,47 @@ def liver_record(label, img, spacing):
     return rec
 
 
+def vessel_hu(raw_path, img, label):
+    """Median HU per MAISI structure (RAW_CLASSES) from the raw 132-class mask, reoriented like postprocess.py does.
+    Checks that the raw liver (1) / hepatic tumour (26) equal the pair's labels 1 / 2 voxel for voxel."""
+    from orient import reorient_array
+    nii = nib.load(raw_path)
+    raw, _ = reorient_array(np.asarray(nii.dataobj).astype(np.uint8), nii.affine)
+    if raw.shape != label.shape:
+        return {"error": f"raw mask {raw.shape} vs pair {label.shape}"}
+    out = {"raw_matches_pair": bool(np.array_equal(raw == ORGAN, label == ORGAN)
+                                    and np.array_equal(raw == 26, label == TUMOR))}
+    boxes = ndimage.find_objects(raw)
+    for name, ids in RAW_CLASSES.items():
+        vals = []
+        for i in ids:
+            if i > len(boxes) or boxes[i - 1] is None:
+                continue
+            b = boxes[i - 1]
+            m = raw[b] == i
+            core = ndimage.binary_erosion(m, border_value=0)
+            vals.append(img[b][core if core.sum() >= 20 else m])
+        v = np.concatenate(vals) if vals else np.zeros(0)
+        out[name] = {"hu": round(float(np.median(v)), 1) if v.size else None, "vox": int(v.size)}
+    return out
+
+
+def phase_of(vs):
+    """Rough contrast phase from vessel HU (constants at the top); None without aorta + portal vein."""
+    if not vs or "error" in vs:
+        return None
+    a, pv = vs["aorta"]["hu"], vs["portal_vein"]["hu"]
+    if a is None:
+        return None
+    if a < PHASE_NONCON_AORTA:
+        return "non-contrast"
+    if pv is None:
+        return None
+    if pv < PHASE_ART_RATIO * a:
+        return "arterial"
+    return "portal venous" if a >= PHASE_PV_AORTA else "late"
+
+
 def measure(args):
     kind, name, label_path, image_path, out, extra = args
     cache = Path(out) / kind / f"{name}.json"
@@ -218,6 +268,8 @@ def measure(args):
     img, label, spacing = load_pair(label_path, image_path)
     rec = {"name": name, "kind": kind, "version": LVERSION, "label_path": label_path, "image_path": image_path,
            **extra, **liver_record(label, img, spacing)}
+    if extra.get("raw_label"):
+        rec["vessels"] = vessel_hu(extra["raw_label"], img, label)
     write_json(cache, rec)
     return kind, name, (f"{rec['n_pieces']} liver pieces ({rec.get('n_detached', 0)} detached), "
                         f"{len(rec['tumours'])} tumour comps, {sum(not t['in_main'] for t in rec['tumours'])} outside main")
@@ -319,6 +371,10 @@ def tables(out, metrics_dir, cuts):
         r["cc_change"] = ("unchanged" if not lost_t and not r.get("n_detached") else "liver+tumour" if lost_t and
                           r.get("n_detached") else "tumour only" if lost_t else "liver only")
         r["cc_tumour_free"] = bool(r["tumours"]) and lost_t == len(r["tumours"])
+        vs = r.get("vessels") or {}
+        r["phase"] = phase_of(vs)
+        for k in RAW_CLASSES:
+            r[f"{k}_hu"] = (vs.get(k) or {}).get("hu")
     for r in real:
         r["outside"] = outside(r, rng)
 
@@ -427,6 +483,39 @@ def tables(out, metrics_dir, cuts):
                         reverse=side == "high")
             if xs:
                 L.append(f"- {m} {side} ({len(xs)}): " + ", ".join(f"{n} {v:g}" for v, n in xs[:6]))
+
+    # 5. contrast phase (pool only)
+    withv = [r for r in pool if r.get("vessels") and "error" not in r["vessels"]]
+    errs = [f"{r['name']}: {r['vessels']['error']}" for r in pool if r.get("vessels") and "error" in r["vessels"]]
+    L += ["", "## 5. Contrast phase of the MAISI volumes (pool only)", "",
+          "MAISI has no phase input (we generate with modality 1 = generic CT), so the phase is whatever it draws. "
+          f"Median HU per structure from MAISI's raw 132-class mask (eroded by one voxel). Raw masks measured: "
+          f"{len(withv)}/{N}" + (f" ({len(errs)} errors, e.g. {errs[0]})" if errs else "")
+          + f"; raw liver / tumour identical to the pair labels: "
+          f"{sum(r['vessels'].get('raw_matches_pair', False) for r in withv)}/{len(withv)}. Real LiTS has no vessel "
+          "masks, so the real side needs a segmenter (backlog).", "",
+          "| structure | volumes with the mask | median HU p5 / median / p95 |", "|---|---|---|"]
+    for k in RAW_CLASSES:
+        v = [r[f"{k}_hu"] for r in withv if r[f"{k}_hu"] is not None]
+        L.append(f"| {k} | {len(v)} | {pct(v, d=0)} |")
+    L.append(f"| liver core (pair label) | {sum(r.get('hu_median') is not None for r in withv)} | "
+             f"{pct([r.get('hu_median') for r in withv], d=0)} |")
+    pv_ratio = [r["portal_vein_hu"] / r["aorta_hu"] for r in withv
+                if r["portal_vein_hu"] is not None and r["aorta_hu"]]
+    L += ["", f"Portal vein / aorta HU ratio: p5 / median / p95 {pct(pv_ratio, d=2)} (about 1 in portal venous, "
+          "clearly below 1 in arterial).", "",
+          f"Rough phase rule: aorta < {PHASE_NONCON_AORTA} HU non-contrast; portal vein < {PHASE_ART_RATIO} x aorta "
+          f"arterial; aorta >= {PHASE_PV_AORTA} portal venous; else late. Descriptive only; thresholds are textbook "
+          "values, not fitted.", "",
+          "| phase | volumes | aorta HU p50 | portal vein HU p50 | liver core HU p5 / p50 / p95 | liver flagged (any) "
+          "| hu_median outside real val |", "|---|---|---|---|---|---|---|"]
+    for p in ("non-contrast", "arterial", "portal venous", "late", None):
+        sub = [r for r in pool if r["phase"] == p]
+        if not sub:
+            continue
+        L.append(f"| {p or 'unknown'} | {len(sub)} | {pct([r['aorta_hu'] for r in sub], (50,), 0)} | "
+                 f"{pct([r['portal_vein_hu'] for r in sub], (50,), 0)} | {pct([r.get('hu_median') for r in sub], d=0)} "
+                 f"| {sum(bool(r['outside']) for r in sub)} | {sum(any(m == 'hu_median' for m, _, _ in r['outside']) for r in sub)} |")
     (out / "summary.md").write_text("\n".join(L) + "\n")
     print("wrote", out / "summary.md", flush=True)
     return pool, real, rng
@@ -710,8 +799,13 @@ def main():
         files = sorted(lab.glob(f"{a.target}_*.nii.gz"))[: a.limit or None]
         if not files:
             raise SystemExit(f"no labels in {lab}")
+        def raw_label(vid):
+            r = sorted((Path(a.pool) / "raw" / vid).glob("sample_*_label.nii.gz"))
+            return {"raw_label": str(r[0])} if r else {}
         jobs = [("pool", f.name[: -len(".nii.gz")], str(f),
-                 str(lab.parent / "imagesTr" / (f.name[: -len(".nii.gz")] + "_0000.nii.gz")), out, {}) for f in files]
+                 str(lab.parent / "imagesTr" / (f.name[: -len(".nii.gz")] + "_0000.nii.gz")), out,
+                 raw_label(f.name[: -len(".nii.gz")])) for f in files]
+        print(f"raw 132-class masks found for {sum(bool(j[5]) for j in jobs)}/{len(jobs)} pool volumes", flush=True)
         raw = Path(a.raw)
         split = json.loads((raw / "real_split.json").read_text())
         for sub, key in (("Tr", "val"), ("Ts_real", "test")):

@@ -103,6 +103,14 @@ setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
   conditions it on and labels it with the target spacing, then only pads to `output_size` → at 512³ @ 0.8 mm the anatomy is
   ~half scale (body ~180 mm). `maisi/patches/mask_native_spacing.patch` (applied by `setup_maisi.sh`) uses 1.5 mm for both,
   so MAISI resamples the mask (nearest) to the target spacing: 480×480×384 voxels of content, padded to 512³.
+- **No contrast-phase control in MAISI** (checked 2026-11-14 at `dba166e`): no input for phase (non-contrast /
+  arterial / portal venous / delayed). The image diffusion UNet only takes spacing + a `modality` class integer
+  (`configs/modality_mapping.json`: `ct` 1, `ct_wo_contrast` 2, `ct_contrast` 3, MR 8+); the code passes it through
+  (`scripts/sample.py` → `infer_image_from_mask.py`), but the docs list only 1 for CT ("always set as 'ct' but
+  expandable") and say nothing on whether rflow-ct learned 2/3. We generate with 1 (`make_jobs.py`), so the phase is
+  whatever the model draws from noise + mask. Training data: "~35 datasets, 60,000 volumes", phases undocumented.
+  Measured per pool volume by `maisi/liver_metrics.py` (vessel HU from the raw 132-class mask: aorta 6, IVC 7,
+  portal + splenic vein 17, hepatic vessel 25, spleen 3, kidneys 5/14).
 - rflow-ct needs `num_inference_steps` 30; the shipped 80g presets say 1000 (a DDPM value).
 - B200 (sm_100) needs a CUDA 12.8+ torch build: we use torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥ 2.8).
   The old nnU-Net `setup.sh` pins torch 2.3.0+cu121, which has no Blackwell kernels.
