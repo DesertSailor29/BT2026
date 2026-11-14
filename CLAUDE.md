@@ -61,10 +61,13 @@ folder) is shared by both machines through git.
 
 ## Running jobs on UCloud (mandatory: terminals close without warning)
 
-A UCloud terminal (and a Claude session in it) can close at any moment, and every process attached to it dies
-with it. So **anything that runs longer than ~1 minute** (MAISI, postprocessing, reorienting, nnU-Net, installs,
-downloads) is started detached and logged, never in the foreground and never with Claude's own background tasks
-(`run_in_background`), which die together with Claude:
+A UCloud terminal (and a Claude session in it) can close at any moment, outside the user's control, and every
+process attached to it dies with it. So **every command that does work (computes, writes files, installs, downloads,
+trains, makes figures; MAISI, postprocessing, reorienting, nnU-Net, ...) is started with `setsid nohup`, detached and
+logged, however short it is expected to be.** Only instant read-only checks (`ls`, `cat`, `tail`, `git status`,
+`pgrep`, a quick `python -c`) run directly. Never in the foreground and never with Claude's own background tasks
+(`run_in_background`, Monitor), which die together with Claude; also status watchers and follow-up steps (scoring,
+figures, summaries) go through `setsid nohup`:
 
 ```bash
 setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
