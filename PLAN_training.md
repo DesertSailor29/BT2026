@@ -103,6 +103,59 @@ The summary also shows the noise row (`all_rep2` − `all` with its CI) and each
 Lesion-wise metrics: 26-connected tumour components; detected = any overlap. Output:
 `$nnUNet_results/test_eval_liver/summary.md`.
 
+## Amendment candidates after the measure session (planned 2026-11-14, nothing decided on counts yet)
+
+Prompted by the review figures (`reports/figures/filter_review/`). No filter arm has been trained, so no arm result
+can have shaped these changes; they are recorded as amendments with the figure that prompted each.
+
+1. **Touch v2 = "connected to the main liver" (decided).** Main liver = the largest 26-connected liver piece. A tumour
+   component passes if it lies in the 26-connected component of liver ∪ tumour that contains the main liver. Reason:
+   liver_0842 c4 (`maisi_stray_island.png`) touches only a detached speck of liver label, which v1 lets through.
+   No parameter. Replaces v1 in every touch arm (reject, repair, both) once the counts are in.
+2. **Tumour-free after repair (open, decide on counts):** volumes in which every tumour component fails. Keep as
+   tumour-free training volumes (repairTouch as designed) or delete (user's proposal: "if no tumour remains, delete").
+3. **Detached liver pieces (open, measure first):** liver label not connected to the main liver (e.g. the blob next to
+   the colon in liver_0948). Leave / relabel to background / reject, decided after comparing with the real livers.
+4. **Liver plausibility check (open, measure first + human review):** catches whole bad volumes whose liver label
+   covers bowel, fat or several organs, not liver tissue. Volume level, so reject only. Candidate measures (inside the
+   liver label, core eroded by 2 voxels so label-edge steps don't count): median HU, IQR, p5/p95, share of fat
+   (< −30 HU), air (< −200 HU) and bone (> 300 HU) voxels; liver volume (ml), number of pieces, share of the largest,
+   centroid side (patient right?), craniocaudal extent; boundary edge strength (median HU gradient on the label
+   surface: a label that follows no organ edge has a weak one). Reference = the 20 real val livers (same principle as
+   AUC: a volume is suspicious if it is unlike every real liver); all 131 LiTS descriptive only. **No rule until the
+   user has looked at the flagged cases and judged whether the flags match visibly bad livers.**
+
+**Measure script `maisi/liver_metrics.py`** (descriptive, no decisions; reads the pool + the filter_metrics cache,
+cross-checks component numbering against it). Per volume: liver pieces (ml, distance to the main liver), per tumour
+component touch v1 / in-main v2, the liver measures above. Output `$MAISI_RUNS/pool/filter_metrics/liver/liver_check/`
+(cache JSON, CSV, `summary.md`):
+- counts per variant (touch v1, v2; AUC at cut 0.504 and 0.547; both): unchanged / repaired (≥ 1 tumour left) /
+  tumour-free after repair (would be deleted) / no tumour from the start, and the resulting arm sizes (reject,
+  repair-keep, repair-delete-tumour-free);
+- liver pieces: pool vs real val vs all 131 (how many volumes have pieces, their sizes);
+- each liver measure: real range vs pool distribution, synthetic volumes outside the real range per measure and in
+  total (counts only).
+
+Also counted: the **"keep the main structure" repair** (detached liver pieces and tumour outside the main structure
+→ background, i.e. largest-connected-component cleaning of liver + tumour) and its reject twin (keep volumes where
+nothing lies outside), so detached liver pieces can be filtered or repaired like tumours.
+
+**Review figures** (`reports/figures/liver_review/`, shared style `maisi/viz.py`, image only + image + label):
+- **Blind review first** (`blind/`, decided 2026-11-14): 30 flagged (outside the real val range on ≥ 1 liver measure)
+  + 30 unflagged pool volumes, shuffled, shown only by code (B01..), axial at the liver's largest cross-section +
+  coronal through its centroid. The user marks each ok / bad / unsure in `blind/marks.csv` without knowing the flags;
+  `liver_metrics.py --score marks.csv` then compares marks and flags (key only on UCloud, `<out>/blind_key.json`).
+  This tests whether the measures find visibly bad livers, which is stronger than viewing flagged cases alone.
+- Then the open figures (`open/`): largest detached liver pieces (pool and real), all tumours that pass v1 but fail v2,
+  per liver measure the most extreme pool volume beyond the real range next to the most extreme real val liver.
+- Caveat: a new real liver falls outside the min–max of 20 real livers with probability ≈ 2/21 ≈ 10% per measure, so
+  "outside on any of 10 measures" will also flag many good livers. `summary.md` shows this directly (real test livers
+  outside); the blind review shows how many flags are visibly bad. A liver rule, if any, is chosen after both.
+
+**Session:** written + fake-tested on the VM (small volumes; VM RAM is tight), then one UCloud CPU session
+(16 cores / 48 GB, ~30–45 min, detached, status file), measuring only. Building D103/D104 waits for the decisions
+(D103 depends on the touch definition; lits_049 / AUC cut still open).
+
 ## The CPU session (first; no GPU)
 
 Two CPU sessions, so no preprocessing is wasted if a sanity check changes a rule:
