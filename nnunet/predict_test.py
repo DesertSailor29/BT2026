@@ -342,6 +342,11 @@ def eval_runs(baseline, runs, family, workers, out_dir):
         copy_progress_plots()
     except Exception as ex:  # noqa: BLE001
         print(f"progress plots failed: {ex!r}", flush=True)
+    try:
+        import training_curves
+        training_curves.main()
+    except Exception as ex:  # noqa: BLE001
+        print(f"training curves failed: {ex!r}", flush=True)
 
 
 def confusion_tables(rows, names, every, cases, out_dir):
