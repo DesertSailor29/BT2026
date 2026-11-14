@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 """Filter metrics for the MAISI pool (Option B): per tumour component pass / fail for the reject and repair arms. CPU.
 
-Rules: PLAN_training.md "Filter rules" (fixed 2026-11-12, before looking at the pool metrics). Unit = tumour component
+Rules: PLAN_training.md "Filter rules" (touch/auc fixed 2026-11-12 before looking at the pool metrics; since the
+2026-11-14 amendment the main arms use maisi/cc_rules.py (cc, ccAuc), which builds on the components, separability
+and cut measured here; touch/auc/both remain for follow-up and comparison arms). Unit = tumour component
 (26-connected tumour voxels). A criterion decides pass / fail per component, and the same decision drives both arms:
-    reject C   keep the volumes in which every component passes (tumour-free volumes pass) -> ids_reject<C>.json
+    reject C   keep the volumes in which every component passes (tumour-free volumes pass) -> ids_<c>Reject.json
     repair C   keep every volume, relabel its failing components (nnunet/build_repair_dataset.py --criterion C)
 Criteria (a component fails if it is unlike every real lesion):
     touch   fails if none of its voxels is 26-adjacent to an organ voxel.                   repair -> background
@@ -21,14 +23,14 @@ voxels within 15 mm; ids_thesis15mm.json, cross-checked against raw/<id>/result.
 
 Real reference: every lesion of the real validation cases (Dataset101 labelsTr/lits_*, the 20 val cases; the test
 cases live in labelsTs_real and are never read), measured by the same code. Lesions listed in
-real_reference_exclusions.json (next to this script, each with a reason; sanity check 2 of the plan) are left out of
-the cut.
+real_reference_exclusions.json (next to this script, each with a reason; sanity check 2 of the plan; an entry without
+"component" excludes the whole case, e.g. lits_049) are left out of the cut.
 
 Outputs in --out (default <pool>/filter_metrics/<target>):
     per_volume/<id>.json, real_reference/<case>.json   caches (no decisions in them, so the cut can change freely;
                                                        resumable: existing files of the same VERSION are skipped)
     metrics.csv  components.csv  real_lesions.csv      tables incl. the decisions
-    ids_rejectTouch.json  ids_rejectAUC.json  ids_rejectBoth.json  ids_thesis15mm.json   passing ids (make_splits --ids)
+    ids_touchReject.json  ids_aucReject.json  ids_touchAucReject.json  ids_thesis15mm.json   passing ids (make_splits --ids)
     rules.json                                         cut + version, read by build_repair_dataset.py
     summary.md                                         real reference, classes per criterion, cross-tabs, sanity checks
 
@@ -62,7 +64,7 @@ SURROUND_SHARE = 0.5  # contact >= this: the component's surroundings are the or
 VERSION = (f"cc3 touch=adj26 auc: core=erode1 shell={AUC_GAP_MM:g}-{AUC_SHELL_MM:g}mm organ if contact>={SURROUND_SHARE:g} "
            f"or organ>={AUC_ORGAN_SHARE:g} min={AUC_MIN_VOX}")
 NOIMG = " noimage"
-CRITERIA = {"touch": "Touch", "auc": "AUC", "both": "Both"}  # criterion -> arm suffix (rejectTouch, repairAUC, ...)
+CRITERIA = {"touch": "touch", "auc": "auc", "both": "touchAuc"}  # criterion -> arm prefix (touchReject, aucRepair, ...)
 EXCLUSIONS = Path(__file__).resolve().parent / "real_reference_exclusions.json"
 HU_LO, HU_HI = -1024, 3071
 MIN_REJECT_KEEP, MIN_REPAIR_CHANGE = 100, 20  # sanity check 4
@@ -313,10 +315,11 @@ def write_tables(out_dir, target, exclusions_path):
         return
     with_image = all(r["version"] == VERSION for r in recs) and real and all(c["version"] == VERSION for c in real)
     excl = load_exclusions(exclusions_path, target)
-    excl_keys = {(e["case"], e["component"]) for e in excl}
+    excl_keys = {(e["case"], e.get("component")) for e in excl}  # component omitted = the whole case
 
     # real reference -> cut
-    real_rows = [{"case": c["case"], **l, "excluded": (c["case"], l["component"]) in excl_keys}
+    real_rows = [{"case": c["case"], **l, "excluded": (c["case"], l["component"]) in excl_keys
+                  or (c["case"], None) in excl_keys}
                  for c in real for l in c["lesions"]]
     scored = [l for l in real_rows if l.get("sep") is not None and not l["excluded"]]
     cut = cut_from = None
@@ -331,7 +334,7 @@ def write_tables(out_dir, target, exclusions_path):
             nf = [c for c in r["components"] if fails(c, k, cut)]
             r[f"fail_{k}"] = len(nf)
             r[f"class_{k}"] = volume_class(r["components"], k, cut)
-            r[f"pass_reject{CRITERIA[k]}"] = not nf
+            r[f"pass_{CRITERIA[k]}Reject"] = not nf
         r["near_miss"] = sum(not c["touches"] and c["min_dist_mm"] <= NEAR_MM for c in r["components"])
     comp_rows = []
     for r in recs:
@@ -351,16 +354,16 @@ def write_tables(out_dir, target, exclusions_path):
 
     ids_file("ids_thesis15mm.json", f">= {THESIS_FRAC:.0%} of tumour voxels within {THESIS_MM:g} mm of the organ "
              "(thesis; descriptive, no arm)", [r["id"] for r in recs if r["thesis_pass"]])
-    ids_file("ids_rejectTouch.json", "every tumour component touches the organ (26-adjacent); tumour-free volumes pass",
-             [r["id"] for r in recs if r["pass_rejectTouch"]], {"version": VERSION})
+    ids_file("ids_touchReject.json", "every tumour component touches the organ (26-adjacent); tumour-free volumes pass",
+             [r["id"] for r in recs if r["pass_touchReject"]], {"version": VERSION})
     if cut is not None:
-        ids_file("ids_rejectAUC.json", f"every scored tumour component has sep >= {cut} (minimum of the real val "
+        ids_file("ids_aucReject.json", f"every scored tumour component has sep >= {cut} (minimum of the real val "
                  "lesions); unscored components and tumour-free volumes pass",
-                 [r["id"] for r in recs if r["pass_rejectAUC"]], {"version": VERSION, "cut": cut})
-        ids_file("ids_rejectBoth.json", f"every tumour component touches the organ and has sep >= {cut} (or no score)",
-                 [r["id"] for r in recs if r["pass_rejectBoth"]], {"version": VERSION, "cut": cut})
+                 [r["id"] for r in recs if r["pass_aucReject"]], {"version": VERSION, "cut": cut})
+        ids_file("ids_touchAucReject.json", f"every tumour component touches the organ and has sep >= {cut} (or no score)",
+                 [r["id"] for r in recs if r["pass_touchAucReject"]], {"version": VERSION, "cut": cut})
     else:
-        for f in ("ids_rejectAUC.json", "ids_rejectBoth.json"):
+        for f in ("ids_aucReject.json", "ids_touchAucReject.json"):
             (out / f).unlink(missing_ok=True)
     write_json(out / "rules.json", {
         "version": VERSION, "target": target, "auc_cut": cut, "auc_cut_from": cut_from,
@@ -382,7 +385,7 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
          "## Real reference (sanity checks 1 + 2)", ""]
     touch_real = [l for l in real_rows if not l["excluded"]]
     nt = sum(l["touches"] for l in touch_real)
-    L.append(f"Real lesions: {len(real_rows)} ({len(excl)} excluded by real_reference_exclusions.json), "
+    L.append(f"Real lesions: {len(real_rows)} ({len(real_rows) - len(touch_real)} excluded by {len(excl)} entries of real_reference_exclusions.json), "
              f"**touching the organ: {nt}/{len(touch_real)}**.")
     for l in [l for l in touch_real if not l["touches"]]:
         L.append(f"- NOT touching: {l['case']} component {l['component']}, {l['ml']} ml, min distance "
@@ -398,9 +401,10 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
                      f"| {l['shell']} |")
         L += ["", f"**AUC cut = {cut}** (from {cut_from['case']} component {cut_from['component']})."]
         for e in excl:
-            L.append(f"- excluded: {e['case']} component {e['component']}: {e.get('reason', '(no reason given)')}")
+            L.append(f"- excluded: {e['case']} {'component ' + str(e['component']) if e.get('component') is not None else '(whole case)'}: "
+                     f"{e.get('reason', '(no reason given)')}")
     else:
-        L += ["", "No AUC cut (images not measured, or < 5 scored real lesions): no auc decisions, no ids_rejectAUC.json."]
+        L += ["", "No AUC cut (images not measured, or < 5 scored real lesions): no auc decisions, no ids_aucReject.json."]
 
     L += ["", "## Decisions per criterion (sanity checks 3 + 4)", "",
           "| criterion | no tumour | clean (reject keeps) | repaired | tumour-free after repair | reject keeps | "
@@ -408,12 +412,12 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
     checks = []
     for k in crits:
         cls = Counter(r[f"class_{k}"] for r in recs)
-        keep = sum(r[f"pass_reject{CRITERIA[k]}"] for r in recs)
+        keep = sum(r[f"pass_{CRITERIA[k]}Reject"] for r in recs)
         change = cls["repaired"] + cls["tumour_free"]
         L.append(f"| {k} | {cls['no_tumour']} | {cls['clean']} | {cls['repaired']} | {cls['tumour_free']} | "
                  f"{keep}/{n} | {change}/{n} |")
-        checks += [f"reject{CRITERIA[k]} keeps {keep} ({'ok' if keep >= MIN_REJECT_KEEP else 'CHECK: < %d' % MIN_REJECT_KEEP})",
-                   f"repair{CRITERIA[k]} changes {change} ({'ok' if change >= MIN_REPAIR_CHANGE else 'CHECK: < %d' % MIN_REPAIR_CHANGE})"]
+        checks += [f"{CRITERIA[k]}Reject keeps {keep} ({'ok' if keep >= MIN_REJECT_KEEP else 'CHECK: < %d' % MIN_REJECT_KEEP})",
+                   f"{CRITERIA[k]}Repair changes {change} ({'ok' if change >= MIN_REPAIR_CHANGE else 'CHECK: < %d' % MIN_REPAIR_CHANGE})"]
     comps = [c for r in recs for c in r["components"]]
     for k in crits:
         f = [c for c in comps if fails(c, k, cut)]
@@ -435,8 +439,8 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
     if "auc" in crits:
         L += ["", "Volumes failing touch x failing auc:", "", "| | auc ok | auc fails |", "|---|---|---|"]
         for name, t in (("touch ok", True), ("touch fails", False)):
-            sub = [r for r in recs if r["pass_rejectTouch"] is t]
-            L.append(f"| {name} | {sum(r['pass_rejectAUC'] for r in sub)} | {sum(not r['pass_rejectAUC'] for r in sub)} |")
+            sub = [r for r in recs if r["pass_touchReject"] is t]
+            L.append(f"| {name} | {sum(r['pass_aucReject'] for r in sub)} | {sum(not r['pass_aucReject'] for r in sub)} |")
         syn = [c["sep"] for c in comps if c.get("sep") is not None]
         L += ["", "| sep | n | p5 / p25 / median / p75 / p95 |", "|---|---|---|",
               f"| real val lesions | {len(scored)} | {q5([l['sep'] for l in scored])} |",
@@ -448,11 +452,11 @@ def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, e
     L += ["", "## Descriptive", "",
           f"Contact share (organ part of the outer shell), touching components: real {q5([l['contact'] for l in touch_real if l['touches']])}, "
           f"synthetic {q5([c['contact'] for c in comps if c['touches']])} (p5/p25/median/p75/p95).", "",
-          "Thesis rule (volume-level, no arm) vs rejectTouch:", "", "| | rejectTouch keeps | rejectTouch drops |",
+          "Thesis rule (volume-level, no arm) vs touchReject:", "", "| | touchReject keeps | touchReject drops |",
           "|---|---|---|"]
     for name, t in (("thesis pass", True), ("thesis fail", False), ("no tumour", None)):
         sub = [r for r in recs if r["thesis_pass"] is t]
-        L.append(f"| {name} | {sum(r['pass_rejectTouch'] for r in sub)} | {sum(not r['pass_rejectTouch'] for r in sub)} |")
+        L.append(f"| {name} | {sum(r['pass_touchReject'] for r in sub)} | {sum(not r['pass_touchReject'] for r in sub)} |")
     chk = [(r["thesis_frac15"], r["result_json_frac15"]) for r in recs
            if r.get("result_json_frac15") is not None and r["thesis_frac15"] is not None]
     if chk:

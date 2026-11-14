@@ -211,7 +211,7 @@ def main():
     readme += ["## maisi_off_liver.png", "",
                f"{k} examples (largest component per volume) of tumour components >= {a.far_mm:g} mm from the liver; "
                f"{n_far}/999 volumes have at least one. LiTS labels only liver tumours, so these are wrong labels "
-               "(rule touch: rejectTouch drops the volume, repairTouch sets them to background).", ""]
+               "(rule touch: touchReject drops the volume, touchRepair sets them to background).", ""]
 
     # 3. MAISI: tumour label without a visible lesion, at the liver (off-liver ones are in figure 2; many of the big
     #    pelvic blobs there are invisible too)

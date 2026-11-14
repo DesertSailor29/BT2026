@@ -1,27 +1,38 @@
 #!/usr/bin/env python
-"""Build a repair-arm dataset: Dataset101 with the failing tumour components of one criterion relabelled.
+"""Build a repair-arm dataset: Dataset101 with the labels of one criterion repaired.
 
-PLAN_training.md "Filter rules" (fixed 2026-11-12). The decision per component is filter_metrics' (same functions,
-same cached measurements, same cut from rules.json), so a repair arm and its reject arm judge identical components:
-    --criterion touch -> Dataset103_LiverSynthRepairTouch: components not touching the liver -> background
-    --criterion auc   -> Dataset104_LiverSynthRepairAUC:   invisible components (sep < real min) -> liver if >= 50%
-                                                            of their outer shell is liver, else background
-    --criterion both  -> Dataset105_LiverSynthRepairBoth:  either rule fails; not touching -> background, else as auc
-N stays 999, only labels change. Each Dataset101 label is relabelled with filter_metrics.apply_repair, which recomputes
-the components and checks them against the metrics cache (Dataset101 labels are the pool labels cropped at MAISI's
-empty padding, so the components and their numbering are the same). Images and the 20 real validation cases are
-hard-linked from Dataset101 (symlink fallback), real_split.json is copied: validation and test are identical to D101.
+PLAN_training.md "Filter rules" (amended 2026-11-14). The decisions are those of maisi/cc_rules.py (cc, ccAuc) and
+maisi/filter_metrics.py (auc, touch, both): same functions, same cached measurements, same AUC cut from rules.json,
+so a repair arm and its reject arm (ids_<c>Reject.json) judge identical components.
+  Main arms:
+    --criterion cc     -> Dataset103_LiverSynthRepairCC:    every liver / tumour voxel outside the main structure
+                                                            (largest liver piece + the liver/tumour connected to it)
+                                                            -> background                       (ccRepair, ccRepairDel)
+    --criterion ccAuc  -> Dataset104_LiverSynthRepairCCAUC: cc, then tumour components in the main structure with
+                                                            sep < cut -> liver if >= 50% of their outer shell is liver,
+                                                            else background                     (ccAucRepair)
+  Follow-up / comparison:
+    --criterion auc    -> Dataset105_LiverSynthRepairAUC:      invisible components (sep < cut) -> surroundings' label
+    --criterion touch  -> Dataset106_LiverSynthRepairTouch:    components not touching the liver -> background
+    --criterion both   -> Dataset107_LiverSynthRepairTouchAUC: either fails; not touching -> background, else as auc
+N stays 999, only labels change. Each Dataset101 label is recomputed and checked against the caches (Dataset101 labels
+are the pool labels cropped at MAISI's empty padding, so the components and their numbering are the same): for cc /
+ccAuc via cc_rules.apply against the filter_metrics cache and the cc cache (<metrics>/cc/<id>.json), and at the end
+the totals (unchanged, tumour-free, components relabelled) must equal cc_rules.json; for auc / touch / both via
+filter_metrics.apply_repair. Images and the 20 real validation cases are hard-linked from Dataset101 (symlink
+fallback), real_split.json is copied: validation and test are identical to D101.
 
 Plans are *copied* from Dataset101 (nnUNetv2_move_plans_between_datasets), not re-planned, so patch size, spacing and
 CT normalisation are exactly those of the `all` arm (the images are the same, so its intensity statistics apply).
 
-The dataset records the rules it was built with (repair_rules.json). If filter_metrics' rules.json changes later (e.g.
-an excluded real lesion moves the AUC cut), the build refuses: delete the dataset (raw + preprocessed) and rebuild.
+The dataset records the rules it was built with (repair_rules.json: criterion, versions, cut, exclusions). If they
+change later (e.g. an excluded real lesion moves the AUC cut), the build refuses: delete the dataset (raw +
+preprocessed) and rebuild. cc / ccAuc need maisi/cc_rules.py to have run first (cc cache + cc_rules.json).
 
-  python build_repair_dataset.py --criterion touch           # raw dataset + repair_report.csv + repair_summary.md
-  python build_repair_dataset.py --criterion touch --plans   # also copy Dataset101's plans
+  python build_repair_dataset.py --criterion cc           # raw dataset + repair_report.csv + repair_summary.md
+  python build_repair_dataset.py --criterion cc --plans   # also copy Dataset101's plans
   nnUNetv2_preprocess -d 103 -plans_name nnUNetPlans -c 3d_fullres -np 16
-  python make_splits.py --target liver --dataset-id 103 --arm repairTouch --all-synth
+  python make_splits.py --target liver --dataset-id 103 --arm ccRepair --all-synth
 
 Memory ~1.5 GB per worker (cropped 480x480x384 label). nnunet/run_queue.py runs all of this.
 """
@@ -42,10 +53,13 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maisi"))
 from filter_metrics import CRITERIA, ORGAN, TUMOR, VERSION, apply_repair, fails, repair_value, volume_class  # noqa: E402
+import cc_rules  # noqa: E402
 
 SRC_ID, SRC = 101, "Dataset101_LiverSynth"
-DATASETS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC"),
-            "both": (105, "Dataset105_LiverSynthRepairBoth")}
+DATASETS = {"cc": (103, "Dataset103_LiverSynthRepairCC"), "ccAuc": (104, "Dataset104_LiverSynthRepairCCAUC"),
+            "auc": (105, "Dataset105_LiverSynthRepairAUC"), "touch": (106, "Dataset106_LiverSynthRepairTouch"),
+            "both": (107, "Dataset107_LiverSynthRepairTouchAUC")}
+ARM_PREFIX = {**CRITERIA, "cc": "cc", "ccAuc": "ccAuc"}
 POOL = os.environ.get("MAISI_RUNS", f"{os.environ.get('PROJ', '/work/Research')}/maisi_runs") + "/pool"
 
 
@@ -65,13 +79,34 @@ def repair_one(args):
     rows = json.load(open(metrics_json))["components"]
     nii = nib.load(src_lab)
     lab = np.asarray(nii.dataobj).astype(np.uint8)
-    fixed = apply_repair(lab, rows, criterion, cut)
+    vml = float(np.prod(nii.header.get_zooms()[:3])) / 1000.0
+    if criterion in cc_rules.CRITERIA:
+        cc_cache = json.load(open(os.path.join(os.path.dirname(os.path.dirname(metrics_json)), "cc",
+                                               os.path.basename(metrics_json))))
+        fixed, m, cls = cc_rules.apply(lab, rows, criterion, cut, cached=cc_cache)
+    else:
+        fixed = apply_repair(lab, rows, criterion, cut)
     out = nib.Nifti1Image(fixed, nii.affine)
     out.set_qform(nii.affine, code=1)
     out.set_sform(nii.affine, code=1)
     nib.save(out, dst_lab + ".tmp.nii.gz")
     os.replace(dst_lab + ".tmp.nii.gz", dst_lab)
-    vml = float(np.prod(nii.header.get_zooms()[:3])) / 1000.0
+    if criterion in cc_rules.CRITERIA:
+        new = cc_rules.decide(m, rows, criterion, cut)
+        klass = (("no_tumour" if not rows else "clean") if not cls["changed"] else
+                 "tumour_free" if cls["tumour_free"] else "repaired")
+        rec = {"id": os.path.basename(dst_lab)[: -len(".nii.gz")], "class": klass, "kind": cls["kind"],
+               "components": len(rows), "relabelled": cls["relabelled"],
+               "to_background": sum(v == 0 for v in new), "to_organ": cls["to_organ"],
+               "relabelled_ml": round(sum(r["ml"] for r, v in zip(rows, new) if v is not None), 3),
+               "tumour_ml_before": round(float((lab == TUMOR).sum()) * vml, 3),
+               "tumour_ml_after": round(float((fixed == TUMOR).sum()) * vml, 3),
+               "organ_ml_added": round(float(((fixed == ORGAN) & (lab != ORGAN)).sum()) * vml, 3),
+               "liver_ml_removed": round(m["liver_removed_vox"] * vml, 3),
+               "liver_detached_after_ml": round(cls.get("liver_detached_after_vox", 0) * vml, 3)}
+        json.dump(rec, open(cache + ".tmp", "w"))
+        os.replace(cache + ".tmp", cache)
+        return rec
     failed = [r for r in rows if fails(r, criterion, cut)]
     rec = {"id": os.path.basename(dst_lab)[: -len(".nii.gz")], "class": volume_class(rows, criterion, cut),
            "components": len(rows), "relabelled": len(failed),
@@ -87,7 +122,10 @@ def repair_one(args):
 
 
 def copy_plans(did, name, pre_dst):
-    """Dataset101's plans -> this dataset (same patch size / spacing / normalisation), + its fingerprint."""
+    """Dataset101's plans -> this dataset (same patch size / spacing / normalisation), + its fingerprint and
+    dataset.json (nnUNetv2_preprocess reads dataset.json from the preprocessed folder)."""
+    os.makedirs(pre_dst, exist_ok=True)
+    shutil.copy(f"{os.environ['nnUNet_raw']}/{name}/dataset.json", f"{pre_dst}/dataset.json")
     if os.path.exists(f"{pre_dst}/nnUNetPlans.json"):
         print("plans already copied")
         return
@@ -115,11 +153,14 @@ def main():
     rules = json.load(open(f"{a.metrics}/rules.json"))
     assert rules["version"] == VERSION, f"rules.json is from another filter_metrics version: {rules['version']}"
     cut = rules["auc_cut"]
-    uses_cut = a.criterion in ("auc", "both")
+    uses_cut = a.criterion in ("auc", "both", "ccAuc")
     if uses_cut and cut is None:
         raise SystemExit("rules.json has no AUC cut (filter_metrics ran without images?)")
     used = {"criterion": a.criterion, "version": VERSION, "auc_cut": cut if uses_cut else None,
             "excluded": rules["excluded"] if uses_cut else None}
+    if a.criterion in cc_rules.CRITERIA:
+        used["cc_version"] = cc_rules.CC_VERSION
+        assert os.path.isdir(f"{a.metrics}/cc"), "run maisi/cc_rules.py first"
 
     raw_src, raw_dst = f"{os.environ['nnUNet_raw']}/{SRC}", f"{os.environ['nnUNet_raw']}/{name}"
     pre_dst = f"{os.environ['nnUNet_preprocessed']}/{name}"
@@ -160,12 +201,23 @@ def main():
 
     n = len(glob.glob(f"{raw_dst}/labelsTr/*.nii.gz"))
     assert n == len(labs) == len(imgs), (n, len(labs), len(imgs))
-    what = {"touch": "tumour components not touching the liver relabelled to background",
+    if a.criterion in cc_rules.CRITERIA:  # the labels written must give the counts cc_rules.py reported
+        exp = json.load(open(f"{a.metrics}/cc_rules.json"))["counts"][a.criterion]
+        got = {"unchanged": sum(r["class"] in ("no_tumour", "clean") for r in recs),
+               "tumour_free": sum(r["class"] == "tumour_free" for r in recs),
+               "components_relabelled": sum(r["relabelled"] for r in recs)}
+        assert all(got[k] == exp[k] for k in got), f"build vs cc_rules.json: {got} vs {exp}"
+        print(f"counts match cc_rules.json: {got}", flush=True)
+    what = {"cc": "everything outside the main structure (largest liver piece + the liver/tumour connected to it) "
+                  "relabelled to background",
+            "ccAuc": f"cc, then tumour components in the main structure with separability < {cut} relabelled to their "
+                     "surroundings' label",
+            "touch": "tumour components not touching the liver relabelled to background",
             "auc": f"tumour components with separability < {cut} (real val minimum) relabelled to their surroundings' label",
             "both": f"tumour components not touching the liver relabelled to background, and those with separability "
                     f"< {cut} to their surroundings' label"}[a.criterion]
     json.dump(dict(src_ds, numTraining=n, description=f"{src_ds.get('description', SRC)}; {what} "
-                   f"(repair{CRITERIA[a.criterion]} arm)"), open(f"{raw_dst}/dataset.json", "w"), indent=1)
+                   f"({ARM_PREFIX[a.criterion]}Repair arm)"), open(f"{raw_dst}/dataset.json", "w"), indent=1)
 
     if recs:
         with open(f"{raw_dst}/repair_report.csv", "w", newline="") as fh:
@@ -181,7 +233,12 @@ def main():
             f"({sum(r['to_background'] for r in recs)} to background, {sum(r['to_organ'] for r in recs)} to liver), "
             f"{sum(r['relabelled_ml'] for r in recs):.1f} ml in total.",
         f"Tumour-free training volumes: {sum(r['tumour_ml_after'] == 0 for r in recs)} after repair "
-        f"(was {sum(r['tumour_ml_before'] == 0 for r in recs)}).", ""])
+        f"(was {sum(r['tumour_ml_before'] == 0 for r in recs)}).",
+        *([f"Liver removed (outside the main structure): {sum(r['liver_ml_removed'] > 0 for r in recs)} volumes, "
+           f"{sum(r['liver_ml_removed'] for r in recs):.1f} ml. Liver pieces detached by an AUC relabel to background "
+           f"(left as liver): {sum(r['liver_detached_after_ml'] > 0 for r in recs)} volumes, "
+           f"{sum(r['liver_detached_after_ml'] for r in recs):.2f} ml."] if a.criterion in cc_rules.CRITERIA else []),
+        ""])
     open(f"{raw_dst}/repair_summary.md", "w").write(txt)
     print(txt, flush=True)
 

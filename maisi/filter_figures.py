@@ -122,7 +122,7 @@ def main():
     out.mkdir(exist_ok=True)
     rules = json.loads((m / "rules.json").read_text())
     cut = rules["auc_cut"]
-    excl = {(e["case"], e["component"]) for e in rules["excluded"]}
+    excl = {(e["case"], e.get("component")) for e in rules["excluded"]}
     real = [json.loads(p.read_text()) for p in sorted((m / "real_reference").glob("*.json"))]
     real_l = [(c["label_path"], l, c["case"]) for c in real for l in c["lesions"]]
     lab_dir = f"{a.pool}/pairs/{a.target}/labelsTr"
@@ -136,7 +136,7 @@ def main():
         return f"{name} c{c['component']} z{c['centroid'][2]}\n{c['ml']} ml, d {c['min_dist_mm']} mm{s}"
 
     scored = sorted([x for x in real_l if x[1].get("sep") is not None], key=lambda x: x[1]["sep"])
-    sheet([(lp, c, t(n, c) + (" EXCL" if (n, c["component"]) in excl else "")) for lp, c, n in scored[:6]],
+    sheet([(lp, c, t(n, c) + (" EXCL" if (n, c["component"]) in excl or (n, None) in excl else "")) for lp, c, n in scored[:6]],
           out / "real_least_visible.png", f"Real val lesions, least visible first (cut = {cut})")
     sheet([(lp, c, t(n, c)) for lp, c, n in real_l if not c["touches"]], out / "real_not_touching.png",
           "Real val lesions not touching the liver")

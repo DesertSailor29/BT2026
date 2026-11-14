@@ -1,46 +1,41 @@
 #!/usr/bin/env python
-"""Unattended queue for the liver filter arms (PLAN_training.md, 2026-11-12): prepare, then train + test each arm.
+"""Unattended queue for the liver filter arms (Decisions 2026-11-14): prepare, train + test each arm, three lanes.
 
-CPU session first (`--prep-only`: everything up to the preprocessed repair datasets, then look at the sanity checks),
-then the GPU session with the same command without the flag (done prep steps are skipped):
+    setsid nohup bash -c 'export QUEUE_CPU_WORKERS=20 && source "$PROJ/BT2026/nnunet/env.sh" && \
+      python "$PROJ/BT2026/nnunet/run_queue.py"' > "$PROJ/logs/queue_liver_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 
-    setsid nohup bash -c 'source "$PROJ/BT2026/nnunet/env.sh" && python "$PROJ/BT2026/nnunet/run_queue.py"' \
-      > "$PROJ/logs/queue_liver_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+Lanes (threads; each step skips what is already done, so the same command resumes after a session end):
+  prep    eval-all, metrics (filter_metrics.py), cc (maisi/cc_rules.py -> ids_cc*.json), figures,
+          build-cc / preprocess-cc (Dataset103_LiverSynthRepairCC), build-ccAuc / preprocess-ccAuc (Dataset104), ...
+  train   per arm in ARMS order: split (make_splits.py), train (nnUNetv2_train, 1000 epochs, + train_status.py).
+          An arm waits only for the prep step it needs, so ccReject (a Dataset101 fold) trains while D103/D104 are
+          built + preprocessed on the remaining cores.
+  predict per trained arm: predict (predict_test.py, 111 real LiTS test cases, checkpoint_final) then eval over every
+          finished run. Runs at the same time as the next arm's training (pipelining; with --no-pipeline the train
+          lane waits for each prediction).
+Default arms: ccReject -> ccRepair -> ccRepairDel -> ccAucRepair (the Holm family). Follow-ups by name.
+A failed step skips what depends on it and the queue goes on.
 
-Steps, in order (each one skips what is already done, so the same command resumes after a session end):
-  eval-all     lesion-wise re-evaluation of the existing `all` runs (Dataset101 folds 0 + 1)       CPU, minutes
-  metrics      maisi/filter_metrics.py (touch + separability, real reference, cut)
-               -> ids_rejectTouch.json, ids_rejectAUC.json, rules.json                             CPU, ~15-30 min
-  figures      maisi/filter_figures.py: contact sheets for the sanity checks                       CPU, minutes
-  build-X      build_repair_dataset.py --criterion X --plans -> Dataset103 (touch) / 104 (auc)     CPU, ~10 min
-  preprocess-X nnUNetv2_preprocess -d 103 / 104 (Dataset101 plans)                                 CPU, ~30 min
-  per arm, in ARMS order (default: repairTouch -> rejectTouch -> repairAUC -> rejectAUC; follow-ups by name):
-    split      make_splits.py (registered once; the fold number is looked up by arm name)
-    train      nnUNetv2_train <d> 3d_fullres <fold> --c (+ train_status.py status file)            GPU, ~4.9 h
-    predict    predict_test.py predict (111 real LiTS test cases, checkpoint_final)                GPU, ~2 h
-    eval       predict_test.py eval over every finished run (reference = `all` fold 0)             CPU, minutes
-A failed step skips what depends on it (e.g. a failed metrics step skips every arm) and the queue goes on.
-Only the prep steps the selected arms need are run.
-
-Status: one file at the top of $PROJ, e.g. QUEUE_liver_arms__4of15_train-repair__ETA_Fri-13-Nov_09-30_CET.txt
-(-> __DONE_ / __STOPPED_ at the end; ETA from rough per-step estimates, the training watcher has the exact one).
-Progress lines with times + results: $PROJ/queue_liver/progress.md (copy the key numbers into NOTES.md).
+Status: one file at the top of $PROJ, e.g. QUEUE_liver_arms__2of4_trained__train-ccRepair__ETA_Sun-15-Nov_09-30_CET.txt
+(-> __DONE_ / __STOPPED_ at the end). Progress lines with times + results: $PROJ/queue_liver/progress.md.
 Training settings as for `all`: default nnUNetTrainer, 1000 epochs, nnUNet_compile=f, nnUNet_n_proc_DA=24.
 
   python run_queue.py --dry-run          # what would run, what is done
-  python run_queue.py --prep-only        # CPU session: prep steps only, no training
-  python run_queue.py --arms repairTouch rejectTouch   # only some arms (prep steps they need still run)
-  python run_queue.py --arms repairBoth rejectBoth     # follow-up: combined touch + AUC (builds Dataset105)
-  python run_queue.py --second-run rejectTouch         # follow-up: a second run of an arm (same train cases)
+  python run_queue.py --prep-only        # prep lane only
+  python run_queue.py --arms ccReject    # only some arms (the prep steps they need still run)
+  python run_queue.py --arms aucReject aucRepair      # follow-ups
+  python run_queue.py --second-run ccRepair           # a second run of an arm (same train cases)
 """
 import argparse
 import glob
 import json
 import os
+import queue
 import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -54,23 +49,25 @@ FM = f"{POOL}/filter_metrics/liver"
 TZ = ZoneInfo("Europe/Copenhagen")
 PY = sys.executable
 
-ARMS = [  # name, dataset id, ids file (None = every synthetic case), prep step it needs
-    ("repairTouch", 103, None, "preprocess-touch"),
-    ("rejectTouch", 101, f"{FM}/ids_rejectTouch.json", "metrics"),
-    ("repairAUC", 104, None, "preprocess-auc"),
-    ("rejectAUC", 101, f"{FM}/ids_rejectAUC.json", "metrics"),
+ARMS = [  # name, dataset id, ids file (None = every synthetic case), prep step it needs  (Decisions 2026-11-14)
+    ("ccReject", 101, f"{FM}/ids_ccReject.json", "cc"),
+    ("ccRepair", 103, None, "preprocess-cc"),
+    ("ccRepairDel", 103, f"{FM}/ids_ccRepairDel.json", "preprocess-cc"),
+    ("ccAucRepair", 104, None, "preprocess-ccAuc"),
 ]
-MAIN = [a[0] for a in ARMS]  # the Holm family of the main comparison (PLAN_training.md "Evaluation and analysis")
+MAIN = [a[0] for a in ARMS]  # the Holm family of the main comparison
 FOLLOW_UPS = [
-    ("repairBoth", 105, None, "preprocess-both"),
-    ("rejectBoth", 101, f"{FM}/ids_rejectBoth.json", "metrics"),
+    ("aucReject", 101, f"{FM}/ids_aucReject.json", "metrics"),
+    ("aucRepair", 105, None, "preprocess-auc"),
+    ("ccAucReject", 101, f"{FM}/ids_ccAucReject.json", "cc"),
 ]
 BASELINE = [(101, 0), (101, 1)]  # `all` and `all_rep2`
-REPAIR_DS = {"touch": (103, "Dataset103_LiverSynthRepairTouch"), "auc": (104, "Dataset104_LiverSynthRepairAUC"),
-             "both": (105, "Dataset105_LiverSynthRepairBoth")}
-HOURS = {"eval-all": 0.1, "metrics": 0.5, "figures": 0.1, "build": 0.2, "preprocess": 0.5, "split": 0.0, "train": 4.9,
-         "predict": 2.0, "eval": 0.1}
-DEPENDS = {"figures": "metrics", **{f"build-{c}": "metrics" for c in REPAIR_DS},
+REPAIR_DS = {"cc": (103, "Dataset103_LiverSynthRepairCC"), "ccAuc": (104, "Dataset104_LiverSynthRepairCCAUC"),
+             "auc": (105, "Dataset105_LiverSynthRepairAUC")}
+HOURS = {"eval-all": 0.1, "metrics": 0.1, "cc": 0.2, "figures": 0.1, "build": 0.3, "preprocess": 0.7, "split": 0.0,
+         "train": 4.9, "predict": 2.0, "eval": 0.1}
+DEPENDS = {"cc": "metrics", "figures": "metrics", **{f"build-{c}": ("cc" if c.startswith("cc") else "metrics")
+                                                     for c in REPAIR_DS},
            **{f"preprocess-{c}": f"build-{c}" for c in REPAIR_DS}}
 WORKERS = int(os.environ.get("QUEUE_CPU_WORKERS", "16"))
 
@@ -80,17 +77,21 @@ def now():
 
 
 class Queue:
-    def __init__(self, arms, dry, prep_only=False):
-        self.dry = dry
-        self.arms = arms
-        self.steps = [("eval-all", None), ("metrics", None), ("figures", None)]
+    def __init__(self, arms, dry, prep_only=False, pipeline=True):
+        self.dry, self.arms, self.prep_only, self.pipeline = dry, arms, prep_only, pipeline
+        # prep order: what the first arm needs first; eval-all + figures last (nothing waits for them)
+        self.prep = ["metrics", "cc"]
         for crit in REPAIR_DS:
             if any(a[3] == f"preprocess-{crit}" for a in arms):
-                self.steps += [(f"build-{crit}", None), (f"preprocess-{crit}", None)]
-        if not prep_only:
-            for a in arms:
-                self.steps += [(s, a) for s in ("split", "train", "predict", "eval")]
+                self.prep += [f"build-{crit}", f"preprocess-{crit}"]
+        self.prep += ["eval-all", "figures"]
+        self.ready = {s: threading.Event() for s in self.prep}
         self.failed = set()
+        self.lock = threading.RLock()
+        self.active = {}  # lane -> step label
+        self.n_trained = 0
+        self.train_t0 = None
+        self.pq = queue.Queue()
         self.dir = PROJ / "queue_liver"
         self.status = None
         if not dry:
@@ -104,25 +105,34 @@ class Queue:
     # --- bookkeeping -------------------------------------------------------------------------------------------
     def log(self, msg):
         line = f"- {now():%Y-%m-%d %H:%M} {msg}"
-        print(line, flush=True)
-        if not self.dry:
-            with open(self.dir / "progress.md", "a") as fh:
-                fh.write(line + "\n")
+        with self.lock:
+            print(line, flush=True)
+            if not self.dry:
+                with open(self.dir / "progress.md", "a") as fh:
+                    fh.write(line + "\n")
 
-    def set_status(self, i, label, end=None):
+    def set_status(self, end=None):
         if self.dry:
             return
-        left = sum(HOURS.get(s, HOURS.get(s.split("-")[0], 0.0)) for s, _ in self.steps[i:])
-        when = end or f"ETA_{(now() + timedelta(hours=left)):%a-%d-%b_%H-%M}_CET"
-        name = f"QUEUE_liver_arms__{i + 1 if not end else i}of{len(self.steps)}_{label}__{when}.txt"
-        new = PROJ / name
-        body = (f"Liver filter-arm queue (nnunet/run_queue.py), started from {REPO}\n"
-                f"progress: {self.dir / 'progress.md'}\nsteps: " + ", ".join(f"{s}-{a[0]}" if a else s for s, a in self.steps) +
-                f"\nfailed: {sorted(self.failed) or 'none'}\nupdated {now():%Y-%m-%d %H:%M} CET\n")
-        if self.status and self.status.exists() and self.status != new:
-            self.status.rename(new)
-        new.write_text(body)
-        self.status = new
+        with self.lock:
+            n = len(self.arms)
+            left = HOURS["train"] * (n - self.n_trained) + HOURS["predict"] + HOURS["eval"]
+            if self.train_t0 and "train" in self.active and self.active["train"].startswith("train-"):
+                left -= min((time.time() - self.train_t0) / 3600, HOURS["train"] * 0.95)
+            if not n:
+                left = 1.0
+            when = end or f"ETA_{(now() + timedelta(hours=left)):%a-%d-%b_%H-%M}_CET"
+            act = "+".join(self.active.get(k) for k in ("train", "predict", "prep") if self.active.get(k)) or "idle"
+            name = f"QUEUE_liver_arms__{self.n_trained}of{n}_trained__{act if not end else 'finished'}__{when}.txt"
+            new = PROJ / name
+            body = (f"Liver filter-arm queue (nnunet/run_queue.py), started from {REPO}\n"
+                    f"progress: {self.dir / 'progress.md'}\narms: {', '.join(a[0] for a in self.arms)}\n"
+                    f"prep: {', '.join(self.prep)}\npipeline: {self.pipeline}\nactive: {self.active}\n"
+                    f"failed: {sorted(self.failed) or 'none'}\nupdated {now():%Y-%m-%d %H:%M} CET\n")
+            if self.status and self.status.exists() and self.status != new:
+                self.status.rename(new)
+            new.write_text(body)
+            self.status = new
 
     def run(self, cmd, log_name=None, env=None):
         """Run a command; its output goes to the queue log, or to its own log in $PROJ/logs."""
@@ -177,9 +187,17 @@ class Queue:
                 r = json.load(open(f"{FM}/rules.json"))
                 self.log(f"metrics: real lesions {r['real_lesions']} ({r['real_lesions_scored']} scored), "
                          f"AUC cut {r['auc_cut']}")
-                for f in ("ids_rejectTouch.json", "ids_rejectAUC.json", "ids_thesis15mm.json"):
+                for f in ("ids_touchReject.json", "ids_aucReject.json", "ids_thesis15mm.json"):
                     d = json.load(open(f"{FM}/{f}"))
                     self.log(f"metrics: {f} passes {d['n_pass']}/{d['n_total']}")
+            return
+        if name == "cc":
+            self.run([PY, REPO / "maisi/cc_rules.py", "--metrics", FM, "--workers", WORKERS], "cc_rules_liver")
+            if not self.dry:
+                c = json.load(open(f"{FM}/cc_rules.json"))["counts"]
+                for k in ("cc", "ccAuc"):
+                    self.log(f"cc: {k} unchanged {c[k]['unchanged']}, kinds {c[k]['kind']}, tumour-free "
+                             f"{c[k]['tumour_free']}, components relabelled {c[k]['components_relabelled']}")
             return
         if name == "figures":
             fig, rules = Path(FM) / "figures" / "real_least_visible.png", Path(FM) / "rules.json"
@@ -234,12 +252,33 @@ class Queue:
         if name == "eval":
             return self.eval()
 
+    @staticmethod
+    def running_train(did, fold):
+        r = subprocess.run(["pgrep", "-f", f"nnUNetv2_train {did} 3d_fullres {fold}( |$)"], capture_output=True, text=True)
+        return [int(x) for x in r.stdout.split()]
+
     def train(self, arm_name, did, fold):
         fd = self.fold_dir(did, fold) if not self.dry else Path("<fold_dir>")
         done = (fd / "checkpoint_final.pth").exists() and (fd / "validation" / "summary.json").exists()
         if done:
             self.log(f"train: {arm_name} already done")
             return
+        running = self.running_train(did, fold)
+        if running:  # e.g. started by a queue that was restarted: wait for it instead of starting a second one
+            self.log(f"train: {arm_name} already running (pid {running}), waiting for it")
+            wl = PROJ / "logs" / f"status_train_d{did}_{arm_name}_{now():%Y%m%d_%H%M%S}.log"
+            watcher = subprocess.Popen([PY, HERE / "train_status.py", "--fold-dir", fd, "--name",
+                                        f"D{did}_3d_fullres_f{fold}_{arm_name}"],
+                                       stdout=open(wl, "w"), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+            try:
+                while self.running_train(did, fold):
+                    time.sleep(60)
+            finally:
+                watcher.terminate()
+                watcher.wait()
+                subprocess.run([PY, HERE / "train_status.py", "--fold-dir", fd, "--once", "--name",
+                                f"D{did}_3d_fullres_f{fold}_{arm_name}"], stdout=subprocess.DEVNULL, check=False)
+            return self.train(arm_name, did, fold)  # done now, or resume (--c) / validate (--val)
         val_only = (fd / "checkpoint_final.pth").exists()
         cmd = ["nnUNetv2_train", did, "3d_fullres", fold] + (["--val"] if val_only else ["--c"])
         env = {"nnUNet_compile": os.environ.get("nnUNet_compile", "f"),
@@ -274,27 +313,89 @@ class Queue:
             rows = [l for l in out.read_text().splitlines() if l.startswith("| D")]
             self.log(f"eval (baseline + {len(runs)} arms): see `{out}`\n" + "\n".join("  " + r for r in rows[: 2 + len(runs)]))
 
-    # --- main loop ---------------------------------------------------------------------------------------------
-    def go(self):
-        self.log(f"queue start ({len(self.steps)} steps, dry={self.dry})")
-        for i, (name, arm) in enumerate(self.steps):
-            label = f"{name}-{arm[0]}" if arm else name
-            needs = arm[3] if arm else DEPENDS.get(name)
-            if needs in self.failed or (arm and arm[0] in self.failed):
-                self.log(f"skip {label} (depends on a failed step)")
+    # --- lanes -------------------------------------------------------------------------------------------------
+    def run_step(self, name, arm, lane):
+        label = f"{name}-{arm[0]}" if arm else name
+        with self.lock:
+            self.active[lane] = label
+            if name == "train":
+                self.train_t0 = time.time()
+        self.set_status()
+        t0 = time.time()
+        try:
+            self.step(name, arm)
+            if not self.dry:
+                self.log(f"ok {label} ({(time.time() - t0) / 3600:.2f} h)")
+            return True
+        except Exception as e:  # noqa: BLE001
+            self.log(f"FAILED {label}: {e!r}")
+            with self.lock:
                 self.failed.add(arm[0] if arm else name)
-                continue
-            self.set_status(i, label)
-            t0 = time.time()
+            return False
+        finally:
+            with self.lock:
+                self.active.pop(lane, None)
+
+    def prep_lane(self):
+        for name in self.prep:
             try:
-                self.step(name, arm)
-                if not self.dry:
-                    self.log(f"ok {label} ({(time.time() - t0) / 3600:.2f} h)")
-            except Exception as e:  # noqa: BLE001
-                self.log(f"FAILED {label}: {e!r}")
-                self.failed.add(arm[0] if arm else name)
+                if DEPENDS.get(name) in self.failed:
+                    self.log(f"skip {name} (depends on a failed step)")
+                    self.failed.add(name)
+                else:
+                    self.run_step(name, None, "prep")
+            finally:
+                self.ready[name].set()
+
+    def train_lane(self):
+        for arm in self.arms:
+            needs = arm[3]
+            if needs in self.ready and not self.ready[needs].is_set():
+                self.log(f"{arm[0]} waits for {needs}")
+                self.ready[needs].wait()
+            if needs in self.failed:
+                self.log(f"skip {arm[0]} (depends on failed {needs})")
+                self.failed.add(arm[0])
+                continue
+            if not self.run_step("split", arm, "train") or not self.run_step("train", arm, "train"):
+                continue
+            with self.lock:
+                self.n_trained += 1
+            if self.pipeline:
+                self.pq.put(arm)
+            else:
+                self.predict_one(arm)
+        self.pq.put(None)
+
+    def predict_lane(self):
+        while (arm := self.pq.get()) is not None:
+            self.predict_one(arm)
+
+    def predict_one(self, arm):
+        if self.run_step("predict", arm, "predict"):
+            self.run_step("eval", arm, "predict")
+
+    def go(self):
+        self.log(f"queue start (arms {[a[0] for a in self.arms]}, prep {self.prep}, pipeline={self.pipeline}, "
+                 f"dry={self.dry})")
+        if self.dry:  # one after the other, commands only
+            self.pipeline = False
+            self.prep_lane()
+            if not self.prep_only:
+                self.train_lane()
+            return
+        lanes = [threading.Thread(target=self.prep_lane, name="prep", daemon=True)]
+        if not self.prep_only:
+            lanes.append(threading.Thread(target=self.train_lane, name="train", daemon=True))
+            if self.pipeline:
+                lanes.append(threading.Thread(target=self.predict_lane, name="predict", daemon=True))
+        for t in lanes:
+            t.start()
+        while any(t.is_alive() for t in lanes):  # join with a timeout, so SIGTERM is handled
+            for t in lanes:
+                t.join(5)
         end = f"{'STOPPED' if self.failed else 'DONE'}_{now():%a-%d-%b_%H-%M}_CET"
-        self.set_status(len(self.steps), "finished", end)
+        self.set_status(end)
         self.log(f"queue finished, failed: {sorted(self.failed) or 'none'}")
 
 
@@ -305,7 +406,8 @@ def main():
                     help="default: the 4 main arms; follow-ups only by name")
     ap.add_argument("--second-run", nargs="+", default=[], metavar="ARM",
                     help="a second run <ARM>_rep2 of these arms (same train cases, new seed of nnU-Net's randomness)")
-    ap.add_argument("--prep-only", action="store_true", help="CPU session: prep steps only (no split/train/predict)")
+    ap.add_argument("--prep-only", action="store_true", help="prep lane only (no split/train/predict)")
+    ap.add_argument("--no-pipeline", action="store_true", help="predict each arm before training the next")
     a = ap.parse_args()
     arms = [x for x in ARMS + FOLLOW_UPS if x[0] in a.arms] if a.arms else ([] if a.second_run else list(ARMS))
     for name in a.second_run:
@@ -313,12 +415,12 @@ def main():
         if base is None:
             raise SystemExit(f"--second-run {name}: unknown arm")
         arms.append((f"{name}_rep2", base[1], ("same-as", name), base[3]))
-    q = Queue(arms, a.dry_run, a.prep_only)
+    q = Queue(arms, a.dry_run, a.prep_only, not a.no_pipeline)
 
     def stop(sig, _frame):
         q.log(f"signal {sig}: stopping")
-        q.set_status(len(q.steps), "stopped", f"STOPPED_{now():%a-%d-%b_%H-%M}_CET")
-        sys.exit(1)
+        q.set_status(f"STOPPED_{now():%a-%d-%b_%H-%M}_CET")
+        os._exit(1)
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)

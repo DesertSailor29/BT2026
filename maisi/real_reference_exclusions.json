@@ -1,5 +1,11 @@
 {
- "_doc": "Real val lesions left out of the filter reference (PLAN_training.md sanity checks 1-2). Only for label errors seen in a figure; each entry: {\"case\": \"lits_007\", \"component\": 3, \"reason\": \"...\", \"date\": \"YYYY-MM-DD\"}. Changes the AUC cut, so the repair datasets must be rebuilt.",
- "liver": [],
+ "_doc": "Real val lesions left out of the filter reference (PLAN_training.md sanity checks 1-2). Only for label errors seen in a figure; each entry: {\"case\": \"lits_007\", \"component\": 3, \"reason\": \"...\", \"date\": \"YYYY-MM-DD\"}. Changes the AUC cut, so the repair datasets must be rebuilt. Omit \"component\" to exclude every lesion of the case.",
+ "liver": [
+  {
+   "case": "lits_049",
+   "reason": "unreliable labels: none of its least visible lesions shows anything under the label (reports/figures/filter_review/real_invisible_lesions, core vs shell HU 116/118); only real case with a lesion below 0.547; 0/681 real test lesions below 0.547 (Decisions 2026-11-14). Stays a real val case for nnU-Net; only the filter reference changes.",
+   "date": "2026-11-14"
+  }
+ ],
  "pancreas": []
 }

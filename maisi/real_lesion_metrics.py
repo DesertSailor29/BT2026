@@ -133,8 +133,8 @@ def main():
                for c in [dict(cc, id=json.loads(p.read_text())["id"]) for cc in json.loads(p.read_text())["components"]]]
     L += ["", "## Candidate AUC cuts: real lesions below vs synthetic pool", "",
           "Real: share of scored lesions below the cut (a filter at this cut would call them 'invisible'). "
-          "Synthetic: components below, and volumes rejectAUC would keep.", "",
-          "| cut | real val below | real test below | real cases with one below | synthetic comps below | rejectAUC keeps |",
+          "Synthetic: components below, and volumes aucReject would keep.", "",
+          "| cut | real val below | real test below | real cases with one below | synthetic comps below | aucReject keeps |",
           "|---|---|---|---|---|---|"]
     for cut in CUTS:
         rv = [l for l in sel("val") if l.get("sep") is not None]

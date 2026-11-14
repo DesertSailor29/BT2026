@@ -6,10 +6,12 @@ Folds are append-only: an arm keeps its fold number forever (arms.json maps fold
 
   python make_splits.py --target liver --arm all                       # every synthetic case
   python make_splits.py --target liver --arm all_rep2                  # same cases again: run-to-run variation
-  python make_splits.py --target liver --arm f15mm --ids f15mm.json    # filter output (JSON list or {"ids": [...]})
-  python make_splits.py --target liver --arm f15mm_k300 --ids f15mm.json --k 300 --seed 0   # random K of a list
-  python make_splits.py --target liver --dataset-id 103 --arm repairTouch --all-synth   # every case of another dataset
-  python make_splits.py --target liver --arm rejectTouch_rep2 --same-as rejectTouch    # second run: identical train set
+  python make_splits.py --target liver --arm ccReject --ids ids_ccReject.json   # filter output (JSON list or {"ids": [...]})
+  python make_splits.py --target liver --arm ccReject_k200 --ids ids_ccReject.json --k 200 --seed 0   # random K of a list
+  python make_splits.py --target liver --dataset-id 103 --arm ccRepair --all-synth    # every case of another dataset
+  python make_splits.py --target liver --dataset-id 103 --arm ccRepairDel --ids ids_ccRepairDel.json   # subset of it
+  python make_splits.py --target liver --arm ccReject_rep2 --same-as ccReject   # second run: identical train set
+(the ids files live in $MAISI_RUNS/pool/filter_metrics/liver/, written by maisi/cc_rules.py and filter_metrics.py)
   python make_splits.py --target liver --list
 Then train:  nnUNetv2_train <id> 3d_fullres <fold>
 """

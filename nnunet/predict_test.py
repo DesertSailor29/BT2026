@@ -56,7 +56,7 @@ MAIN_KEY = "tumour_dice"  # main metric (PLAN_training.md "Evaluation and analys
 SECONDARY = ("liver_dice", "liver_tumour_dice", "les_fp", "fp_ml")
 NOISE_FLOOR = 0.01  # |mean diff| between the two `all` runs was < 0.01
 BOOT = 10000
-FAMILY = ("repairTouch", "rejectTouch", "repairAUC", "rejectAUC")
+FAMILY = ("ccReject", "ccRepair", "ccRepairDel", "ccAucRepair")  # Decisions 2026-11-14
 
 
 def dataset_name(did):
