@@ -38,16 +38,24 @@ Outputs: <out> (default <metrics>/liver_check): pool/<id>.json, real/<case>.json
 pieces.csv, tumours.csv, summary.md, blind_key.json. Figures (default reports/figures/liver_review): README.md,
 open/*.jpg, blind/B*.jpg + marks.csv.
 
-Memory ~3 GB per worker on a 512^3 pair. Run detached (CLAUDE.md):
-    python maisi/liver_metrics.py --workers 14
+Parallel: one volume per worker process, single-threaded inside (OMP/MKL capped at 1). Default --workers auto =
+min(cgroup CPU quota - 1, memory limit / 4 GB) (UCloud shows all host CPUs to nproc; the quota is what counts).
+Progress lines show each worker's peak RSS, so check the first minutes and lower --workers if RAM gets tight.
+Run detached (CLAUDE.md):
+    python maisi/liver_metrics.py
     python maisi/liver_metrics.py --score reports/figures/liver_review/blind/marks.csv     # after the review
 """
-import argparse
-import csv
-import json
 import os
-import random
-import sys
+
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):  # one thread per worker process
+    os.environ.setdefault(_v, "1")
+
+import argparse  # noqa: E402
+import csv  # noqa: E402
+import json  # noqa: E402
+import random  # noqa: E402
+import resource  # noqa: E402
+import sys  # noqa: E402
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool
@@ -271,8 +279,30 @@ def measure(args):
     if extra.get("raw_label"):
         rec["vessels"] = vessel_hu(extra["raw_label"], img, label)
     write_json(cache, rec)
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 ** 2  # GB (Linux: KiB)
     return kind, name, (f"{rec['n_pieces']} liver pieces ({rec.get('n_detached', 0)} detached), "
-                        f"{len(rec['tumours'])} tumour comps, {sum(not t['in_main'] for t in rec['tumours'])} outside main")
+                        f"{len(rec['tumours'])} tumour comps, {sum(not t['in_main'] for t in rec['tumours'])} outside "
+                        f"main, phase {phase_of(rec.get('vessels'))}; worker peak {rss:.1f} GB")
+
+
+def auto_workers(gb_per_worker=4.0):
+    """min(cgroup CPU quota - 1, memory limit / gb_per_worker). nproc on UCloud shows all host CPUs."""
+    cpus = len(os.sched_getaffinity(0))
+    try:
+        q, p = open("/sys/fs/cgroup/cpu.max").read().split()
+        if q != "max":
+            cpus = max(1, int(q) // int(p))
+    except (OSError, ValueError):
+        pass
+    mem = None
+    try:
+        m = open("/sys/fs/cgroup/memory.max").read().strip()
+        mem = None if m == "max" else int(m)
+    except (OSError, ValueError):
+        pass
+    if mem is None:
+        mem = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    return max(1, min(cpus - 1, int(mem / 1024 ** 3 / gb_per_worker))), cpus, mem / 1024 ** 3
 
 
 # --- decisions to count (not to apply) ----------------------------------------------------------------------------
@@ -776,7 +806,7 @@ def main():
                     help="nnU-Net raw dataset with the real LiTS cases (labelsTr = val, labelsTs_real = test)")
     ap.add_argument("--out", help="default <metrics>/liver_check")
     ap.add_argument("--fig-out", default=str(REPO / "reports/figures/liver_review"))
-    ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--workers", type=int, default=0, help="0 = auto: min(CPU quota - 1, memory / 4 GB)")
     ap.add_argument("--limit", type=int, default=0, help="only the first N pool volumes (testing)")
     ap.add_argument("--cuts", type=float, nargs="+", default=[0.504, 0.547], help="AUC cuts to count")
     ap.add_argument("--blind-n", type=int, default=30, help="flagged and unflagged volumes each in the blind review")
@@ -789,6 +819,9 @@ def main():
     ap.add_argument("--score", metavar="MARKS_CSV", help="compare the blind marks with the flags, then exit")
     a = ap.parse_args()
 
+    if a.workers <= 0:
+        a.workers, cpus, mem = auto_workers()
+        print(f"auto workers: {a.workers} (CPU quota {cpus}, memory {mem:.0f} GB, ~4 GB per worker)", flush=True)
     metrics = a.metrics or f"{a.pool}/filter_metrics/{a.target}"
     out = a.out or f"{metrics}/liver_check"
     if a.score:
