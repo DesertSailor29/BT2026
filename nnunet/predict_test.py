@@ -333,6 +333,54 @@ def eval_runs(baseline, runs, family, workers, out_dir):
     txt = "\n".join(lines) + "\n"
     open(f"{out_dir}/summary.md", "w").write(txt)
     print(txt)
+    try:  # extra report; must never break the eval
+        confusion_tables(rows, names, every, cases, out_dir)
+        print(f"confusion tables: {out_dir}/confusion.md", flush=True)
+    except Exception as ex:  # noqa: BLE001
+        print(f"confusion tables failed: {ex!r}", flush=True)
+
+
+def confusion_tables(rows, names, every, cases, out_dir):
+    """confusion.md: TP / FP / FN / TN per run at voxel (tumour, liver), lesion and case level, summed over all test cases.
+
+    Voxel TN = all voxels of the case minus TP, FP, FN (shapes from the reference label headers). Liver = label 1 only,
+    as in the Dice tables. Lesion level has no TN. Case level: tumour cases count as TP if >= 1 lesion is detected,
+    tumour-free cases as FP if any tumour voxel is predicted, else TN.
+    """
+    nvox = {c: int(np.prod(nib.load(f"{LAB}/{c}.nii.gz").shape)) for c in cases}
+    tot = lambda rs, k: sum(float(r[k]) for r in rs)  # noqa: E731
+    lines = ["# Test set: true / false positives and negatives per run", "",
+             f"{len(cases)} real LiTS test cases, checkpoint_final. Sums over all cases. Written by `predict_test.py eval`.", ""]
+    for struct, label in (("tumour", "label 2"), ("liver", "label 1 only, without tumour")):
+        lines += [f"## {struct.capitalize()}, voxel-level ({label}; millions of voxels)", "",
+                  "| run | TP | FP | FN | TN | sensitivity | precision | FP / TP |", "|---|---|---|---|---|---|---|---|"]
+        for k in every:
+            rs = rows[k]
+            tp, ref, pred = tot(rs, f"{struct}_tp"), tot(rs, f"{struct}_ref"), tot(rs, f"{struct}_pred")
+            fp, fn = pred - tp, ref - tp
+            tn = sum(nvox[r["case"]] for r in rs) - tp - fp - fn
+            lines.append(f"| {names[k]} | {tp / 1e6:.2f} | {fp / 1e6:.2f} | {fn / 1e6:.2f} | {tn / 1e6:,.1f} | "
+                         f"{tp / ref:.3f} | {tp / pred if pred else float('nan'):.3f} | {fp / tp if tp else float('nan'):.2f} |")
+        lines.append("")
+    lines += ["## Tumour, lesion-level (26-connected components; no TN at this level)", "",
+              "| run | reference lesions | TP (found) | FN (missed) | FP (predicted pieces on no lesion) | FP per case |",
+              "|---|---|---|---|---|---|"]
+    for k in every:
+        rs = rows[k]
+        ref, det, fp = tot(rs, "les_ref"), tot(rs, "les_det"), tot(rs, "les_fp")
+        lines.append(f"| {names[k]} | {ref:.0f} | {det:.0f} | {ref - det:.0f} | {fp:.0f} | {fp / len(rs):.1f} |")
+    lines += ["", "## Tumour, case-level", "",
+              "| run | TP (tumour case, >= 1 lesion found) | FN (tumour case, none found) | FP (tumour-free case, tumour predicted) | TN (tumour-free case, clean) |",
+              "|---|---|---|---|---|"]
+    for k in every:
+        rs = rows[k]
+        tc = [r for r in rs if float(r["les_ref"]) > 0]
+        tf = [r for r in rs if float(r["les_ref"]) == 0]
+        lines.append(f"| {names[k]} | {sum(float(r['les_det']) > 0 for r in tc)} | {sum(float(r['les_det']) == 0 for r in tc)} | "
+                     f"{sum(float(r['tumour_pred']) > 0 for r in tf)} | {sum(float(r['tumour_pred']) == 0 for r in tf)} |")
+    lines += ["", "Voxel TN outnumbers everything else ~1000x (specificity > 0.999 for every run), so compare runs on "
+              "sensitivity, precision and FP / TP."]
+    open(f"{out_dir}/confusion.md", "w").write("\n".join(lines) + "\n")
 
 
 def main():
