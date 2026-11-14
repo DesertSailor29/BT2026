@@ -21,8 +21,9 @@ Descriptive only (no decisions): contact = organ share of the outer 26-neighbour
 organ (exact Euclidean mm), near misses (fails touch but within 3 mm), the thesis volume rule (>= 90% of all tumour
 voxels within 15 mm; ids_thesis15mm.json, cross-checked against raw/<id>/result.json), MAISI QC.
 
-Real reference: every lesion of the real validation cases (Dataset101 labelsTr/lits_*, the 20 val cases; the test
-cases live in labelsTs_real and are never read), measured by the same code. Lesions listed in
+Real reference: every lesion of the real validation cases (liver: Dataset101 labelsTr/lits_*, the 20 val cases; the test
+cases live in labelsTs_real and are never read. pancreas: the val cases of maisi/msd07_split.json, read straight from
+the MSD Task07 folder, named msd_<NNN>), measured by the same code. Lesions listed in
 real_reference_exclusions.json (next to this script, each with a reason; sanity check 2 of the plan; an entry without
 "component" excludes the whole case, e.g. lits_049) are left out of the cut.
 
@@ -36,6 +37,7 @@ Outputs in --out (default <pool>/filter_metrics/<target>):
 
 Memory ~2.5 GB per worker on a 512^3 pair. Run detached (CLAUDE.md):
     python filter_metrics.py --target liver --workers 16
+    python filter_metrics.py --target pancreas --workers 10      # same rules, real reference = MSD07 val
 """
 import argparse
 import csv
@@ -265,19 +267,23 @@ def measure(args):
 
 
 def measure_real(args):
-    """The same component rows for one real validation case (the reference)."""
-    label_path, out_dir, with_image = args
-    case = os.path.basename(label_path)[: -len(".nii.gz")]
+    """The same component rows for one real validation case (the reference). args = (label, out, with_image) for
+    nnU-Net-style files (lits_*), or (label, out, with_image, image path, case name) otherwise (MSD07)."""
+    label_path, out_dir, with_image, *named = args
+    image_path, case = named if named else (image_of(label_path), os.path.basename(label_path)[: -len(".nii.gz")])
     cache = Path(out_dir) / "real_reference" / f"{case}.json"
     if cache_ok(cache, with_image):
         return case, "skip"
     nii = nib.load(label_path)
     label = np.asarray(nii.dataobj).astype(np.uint8)
     spacing = spacing_of(nii.affine)
-    img = load_image(image_of(label_path), label.shape) if with_image else None
+    img = load_image(image_path, label.shape) if with_image else None
     rows, _ = component_rows(label, spacing, img)
-    write_json(cache, {"case": case, "label_path": label_path, "spacing": spacing,
-                       "version": VERSION + ("" if with_image else NOIMG), "lesions": rows})
+    rec = {"case": case, "label_path": label_path, "spacing": spacing,
+           "version": VERSION + ("" if with_image else NOIMG), "lesions": rows}
+    if named:
+        rec["image_path"] = image_path
+    write_json(cache, rec)
     return case, f"{len(rows)} lesions"
 
 
@@ -476,8 +482,9 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=0, help="only the first N volumes (testing)")
     ap.add_argument("--no-image", action="store_true", help="labels only (touch), no separability")
-    ap.add_argument("--real-dir", help="nnU-Net raw dataset with the real val cases in imagesTr/labelsTr "
-                    "(default $nnUNet_raw/Dataset101_LiverSynth for liver)")
+    ap.add_argument("--real-dir", help="liver: nnU-Net raw dataset with the real val cases in imagesTr/labelsTr "
+                    "(default $nnUNet_raw/Dataset101_LiverSynth); pancreas: the MSD Task07 root (default "
+                    "$PROJ/raw_data/Task07_Pancreas), val cases from maisi/msd07_split.json (msd07_split.py)")
     ap.add_argument("--exclusions", default=str(EXCLUSIONS), help="real lesions left out of the reference")
     ap.add_argument("--tables-only", action="store_true", help="only rebuild tables/ids/rules from the caches")
     a = ap.parse_args()
@@ -490,14 +497,18 @@ def main():
             files = files[: a.limit]
         if not files:
             raise SystemExit(f"no labels in {a.pool}/pairs/{a.target}/labelsTr")
-        if a.target != "liver" and not a.real_dir:
-            raise SystemExit("--real-dir is required for pancreas")
-        raw = os.environ.get("nnUNet_raw", f"{os.environ.get('PROJ', '/work/Research')}/nnunet_data/raw")
-        real_dir = a.real_dir or f"{raw}/Dataset101_LiverSynth"
-        # labelsTr holds only the real *validation* cases; the test cases live in labelsTs_real and are never read
-        real_jobs = [(f, out, with_image) for f in sorted(glob.glob(f"{real_dir}/labelsTr/lits_*.nii.gz"))]
+        if a.target == "pancreas":
+            import msd07_split  # only the val cases; the test cases are never read here
+            root = a.real_dir or msd07_split.ROOT
+            real_jobs = [(lab, out, with_image, img, case)
+                         for case, lab, img in msd07_split.cases(msd07_split.load_or_make(root), "val", root)]
+        else:
+            raw = os.environ.get("nnUNet_raw", f"{os.environ.get('PROJ', '/work/Research')}/nnunet_data/raw")
+            real_dir = a.real_dir or f"{raw}/Dataset101_LiverSynth"
+            # labelsTr holds only the real *validation* cases; the test cases live in labelsTs_real and are never read
+            real_jobs = [(f, out, with_image) for f in sorted(glob.glob(f"{real_dir}/labelsTr/lits_*.nii.gz"))]
         if not real_jobs:
-            raise SystemExit(f"no real val labels in {real_dir}/labelsTr")
+            raise SystemExit("no real val labels found")
         print(f"{len(files)} labels -> {out} ({a.workers} workers, separability {'on' if with_image else 'off'}, "
               f"{len(real_jobs)} real val cases)", flush=True)
         jobs = [(f, out, a.pool, with_image) for f in files]

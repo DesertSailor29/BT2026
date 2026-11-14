@@ -24,6 +24,11 @@ measurements only (main-structure membership per component, removed liver voxels
 
     python cc_rules.py --workers 40          # caches + ids_cc*.json + cc_rules.json + cc_summary.md in <metrics>
     python cc_rules.py --tables-only
+    python cc_rules.py --target pancreas --workers 10   # same rules on the pancreas pool (input: the pool labels,
+                                                        # metrics: <pool>/filter_metrics/pancreas)
+
+Pancreas: "liver" in the code and in the cache / JSON keys (liver_removed_vox, kind "liver only") means the organ
+(label 1); the summary table names it.
 """
 import argparse
 import glob
@@ -146,7 +151,7 @@ def measure_one(args):
     return rec
 
 
-def tables(metrics):
+def tables(metrics, organ="liver"):
     rules = json.load(open(f"{metrics}/rules.json"))
     assert rules["version"] == VERSION, rules["version"]
     cut = rules["auc_cut"]
@@ -191,14 +196,14 @@ def tables(metrics):
                                             "excluded": rules["excluded"], "volumes": N, "counts": counts})
     L = ["# cc / ccAuc rules: counts", "", f"`maisi/cc_rules.py` ({CC_VERSION}); AUC cut {cut} "
          f"(from {rules['auc_cut_from']['case']} c{rules['auc_cut_from']['component']}); {N} volumes.", "",
-         "| rule | unchanged (reject keeps) | liver only | tumour only | liver+tumour | tumour-free after repair | "
-         "repair-delete keeps | components relabelled (to liver) |", "|---|---|---|---|---|---|---|---|"]
+         f"| rule | unchanged (reject keeps) | {organ} only | tumour only | {organ}+tumour | tumour-free after repair | "
+         f"repair-delete keeps | components relabelled (to {organ}) |", "|---|---|---|---|---|---|---|---|"]
     for k in CRITERIA:
         c = counts[k]
         L.append(f"| {k} | {c['unchanged']} | {c['kind'].get('liver only', 0)} | {c['kind'].get('tumour only', 0)} | "
                  f"{c['kind'].get('liver+tumour', 0)} | {c['tumour_free']} | {N - c['tumour_free']} | "
                  f"{c['components_relabelled']} ({c['to_organ']}) |")
-    L += ["", f"ccAuc on top of cc: {counts['ccAuc_in_liver']['components']} in-liver components relabelled in "
+    L += ["", f"ccAuc on top of cc: {counts['ccAuc_in_liver']['components']} in-{organ} components relabelled in "
           f"{counts['ccAuc_in_liver']['volumes']} volumes. Volumes with no tumour at all: {counts['cc']['no_tumour']}.",
           "", "For ccAuc, 'tumour only' includes the AUC relabelling. Arms: ccReject = ids_ccReject.json (D101 fold), "
           "ccRepair = D103 all, ccRepairDel = ids_ccRepairDel.json (D103 fold), ccAucRepair = D104 all.", ""]
@@ -209,14 +214,22 @@ def tables(metrics):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--metrics", default=FM)
-    ap.add_argument("--labels", default=f"{os.environ.get('nnUNet_raw', '')}/Dataset101_LiverSynth/labelsTr")
+    ap.add_argument("--target", default="liver", choices=["liver", "pancreas"])
+    ap.add_argument("--metrics", help=f"default {FM} (pancreas: {POOL}/filter_metrics/pancreas)")
+    ap.add_argument("--labels", help="default $nnUNet_raw/Dataset101_LiverSynth/labelsTr (pancreas: the pool labels, "
+                    f"{POOL}/pairs/pancreas/labelsTr, the same files filter_metrics measured)")
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--tables-only", action="store_true")
     a = ap.parse_args()
+    if a.target == "liver":
+        a.metrics = a.metrics or FM
+        a.labels = a.labels or f"{os.environ.get('nnUNet_raw', '')}/Dataset101_LiverSynth/labelsTr"
+    else:
+        a.metrics = a.metrics or f"{POOL}/filter_metrics/{a.target}"
+        a.labels = a.labels or f"{POOL}/pairs/{a.target}/labelsTr"
     if not a.tables_only:
-        labs = sorted(glob.glob(f"{a.labels}/liver_*.nii.gz"))
-        assert labs, f"no liver_*.nii.gz in {a.labels}"
+        labs = sorted(glob.glob(f"{a.labels}/{a.target}_*.nii.gz"))
+        assert labs, f"no {a.target}_*.nii.gz in {a.labels}"
         os.makedirs(f"{a.metrics}/cc", exist_ok=True)
         jobs = [(f, f"{a.metrics}/per_volume/{os.path.basename(f)[:-7]}.json",
                  f"{a.metrics}/cc/{os.path.basename(f)[:-7]}.json") for f in labs]
@@ -224,7 +237,7 @@ def main():
             for i, _ in enumerate(p.imap_unordered(measure_one, jobs, chunksize=2), 1):
                 if i % 100 == 0 or i == len(jobs):
                     print(f"{i}/{len(jobs)}", flush=True)
-    tables(a.metrics)
+    tables(a.metrics, a.target)
 
 
 if __name__ == "__main__":
