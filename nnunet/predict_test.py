@@ -338,6 +338,10 @@ def eval_runs(baseline, runs, family, workers, out_dir):
         print(f"confusion tables: {out_dir}/confusion.md", flush=True)
     except Exception as ex:  # noqa: BLE001
         print(f"confusion tables failed: {ex!r}", flush=True)
+    try:
+        copy_progress_plots()
+    except Exception as ex:  # noqa: BLE001
+        print(f"progress plots failed: {ex!r}", flush=True)
 
 
 def confusion_tables(rows, names, every, cases, out_dir):
@@ -381,6 +385,22 @@ def confusion_tables(rows, names, every, cases, out_dir):
     lines += ["", "Voxel TN outnumbers everything else ~1000x (specificity > 0.999 for every run), so compare runs on "
               "sensitivity, precision and FP / TP."]
     open(f"{out_dir}/confusion.md", "w").write("\n".join(lines) + "\n")
+
+
+def copy_progress_plots():
+    """Copy every run's nnU-Net progress.png (losses + pseudo Dice per epoch) into the repo next to the test results,
+    as reports/data/test_eval_liver/progress/D<id>_f<fold>_<arm>.png; run_queue.py's publish() commits that folder.
+    A run still training gets its current plot (refreshed at the next eval)."""
+    import shutil
+    dst = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports/data/test_eval_liver/progress")
+    os.makedirs(dst, exist_ok=True)
+    n = 0
+    for f in sorted(glob.glob(f"{os.environ['nnUNet_results']}/Dataset1*/{TRAINER}/fold_*/progress.png")):
+        did = int(f.split("/Dataset")[1][:3])
+        fold = int(f.split("/fold_")[1].split("/")[0])
+        shutil.copy(f, f"{dst}/D{did}_f{fold}_{arm_name(did, fold)}.png")
+        n += 1
+    print(f"progress plots: {n} copied to {dst}", flush=True)
 
 
 def main():
