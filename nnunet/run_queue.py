@@ -33,6 +33,7 @@ import os
 import queue
 import shutil
 import signal
+import statistics
 import subprocess
 import sys
 import threading
@@ -40,6 +41,9 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import train_status  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -69,6 +73,9 @@ HOURS = {"eval-all": 0.1, "metrics": 0.1, "cc": 0.2, "figures": 0.1, "build": 0.
 DEPENDS = {"cc": "metrics", "figures": "metrics", **{f"build-{c}": ("cc" if c.startswith("cc") else "metrics")
                                                      for c in REPAIR_DS},
            **{f"preprocess-{c}": f"build-{c}" for c in REPAIR_DS}}
+EPOCHS, VAL_H, START_H = 1000, 0.15, 0.05  # epochs per arm; final validation + startup per training (hours)
+STATUS_EVERY_S = 300
+RESULTS_REPO = REPO / "reports" / "data" / "test_eval_liver"  # pushed after every evaluation
 WORKERS = int(os.environ.get("QUEUE_CPU_WORKERS", "16"))
 
 
@@ -90,15 +97,23 @@ class Queue:
         self.lock = threading.RLock()
         self.active = {}  # lane -> step label
         self.n_trained = 0
+        self.n_tested = 0
         self.train_t0 = None
+        self.state = {a[0]: "waiting" for a in arms}
+        self.cur_train = None  # (arm, fold_dir) of the running training
+        self.pred_t0 = None
+        self.pred_hours = []  # measured predict + eval times
+        self.finished = False
         self.pq = queue.Queue()
         self.dir = PROJ / "queue_liver"
         self.status = None
         if not dry:
             self.dir.mkdir(parents=True, exist_ok=True)
             done_dir = PROJ / "status_done"
+            names = [a[0] for a in arms]
             for f in PROJ.glob("*.txt"):
-                if "__DONE_" in f.name or "__STOPPED_" in f.name:
+                if ("__DONE_" in f.name or "__STOPPED_" in f.name or f.name.startswith("QUEUE_liver")
+                        or (f.name.startswith("NNUNET_") and any(f"_{n}__" in f.name for n in names))):
                     done_dir.mkdir(exist_ok=True)
                     shutil.move(str(f), done_dir / f.name)
 
@@ -111,28 +126,105 @@ class Queue:
                 with open(self.dir / "progress.md", "a") as fh:
                     fh.write(line + "\n")
 
+    def eta(self):
+        """(training done, all testing done, text lines) from the measured epoch times and predict times."""
+        t = now()
+        per = 17.5 / 3600  # hours per epoch until measured
+        lines = []
+        cur_left = 0.0
+        if self.cur_train:
+            arm, fd = self.cur_train
+            st = train_status.status(fd, EPOCHS, 30)
+            if st["per"]:
+                per = st["per"] / 3600
+            cur_left = (0 if st["final"] else st["left"] * per) + VAL_H
+            lines.append(f"training {arm}: epoch {st['n']}/{EPOCHS}, {st['per'] or 0:.1f} s/epoch, best EMA pseudo "
+                         f"Dice {st['best']}{' STALLED?' if st['stalled'] else ''}")
+        arm_h = EPOCHS * per + VAL_H + START_H
+        waiting = [a for a, v in self.state.items() if v == "waiting"]
+        finishes, x = [], t + timedelta(hours=cur_left)
+        if self.cur_train:
+            finishes.append(x)
+        for _ in waiting:
+            x += timedelta(hours=arm_h)
+            finishes.append(x)
+        train_done = x if finishes else t
+        pred_h = statistics.median(self.pred_hours) if self.pred_hours else HOURS["predict"] + HOURS["eval"]
+        free = t
+        if self.pred_t0:  # the running prediction
+            free = t + timedelta(hours=max(pred_h - (time.time() - self.pred_t0) / 3600, 0.1))
+        for _ in [a for a, v in self.state.items() if v == "trained"]:  # trained, queued for prediction
+            free += timedelta(hours=pred_h)
+        for f in finishes:
+            free = max(free, f) + timedelta(hours=pred_h)
+        lines.append(f"assumed: {per * 3600:.1f} s/epoch, {pred_h:.2f} h per test prediction + eval "
+                     f"({'measured' if self.pred_hours else 'estimate'})")
+        return train_done, free, lines
+
     def set_status(self, end=None):
         if self.dry:
             return
         with self.lock:
             n = len(self.arms)
-            left = HOURS["train"] * (n - self.n_trained) + HOURS["predict"] + HOURS["eval"]
-            if self.train_t0 and "train" in self.active and self.active["train"].startswith("train-"):
-                left -= min((time.time() - self.train_t0) / 3600, HOURS["train"] * 0.95)
-            if not n:
-                left = 1.0
-            when = end or f"ETA_{(now() + timedelta(hours=left)):%a-%d-%b_%H-%M}_CET"
-            act = "+".join(self.active.get(k) for k in ("train", "predict", "prep") if self.active.get(k)) or "idle"
-            name = f"QUEUE_liver_arms__{self.n_trained}of{n}_trained__{act if not end else 'finished'}__{when}.txt"
+            fmt = "%a-%d-%b_%H-%M"
+            try:
+                train_done, all_done, lines = self.eta()
+            except Exception as e:  # noqa: BLE001  never let the status file kill a lane
+                train_done = all_done = now()
+                lines = [f"ETA failed: {e!r}"]
+            head = f"QUEUE_liver__trained_{self.n_trained}of{n}__tested_{self.n_tested}of{n}__"
+            name = head + (end if end else f"TRAINING_DONE_{train_done:{fmt}}__ALL_TESTED_{all_done:{fmt}}_CET") + ".txt"
             new = PROJ / name
-            body = (f"Liver filter-arm queue (nnunet/run_queue.py), started from {REPO}\n"
-                    f"progress: {self.dir / 'progress.md'}\narms: {', '.join(a[0] for a in self.arms)}\n"
-                    f"prep: {', '.join(self.prep)}\npipeline: {self.pipeline}\nactive: {self.active}\n"
-                    f"failed: {sorted(self.failed) or 'none'}\nupdated {now():%Y-%m-%d %H:%M} CET\n")
+            body = "\n".join([
+                "Liver filter-arm queue (nnunet/run_queue.py): train + test the arms; each arm is tested on the 111 "
+                "real LiTS test cases right after its training (while the next arm trains), results pushed to git "
+                f"({RESULTS_REPO.relative_to(REPO)}).",
+                f"all training done: {train_done:%a %d %b %H:%M} CET" if not end else f"finished: {end}",
+                f"all testing + eval done: {all_done:%a %d %b %H:%M} CET" if not end else "",
+                "", "arms: " + ", ".join(f"{a} [{v}]" for a, v in self.state.items()),
+                *lines, f"active: {self.active}", f"failed: {sorted(self.failed) or 'none'}",
+                f"progress: {self.dir / 'progress.md'}", f"updated {now():%Y-%m-%d %H:%M} CET", ""])
             if self.status and self.status.exists() and self.status != new:
                 self.status.rename(new)
             new.write_text(body)
             self.status = new
+
+    def ticker(self):
+        while not self.finished:
+            time.sleep(STATUS_EVERY_S)
+            if not self.finished:
+                self.set_status()
+
+    def publish(self, what):
+        """Copy the test evaluation into the repo, add a NOTES.md log line, commit (only these paths) and push."""
+        src = Path(os.environ["nnUNet_results"]) / "test_eval_liver"
+        RESULTS_REPO.mkdir(parents=True, exist_ok=True)
+        for f in list(src.glob("*.md")) + list(src.glob("*.csv")):
+            shutil.copy(f, RESULTS_REPO / f.name)
+        arms_txt = ["# Folds of the evaluated runs", "", "| dataset | fold | arm | n_train |", "|---|---|---|---|"]
+        for did in sorted({101, *[a[1] for a in ARMS + FOLLOW_UPS]}):
+            f = Path(os.environ["nnUNet_preprocessed"]) / self.ds_name(did) / "arms.json"
+            if f.exists():
+                arms_txt += [f"| D{did} | {i} | {x['arm']} | {x['n_train']} |" for i, x in enumerate(json.loads(f.read_text()))]
+        (RESULTS_REPO / "arms.md").write_text("\n".join(arms_txt) + "\n")
+        notes = REPO / "NOTES.md"
+        summ = (src / "summary.md").read_text() if (src / "summary.md").exists() else ""
+        rows = [l for l in summ.splitlines() if l.startswith("| D") and f" {what} " in l + " "]
+        git = lambda *c: subprocess.run(["git", *c], cwd=REPO, capture_output=True, text=True)  # noqa: E731
+        with self.lock:
+            git("pull", "--rebase", "--autostash", "-q")
+            if notes.exists() and "## Log\n" in (txt := notes.read_text()):
+                line = (f"- {now():%Y-%m-%d %H:%M} (UCloud, run_queue.py auto): **{what} tested** (111 LiTS); "
+                        f"`reports/data/test_eval_liver/summary.md`. " + " / ".join(r.strip() for r in rows[:2]))
+                notes.write_text(txt.replace("## Log\n", "## Log\n" + line + "\n", 1))
+            git("add", "-f", str(RESULTS_REPO), str(notes))
+            r = git("commit", "-q", "-m", f"results: {what} test eval (auto, run_queue.py)", "--",
+                    str(RESULTS_REPO), str(notes))
+            p = git("push", "-q")
+            if p.returncode:
+                git("pull", "--rebase", "--autostash", "-q")
+                p = git("push", "-q")
+        self.log(f"publish {what}: commit rc {r.returncode}, push rc {p.returncode} {p.stderr.strip()[:200]}")
 
     def run(self, cmd, log_name=None, env=None):
         """Run a command; its output goes to the queue log, or to its own log in $PROJ/logs."""
@@ -265,39 +357,19 @@ class Queue:
             return
         running = self.running_train(did, fold)
         if running:  # e.g. started by a queue that was restarted: wait for it instead of starting a second one
-            self.log(f"train: {arm_name} already running (pid {running}), waiting for it")
-            wl = PROJ / "logs" / f"status_train_d{did}_{arm_name}_{now():%Y%m%d_%H%M%S}.log"
-            watcher = subprocess.Popen([PY, HERE / "train_status.py", "--fold-dir", fd, "--name",
-                                        f"D{did}_3d_fullres_f{fold}_{arm_name}"],
-                                       stdout=open(wl, "w"), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-            try:
-                while self.running_train(did, fold):
-                    time.sleep(60)
-            finally:
-                watcher.terminate()
-                watcher.wait()
-                subprocess.run([PY, HERE / "train_status.py", "--fold-dir", fd, "--once", "--name",
-                                f"D{did}_3d_fullres_f{fold}_{arm_name}"], stdout=subprocess.DEVNULL, check=False)
+            self.log(f"train: {arm_name} already running (pid {running[:3]}...), waiting for it")
+            self.cur_train = (arm_name, fd)
+            while self.running_train(did, fold):
+                time.sleep(60)
             return self.train(arm_name, did, fold)  # done now, or resume (--c) / validate (--val)
         val_only = (fd / "checkpoint_final.pth").exists()
         cmd = ["nnUNetv2_train", did, "3d_fullres", fold] + (["--val"] if val_only else ["--c"])
         env = {"nnUNet_compile": os.environ.get("nnUNet_compile", "f"),
                "nnUNet_n_proc_DA": os.environ.get("nnUNet_n_proc_DA", "24")}
-        watcher = None
-        if not self.dry and not val_only:
+        if not self.dry:  # progress goes into the queue's one status file (epoch, s/epoch, ETA)
             fd.mkdir(parents=True, exist_ok=True)
-            wl = PROJ / "logs" / f"status_train_d{did}_{arm_name}_{now():%Y%m%d_%H%M%S}.log"
-            watcher = subprocess.Popen([PY, HERE / "train_status.py", "--fold-dir", fd, "--name",
-                                        f"D{did}_3d_fullres_f{fold}_{arm_name}"],
-                                       stdout=open(wl, "w"), stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-        try:
-            self.run(cmd, f"train_d{did}_{arm_name}_f{fold}", env)
-        finally:
-            if watcher:  # polls every 60 s: stop it and write the final name (DONE, or where it stopped) once
-                watcher.terminate()
-                watcher.wait()
-                subprocess.run([PY, HERE / "train_status.py", "--fold-dir", fd, "--once", "--name",
-                                f"D{did}_3d_fullres_f{fold}_{arm_name}"], stdout=subprocess.DEVNULL, check=False)
+            self.cur_train = (arm_name, fd)
+        self.run(cmd, f"train_d{did}_{arm_name}_f{fold}", env)
         if not self.dry:
             summ = json.load(open(fd / "validation" / "summary.json"))
             dice = {k: round(v["Dice"], 3) for k, v in summ.get("mean", {}).items()}
@@ -356,8 +428,14 @@ class Queue:
             if needs in self.failed:
                 self.log(f"skip {arm[0]} (depends on failed {needs})")
                 self.failed.add(arm[0])
+                self.state[arm[0]] = "failed"
                 continue
-            if not self.run_step("split", arm, "train") or not self.run_step("train", arm, "train"):
+            self.state[arm[0]] = "training"
+            ok = self.run_step("split", arm, "train") and self.run_step("train", arm, "train")
+            with self.lock:
+                self.cur_train = None
+                self.state[arm[0]] = "trained" if ok else "failed"
+            if not ok:
                 continue
             with self.lock:
                 self.n_trained += 1
@@ -372,8 +450,22 @@ class Queue:
             self.predict_one(arm)
 
     def predict_one(self, arm):
-        if self.run_step("predict", arm, "predict"):
-            self.run_step("eval", arm, "predict")
+        with self.lock:
+            self.state[arm[0]] = "testing"
+            self.pred_t0 = time.time()
+        ok = self.run_step("predict", arm, "predict") and self.run_step("eval", arm, "predict")
+        with self.lock:
+            if ok:
+                self.pred_hours.append((time.time() - self.pred_t0) / 3600)
+                self.n_tested += 1
+            self.pred_t0 = None
+            self.state[arm[0]] = "tested" if ok else "failed"
+        if ok and not self.dry:
+            try:
+                self.publish(arm[0])
+            except Exception as e:  # noqa: BLE001
+                self.log(f"publish {arm[0]} FAILED: {e!r}")
+        self.set_status()
 
     def go(self):
         self.log(f"queue start (arms {[a[0] for a in self.arms]}, prep {self.prep}, pipeline={self.pipeline}, "
@@ -385,6 +477,7 @@ class Queue:
                 self.train_lane()
             return
         lanes = [threading.Thread(target=self.prep_lane, name="prep", daemon=True)]
+        threading.Thread(target=self.ticker, name="status", daemon=True).start()
         if not self.prep_only:
             lanes.append(threading.Thread(target=self.train_lane, name="train", daemon=True))
             if self.pipeline:
@@ -394,6 +487,7 @@ class Queue:
         while any(t.is_alive() for t in lanes):  # join with a timeout, so SIGTERM is handled
             for t in lanes:
                 t.join(5)
+        self.finished = True
         end = f"{'STOPPED' if self.failed else 'DONE'}_{now():%a-%d-%b_%H-%M}_CET"
         self.set_status(end)
         self.log(f"queue finished, failed: {sorted(self.failed) or 'none'}")
