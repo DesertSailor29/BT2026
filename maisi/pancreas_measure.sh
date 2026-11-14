@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pancreas, measure only (no build, no training): what the liver rules (cc, ccAuc; unchanged) do to the pancreas pool.
 # CPU only, niced so a running nnU-Net training keeps priority. Resumable (every step skips cached work).
-#   1 msd07_split.py          fixed MSD07 split (seed 42, 60 val) -> maisi/msd07_split.json
+#   1 msd07_split.py          fixed MSD07 split (seed 42, 43 val) -> maisi/msd07_split.json
 #   2 filter_metrics.py       per tumour component touch / distance / sep on the 999 pancreas volumes; real reference =
 #                             the MSD07 val cases -> AUC cut (rules.json)
 #   3 cc_rules.py             main structure per volume -> ids_cc*.json, cc_summary.md
@@ -24,7 +24,7 @@ step() { echo; echo "=== $(date '+%F %T') $*"; }
 step "status file"
 setsid nohup python "$REPO/job_status.py" --name PANCREAS_measure \
   --glob "$FM/per_volume/*.json" "$FM/cc/*.json" "$FM/real_reference/*.json" "$REAL/cases/*.json" \
-  --total $((999 + 999 + 60 + 281)) --pid $$ --tail-min 10 --what "pancreas measure-only (cc/ccAuc rules)" \
+  --total $((999 + 999 + 43 + 281)) --pid $$ --tail-min 10 --what "pancreas measure-only (cc/ccAuc rules)" \
   > "$PROJ/logs/status_pancreas_measure_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 
 step "1 split"

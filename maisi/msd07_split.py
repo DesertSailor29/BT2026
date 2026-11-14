@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 SPLIT = Path(__file__).resolve().parent / "msd07_split.json"
-VAL_N, SEED = 60, 42
+VAL_N, SEED = 43, 42  # 43/281 = 15%, the same fraction as liver (20/131); user 2026-11-14
 EXPECTED = 281
 ROOT = f"{os.environ.get('PROJ', '/work/Research')}/raw_data/Task07_Pancreas"
 
