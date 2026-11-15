@@ -11,7 +11,7 @@
 <header class="title">
   <div class="kicker">BT2026 · synthetic CT for liver tumour segmentation</div>
   <h1>Liver filter arms: test results</h1>
-  <div class="meta">15 November 2026, updated in the evening with where the false positives sit and the cc rule applied to the predictions · 6 nnU-Net runs trained only on MAISI synthetic CT, tested on 111 real LiTS cases · checkpoint_final</div>
+  <div class="meta">15 November 2026, updated in the evening with where the false positives sit and the cc rule applied to the predictions, and late evening with the visibility (AUC) rule applied to the predictions, a sweep of stricter cuts and the tumour-size split · 6 nnU-Net runs trained only on MAISI synthetic CT, tested on 111 real LiTS cases · checkpoint_final</div>
 </header>
 
 <p>We generated 999 synthetic liver CTs with MAISI, cleaned them with two simple rules, and trained one nnU-Net per
@@ -20,7 +20,7 @@ means for the next steps and the paper.</p>
 
 <div class="tiles">
   <div class="tile"><div class="num">+0.100</div><div class="lbl">tumour Dice per case, best filter (ccAucRepair) vs training on all 999 (0.303 → 0.403)</div></div>
-  <div class="tile"><div class="num">+0.031</div><div class="lbl">ccAucRepair over the baseline when both get the cc rule at test time (the other arms: ≈ 0)</div></div>
+  <div class="tile"><div class="num">+0.031 → +0.009</div><div class="lbl">ccAucRepair's lead when the baseline gets the cc rule, then also the AUC rule, at test time (n.s.)</div></div>
   <div class="tile"><div class="num">67 → 9 <small>/ case</small></div><div class="lbl">false-positive tumour pieces per test case, all → ccAucRepair</div></div>
   <div class="tile"><div class="num">±0.004</div><div class="lbl">run-to-run noise: two identical "all" runs differ by +0.004 tumour Dice</div></div>
 </div>
@@ -41,9 +41,15 @@ means for the next steps and the paper.</p>
   <li><b>A test-time cc rule does most of the same job.</b> Applying the cc rule to the unfiltered model's predictions
     ("ccPost") lifts it by +0.078, as much as the cc filters. With both sides post-processed, ccReject, ccRepair and
     ccRepairDel no longer beat the baseline (−0.004 to +0.005).</li>
-  <li><b>Only the visibility repair survives that.</b> ccAucRepair stays ahead under ccPost: +0.031 [+0.011, +0.051],
-    Holm p 0.002. Relabelling invisible tumours inside the liver teaches the model something a post-processing step
-    cannot (exploratory, added after the results).</li>
+  <li><b>Only the visibility repair survives that, and a test-time version of it does most of the job too.</b>
+    ccAucRepair stays ahead under ccPost (+0.031 [+0.011, +0.051], Holm p 0.002). Applying the AUC rule to the
+    predictions as well ("ccAucPost", same cut 0.5475, readout fixed before running) lifts the baseline by +0.022 and
+    leaves ccAucRepair only +0.009 [−0.008, +0.026] ahead (p 0.42). With both sides given ccAucPost it still leads by
+    +0.023 (Holm p 0.035).</li>
+  <li><b>A stricter cut at test time helps more, up to a point.</b> At 0.60 every run except ccReject gains another
+    +0.02 to +0.04 (best 0.445) for 2–9 real lesions lost per run, and ccAucRepair's lead over the baseline shrinks to +0.008 (n.s.).
+    0.70 gains nothing more and loses 13–33 lesions. The 20 val cases also favour ≈ 0.60. Exploratory: chosen after the
+    results.</li>
 </ol>
 </div>
 
@@ -251,7 +257,7 @@ The cc filters work mainly by teaching the model not to predict tumour outside t
 that just as well for the unfiltered model (+0.078) and costs only 2–10 lesions per run. So for wrong-place labels,
 filtering the training data and post-processing the output are interchangeable. Invisible labels inside the liver are
 different: their harm sits where ccPost cannot reach, and fixing them in the training data gives +0.031 on top of
-ccPost. That part is the contribution a post-processing step cannot replace.
+ccPost. Section 5 asks whether a test-time version of the AUC rule can reach them too.
 </div>
 
 <h3>Where ccPost goes wrong</h3>
@@ -284,13 +290,79 @@ tumour by ccAucRepair. It touches the predicted liver on other slices, so it bel
 <i>all</i> calls large parts of a heterogeneous right lobe tumour, while the reference labels it liver.</figcaption>
 </figure>
 
-<h2><span class="n">5</span>Biggest gain where tumours are small</h2>
+<h2><span class="n">5</span>The visibility rule at test time (ccAucPost)</h2>
+
+<p>If invisible training labels make the model paint tumour on normal-looking liver, those predicted pieces should
+themselves be invisible in the CT. <b>ccAucPost</b> tests that: first ccPost, then every predicted tumour piece inside
+the predicted liver whose separability is below <b>0.5475</b> (the training cut) is relabelled to its surroundings
+(liver if ≥ 50 % of its shell is predicted liver, else background). It uses the same code as the training labels, with
+the predicted liver in place of the label, and decides from the CT and the prediction only; the reference is read only
+for scoring. The cut and the main comparison were fixed in <code>PLAN_followups.md</code> before the script ran.</p>
+
+<p><b>Separability does tell false positives from real hits.</b> Inside the predicted liver, real hits have a median sep
+of 0.89–0.90 and false-positive pieces 0.60–0.64 (AUROC 0.79–0.83 per run). At the training cut the rule removes
+138–228 false-positive pieces per run (over 111 cases) and touches only 0–5 pieces that overlap a real lesion; 0–3 real
+lesions are lost per run.</p>
+
+<figure>
+<!--svg:aucpost-->
+<figcaption><b>Figure 13. Tumour Dice per run as saved, after ccPost and after ccAucPost</b> (mean per case, 111 test
+cases). The two unfiltered runs climb from 0.30 to 0.40, close to ccAucRepair with ccPost (0.412). Every run gains
+from ccAucPost; the best combination is ccAucRepair + ccAucPost (0.426).</figcaption>
+</figure>
+
+<table class="data">
+  <tr><th>comparison (tumour Dice per case, 111 test cases)</th><th class="num">x</th><th class="num">y</th><th class="num">y − x [95 % CI]</th><th class="num">p</th></tr>
+  <tr><td>baseline: ccPost → ccAucPost (what the test-time AUC rule adds)</td><td class="num">0.381</td><td class="num">0.403</td><td class="num">+0.022 [+0.011, +0.035]</td><td class="num">7.8e−10</td></tr>
+  <tr class="best"><td>baseline + ccAucPost → ccAucRepair + ccPost (pre-declared readout: training vs post-processing)</td><td class="num">0.403</td><td class="num">0.412</td><td class="num">+0.009 [−0.008, +0.026]</td><td class="num">0.42</td></tr>
+  <tr><td>ccAucRepair: ccPost → ccAucPost (the rule on top of AUC training)</td><td class="num">0.412</td><td class="num">0.426</td><td class="num">+0.014 [+0.006, +0.024]</td><td class="num">7.3e−9</td></tr>
+  <tr><td>baseline → ccAucRepair, both with ccAucPost (Holm over 4 arms: 0.035)</td><td class="num">0.403</td><td class="num">0.426</td><td class="num">+0.023 [+0.005, +0.043]</td><td class="num">0.0087</td></tr>
+</table>
+<p class="small">Other arms vs baseline, both with ccAucPost: ccReject −0.011 [−0.046, +0.023], ccRepair +0.004
+[−0.006, +0.017], ccRepairDel −0.001 [−0.016, +0.014] (Holm p 1 each). Tumour-free test cases made clean: still 0/10 in
+every run and every variant; their false positives are visible structures (fluid), which the rule keeps.</p>
+
+<div class="box why"><span class="tag">What this means</span>
+The test-time AUC rule recovers most of what training on the AUC-repaired labels gained: the remaining lead
+(+0.009) lies inside the noise floor and its CI covers 0. So invisible labels, like wrong-place labels, are largely a
+problem a post-processing step can fix. Training on clean labels is not useless, though: with the same post-processing
+on both sides ccAucRepair stays +0.023 ahead, so the two fixes overlap but are not identical. For the paper this
+weakens "only the training fix helps" to "the training fix and the matching test-time rule do most of the same work".
+</div>
+
+<h3>Stricter cuts</h3>
+
+<p>The cc rule already has no tolerance (a tumour piece must be 26-connected to the main liver), so "stricter" can only
+mean a higher visibility cut. A cut above 0.5475 no longer means "less visible than every real lesion": on the training
+side, 0.60 would call 5 of the 709 real test lesions invisible and relabel 338 synthetic components (instead of 162),
+0.637 22 lesions and 479 components, 0.70 54 lesions and 715 components. So we tried the stricter cuts only on the
+predictions, as an exploratory dose-response check, and ran the same sweep on the 20 validation cases (the place a cut
+could legitimately be chosen).</p>
+
+<figure>
+<!--svg:sweep-->
+<figcaption><b>Figure 14. Stricter AUC cuts applied to the predictions.</b> "cc only" = ccPost. Left: tumour Dice on the
+111 test cases. Middle: the same on the 20 validation cases (noisier). Right: real test lesions found after ccPost but
+lost after ccAucPost. Dashed = the repeat run all_rep2.</figcaption>
+</figure>
+
+<ul>
+  <li><b>0.60 is the sweet spot on both sets.</b> On test it lifts every run except ccReject by +0.033 to +0.062 over
+    ccPost (Dice 0.434–0.445) and loses 2–9 lesions per run. On val the unfiltered runs also peak at 0.60–0.637, and
+    every run drops at 0.70. A cut chosen on val would be ≈ 0.60, so the test result is not just tuned on test.</li>
+  <li><b>At 0.60 the training advantage is gone.</b> Both sides with ccAucPost at 0.60: ccAucRepair 0.445 vs baseline
+    0.437, +0.008 [−0.009, +0.025], p 0.34 (0.637: +0.006, 0.70: +0.006). On val ccAucRepair is not ahead at any cut
+    (20 cases, wide CIs).</li>
+  <li><b>0.70 is too strict:</b> no further gain on test, losses on val, and 13–33 real lesions lost per run.</li>
+</ul>
+
+<h2><span class="n">6</span>Biggest gain where tumours are small</h2>
 
 <figure>
 <!--svg:burden-->
-<figcaption><b>Figure 13. Tumour Dice by tumour burden.</b> The 101 test cases with tumour, split into thirds by reference
+<figcaption><b>Figure 15. Tumour Dice by tumour burden.</b> The 101 test cases with tumour, split into thirds by reference
 tumour voxel count. The 10 tumour-free cases are left out: every model predicts some tumour in all of them, so their
-Dice is 0 for every run (see section 8).</figcaption>
+Dice is 0 for every run (see section 9).</figcaption>
 </figure>
 
 <p>With a small tumour, a few false-positive pieces outweigh the real lesion. In the smallest third the baseline's voxel
@@ -307,17 +379,17 @@ can be counted from the filter metrics to confirm this.
 
 <figure>
 <!--ct:lits088-->
-<figcaption><b>Figure 14. The test case where the runs differ most</b> (lits_088, tumour Dice spread 0.73). A large tumour
+<figcaption><b>Figure 16. The test case where the runs differ most</b> (lits_088, tumour Dice spread 0.73). A large tumour
 at the liver hilum. ccReject segments almost none of it (Dice 0.03), while every repair arm finds most of it (0.63–0.76)
 and so do the unfiltered runs (0.54, 0.71). One case, but it matches ccReject's weak sensitivity on large tumours. Panels cropped to the
 liver region of the same slice.</figcaption>
 </figure>
 
-<h2><span class="n">6</span>Repair beats reject, though their means are close</h2>
+<h2><span class="n">7</span>Repair beats reject, though their means are close</h2>
 
 <figure>
 <!--svg:per_case-->
-<figcaption><b>Figure 15. Per-case differences behind the means.</b> One dot per test case: tumour Dice of the arm minus the
+<figcaption><b>Figure 17. Per-case differences behind the means.</b> One dot per test case: tumour Dice of the arm minus the
 baseline. "Same" = within ±0.01 (includes the 10 tumour-free cases, Dice 0 everywhere).</figcaption>
 </figure>
 
@@ -328,7 +400,7 @@ reach 0.651–0.675.</p>
 
 <figure>
 <!--svg:curves-->
-<figcaption><b>Figure 16. Training curves</b> (centred 51-epoch mean, dot = lowest validation loss). ccReject's
+<figcaption><b>Figure 18. Training curves</b> (centred 51-epoch mean, dot = lowest validation loss). ccReject's
 validation loss bottoms out at epoch 756 and then rises (−0.390 → −0.327), and its train/val gap is the largest (0.35).
 Its validation loss is also the worst throughout. ccRepairDel (from epoch 623) and ccRepair (from 854) rise a little
 too. <i>all</i> and ccAucRepair keep improving until near the end.</figcaption>
@@ -342,7 +414,7 @@ Under ccPost the reject/repair difference in mean Dice disappears too (+0.005 vs
 the spread, large tumours and N, not on the mean.
 </div>
 
-<h2><span class="n">7</span>Tumour-free volumes and the visibility rule</h2>
+<h2><span class="n">8</span>Tumour-free volumes and the visibility rule</h2>
 
 <p>Comparisons between arms are exploratory (no correction, one run per arm):</p>
 <table class="data">
@@ -357,7 +429,7 @@ the spread, large tumours and N, not on the mean.
   <li><b>Visibility rule: a real extra gain.</b> Relabelling invisible tumours inside the liver raises precision
     (0.725 → 0.771) at equal sensitivity. It is the only arm-vs-arm difference with a CI clear of zero. Invisible labels
     are a separate MAISI failure that connectivity alone does not catch. It is also the only gain that survives the
-    test-time cc rule (+0.031, section 4).</li>
+    test-time cc rule (+0.031, section 4), though the test-time AUC rule recovers most of it (section 5).</li>
   <li><b>Tumour-free volumes: keep them.</b> Dropping them changes tumour Dice by nothing measurable. Keeping them gives
     slightly fewer false positives and better liver Dice (0.866 vs 0.851, the largest liver drop of any arm). They are
     free extra liver examples.</li>
@@ -365,18 +437,19 @@ the spread, large tumours and N, not on the mean.
 
 <figure>
 <!--ct:missed-->
-<figcaption><b>Figure 17. Lesions one model finds and the other misses.</b> D4 (lits_074): a 125 ml lesion in the left
+<figcaption><b>Figure 19. Lesions one model finds and the other misses.</b> D4 (lits_074): a 125 ml lesion in the left
 lobe, hardly darker than the liver. Both <i>all</i> runs find it, ccAucRepair calls it background. D5 (lits_046): the
 opposite, a clearly darker 9 ml lesion that both <i>all</i> runs leave as a hole and ccAucRepair finds. A possible side
 effect of the AUC repair (relabelling invisible synthetic tumours may teach the model that low-contrast regions are not
 tumour) is not tested. These are single cases chosen as the largest of their kind.</figcaption>
 </figure>
 
-<h2><span class="n">8</span>What did not get better</h2>
+<h2><span class="n">9</span>What did not get better</h2>
 <ul>
   <li><b>Tumour-free cases still get tumour.</b> All six models predict tumour in all 10 tumour-free test cases. Filtering
     cuts the amount (ccAucRepair: 11–23 pieces, 2–38 ml per case, vs 36–142 pieces for <i>all</i>), but not to zero.
-    ccPost does not help here (0/10 clean in every run): these false positives lie inside the predicted liver.</li>
+    Neither ccPost nor ccAucPost helps here (0/10 clean in every run and variant): these false positives lie inside
+    the predicted liver and are visible structures.</li>
   <li><b>Lesion recall stays near 0.41</b> (0.75 for lesions ≥ 1 ml). Filtering removes wrong signal but adds no new
     signal. Small real lesions remain hard for a model trained only on synthetic data.</li>
   <li><b>Liver Dice dips slightly</b> in every arm (−0.003 to −0.022). The largest dips are in the arms with fewer
@@ -387,7 +460,7 @@ tumour) is not tested. These are single cases chosen as the largest of their kin
     not what this study compares.</li>
 </ul>
 
-<h2><span class="n">9</span>How sure are we</h2>
+<h2><span class="n">10</span>How sure are we</h2>
 <div class="box caveat"><span class="tag">Caveats</span>
 <ul>
   <li><b>One training run per filter arm.</b> The noise floor comes from a single pair of identical runs. A second
@@ -398,6 +471,10 @@ tumour) is not tested. These are single cases chosen as the largest of their kin
   <li><b>checkpoint_final only</b> (fixed before results). The best-checkpoint test, a secondary check, is running.</li>
   <li><b>Leakage:</b> MAISI was trained on data that includes LiTS. This affects every arm equally, so it matters for
     absolute numbers, not for the comparison.</li>
+  <li><b>ccAucPost and the cut sweep were also added after the results.</b> The main cut (0.5475) and the main
+    readout were fixed in writing before <code>auc_post.py</code> ran. The stricter cuts are exploratory; val (20 cases)
+    and test agree on ≈ 0.60, but a stricter cut would need to be fixed on val and confirmed on new data before it
+    is claimed.</li>
   <li><b>ccPost was added after the results.</b> The main analysis (saved predictions) was fixed in advance. The ccPost
     comparison is exploratory, but it changes how the main result should be read, so it belongs in the paper.</li>
   <li><b>CT examples</b> are picked by fixed rules (largest case of each kind), not by eye, and read by eye. They
@@ -407,30 +484,159 @@ tumour) is not tested. These are single cases chosen as the largest of their kin
 </ul>
 </div>
 
-<h2><span class="n">10</span>Implications and next steps</h2>
+<h2><span class="n">11</span>Implications and next steps</h2>
 <ol>
-  <li><b>For the paper, the story gets sharper.</b> MAISI makes two kinds of label errors, and they behave
-    differently. <b>Wrong-place tumours</b> make the model fire outside the liver. Filtering the training data fixes
-    this (+0.07 to +0.10), but so does a cc rule at test time (+0.078). <b>Invisible tumours inside the liver</b> make
-    the model fire inside the liver, where post-processing cannot reach. Only fixing those labels helps (+0.031 under
-    ccPost). Report the main table and the ccPost table side by side; that answers "why not just post-process?" before
-    a reviewer asks.</li>
-  <li><b>Recommended pipeline: ccAucRepair + ccPost</b> (tumour Dice 0.412, the best of all variants). Confirm with the
-    second ccAucRepair run (training now), then rerun the false-positive analysis with it
-    (<code>fp_location.py --runs … 104:1</code>).</li>
-  <li><b>Decide how to present ccPost</b> (open question in NOTES): main results stay as fixed in advance; ccPost as a
-    clearly marked secondary analysis.</li>
-  <li><b>The false positives that remain sit inside the liver</b> (fluid, low-contrast structures touching it). A
-    stricter visibility cut, a HU or shape check on predicted tumour, or training tumours closer to real sizes (the
-    pool's tumours are much smaller than LiTS's) are the next candidates.</li>
-  <li><b>Check the possible AUC side effect</b> (Figure 17): compare how many low-contrast real lesions <i>all</i> and
-    ccAucRepair find, using the per-lesion visibility already measured for LiTS. CPU only.</li>
+  <li><b>For the paper, the story gets sharper and more modest.</b> MAISI makes two kinds of label errors.
+    <b>Wrong-place tumours</b> make the model fire outside the liver; filtering the training data fixes this
+    (+0.07 to +0.10), and so does a cc rule at test time (+0.078). <b>Invisible tumours inside the liver</b> make the model
+    fire on normal-looking liver; repairing those labels helps (+0.031 under ccPost), and the same visibility rule at
+    test time gets most of that too (+0.022; remaining lead +0.009, n.s.). Report the main table, the ccPost table and
+    the ccAucPost table side by side: the filters are an understanding of <i>what</i> goes wrong, and the matching
+    test-time rules are the cheap fix.</li>
+  <li><b>Recommended pipeline: ccAucRepair + ccAucPost at 0.5475</b> (tumour Dice 0.426, cut fixed in advance). A
+    stricter test-time cut (0.60: 0.445) is promising but exploratory. Confirm with the second ccAucRepair run (training
+    now; rerun <code>fp_location.py</code> and <code>auc_post.py</code> with <code>104:1</code>).</li>
+  <li><b>Decide how to present the post-processing</b> (open question in NOTES): main results stay as fixed in advance;
+    ccPost and ccAucPost as clearly marked secondary analyses.</li>
+  <li class="keep"><b>Larger training tumours (decision Mon 16 Nov).</b> The pool's tumours are not smaller per lesion (median 0.2 ml
+    vs 0.3 ml in real val), but real cases carry more and bigger lesions (median 18 ml per case in val vs 2.3 ml per
+    synthetic volume). Test without new generation: two new folds of the ccAucRepair dataset, split at the median
+    measured tumour burden (2.29 ml), each with all 180 tumour-free volumes:
+    <table class="data">
+      <tr><th>arm</th><th class="num">volumes</th><th class="num">tumour volumes</th><th class="num">tumour ml per volume p10 / 50 / 90</th><th class="num">total tumour</th></tr>
+      <tr><td>ccAucRepair_sizeLarge</td><td class="num">590</td><td class="num">410</td><td class="num">3.6 / 20.0 / 139.6</td><td class="num">21.4 L</td></tr>
+      <tr><td>ccAucRepair_sizeSmall</td><td class="num">589</td><td class="num">409</td><td class="num">0.0 / 0.3 / 1.7</td><td class="num">0.25 L</td></tr>
+      <tr class="base"><td>ccAucRepair_sizeRand (optional control)</td><td class="num">590</td><td class="num">410</td><td class="num">0.0 / 2.4 / 75.8</td><td class="num">10.3 L</td></tr>
+      <tr class="base"><td>real val (reference only)</td><td class="num">20 cases</td><td class="num">17</td><td class="num">1.6 / 18.3 / 131.7</td><td class="num">–</td></tr>
+    </table>
+    This is domain matching, not overfitting: the split uses only the synthetic labels, and real test cases are not
+    read. Caveat: the large half also has ≈ 85× more tumour voxels, so "larger" and "more tumour" cannot be separated.
+    About 7 GPU h per arm; two fit into the current session after the running jobs (ends Tue 17 Nov 13:24). Report
+    Dice per tumour-burden third.</li>
+  <li><b>Tumour-free generated volumes: backlog.</b> The ccRepair vs ccRepairDel comparison already adds 157 tumour-free
+    volumes for −1.2 FP pieces per case and +0.005 Dice (n.s.); the false positives left are visible fluid structures
+    that tumour-bearing volumes also show as background; only 10 tumour-free test cases. If done later: regenerate the
+    image from the same mask with the tumour removed (matched twins).</li>
+  <li><b>Check the possible AUC side effect</b> (Figure 19): compare how many low-contrast real lesions <i>all</i> and
+    ccAucRepair find, using the per-lesion visibility already measured for LiTS. CPU only. At test time the rule itself
+    loses only 0–3 real lesions at 0.5475.</li>
   <li><b>Generalisation:</b> run the same rules on the pancreas pool (measurements done: cc keeps 911, cut 0.509) to see
-    whether the effect transfers. Report ccPost there from the start.</li>
+    whether the effect transfers. Report ccPost and ccAucPost there from the start.</li>
+</ol>
+
+<h2><span class="n">12</span>Metrics and references</h2>
+
+<p class="small">Every metric in this report, how it is computed here, and where it comes from. Code:
+<code>nnunet/predict_test.py</code> (test metrics and statistics), <code>maisi/filter_metrics.py</code> and
+<code>maisi/cc_rules.py</code> (rules), <code>nnunet/fp_location.py</code> and <code>nnunet/auc_post.py</code>
+(post-processing), nnU-Net (training curves).</p>
+
+<h3>Segmentation overlap</h3>
+<table class="data defs">
+  <tr><td>Dice coefficient</td><td>2 |A ∩ B| / (|A| + |B|) for reference voxels A and predicted voxels B: 1 = identical, 0 = no
+    overlap.<sup class="r">[1, 2]</sup> NaN when both are empty (case left out of the mean); a tumour-free case with any
+    predicted tumour scores 0.</td></tr>
+  <tr><td>Tumour Dice per case (primary metric)</td><td>Dice of the tumour label (2), computed per test case, then averaged
+    over the cases. Every case weighs the same, so small-tumour cases count as much as large ones.</td></tr>
+  <tr><td>Global tumour Dice</td><td>Dice with the voxels of all test cases pooled (LiTS "Dice global"<sup class="r">[3]</sup>):
+    2 Σ TP / (Σ |A| + Σ |B|). Dominated by large tumours.</td></tr>
+  <tr><td>Liver Dice</td><td>Dice of the liver label (1) only, as nnU-Net reports it (tumour voxels are not liver).</td></tr>
+  <tr><td>Voxel sensitivity / precision</td><td>Over all test cases pooled: true-positive tumour voxels / reference tumour
+    voxels (sensitivity), and / predicted tumour voxels (precision).</td></tr>
+  <tr><td>Tumour burden thirds</td><td>The 101 test cases with tumour, split into three equal groups by the number of
+    reference tumour voxels (small / medium / large).</td></tr>
+</table>
+
+<h3>Lesions and false positives</h3>
+<table class="data defs">
+  <tr><td>26-connected component</td><td>Voxels joined through any face, edge or corner (26 neighbours in 3D). Used for
+    lesions, predicted pieces and the liver.</td></tr>
+  <tr><td>Lesion / predicted piece</td><td>A 26-connected component of the reference / predicted tumour label.</td></tr>
+  <tr><td>Lesion recall</td><td>Reference lesions overlapped by any predicted tumour voxel / all reference lesions, over all
+    cases (also for lesions ≥ 1 ml). A loose, overlap-based detection criterion.<sup class="r">[4]</sup></td></tr>
+  <tr><td>Hit / false-positive piece</td><td>A predicted piece that overlaps a reference lesion / overlaps none. "FP pieces
+    per case" = their count averaged over cases; "FP ml per case" = their volume.</td></tr>
+  <tr><td>Lesions lost</td><td>Reference lesions found by a run as saved (or after ccPost) but no longer found after the
+    post-processing step being compared.</td></tr>
+  <tr><td>Tumour-free case made clean</td><td>A test case without reference tumour in which no tumour voxel is predicted.</td></tr>
+</table>
+
+<h3>Filter rules and post-processing</h3>
+<table class="data defs">
+  <tr><td>HU, W400/L40</td><td>Hounsfield units, the CT density scale (water 0, air −1000). Images are shown with window 400 /
+    level 40 (−160 to 240 HU).</td></tr>
+  <tr><td>Main liver structure (cc rule)</td><td>Largest 26-connected liver piece; the main structure is the 26-connected
+    piece of liver ∪ tumour that contains it. Tumour and liver outside it → background. On training labels this is the
+    cc filter; on predictions it is <b>ccPost</b>.</td></tr>
+  <tr><td>Separability (sep)</td><td>How visible a tumour component is in the CT. Core = the component eroded by one voxel;
+    shell = voxels 2–10 mm outside it (no tumour), restricted to liver when the component sits in the liver.
+    AUC = P(core HU > shell HU) + ½ P(equal), the Mann–Whitney statistic;<sup class="r">[5]</sup> sep = max(AUC, 1 − AUC),
+    so 0.5 = invisible and 1 = fully separated, for dark and bright lesions alike. Components with &lt; 10 measurable
+    voxels get no score (they pass).</td></tr>
+  <tr><td>AUC cut</td><td>The lowest sep of any real validation lesion (20 LiTS cases, lits_049 excluded as unreliable):
+    0.5475. A synthetic component below it is "less visible than every real lesion" → relabelled to its surroundings
+    (liver if ≥ 50 % of its outer shell is liver, else background). On predictions: <b>ccAucPost</b>.</td></tr>
+  <tr><td>Contact share</td><td>Fraction of a component's outer 26-neighbour shell that is liver.</td></tr>
+  <tr><td>AUROC (sep, FP vs hit)</td><td>Probability that a random false-positive piece has lower sep than a random hit
+    piece (+ ½ ties): the area under the ROC curve of sep as a detector of false positives.<sup class="r">[6]</sup> 0.5 =
+    no better than chance.</td></tr>
+</table>
+
+<h3>Comparisons and statistics</h3>
+<table class="data defs">
+  <tr><td>Baseline</td><td>Per-case mean tumour Dice of the two identical <i>all</i> runs (all, all_rep2). Averaging avoids
+    picking the luckier run on test data.</td></tr>
+  <tr><td>Paired difference</td><td>Arm minus baseline per test case (same case, same reference), then averaged. Cases where
+    either side is NaN are dropped.</td></tr>
+  <tr><td>Paired bootstrap 95 % CI</td><td>The 111 per-case differences resampled with replacement 10,000 times; the 2.5th and
+    97.5th percentiles of the resampled means (percentile method).<sup class="r">[7]</sup></td></tr>
+  <tr><td>Wilcoxon signed-rank test</td><td>Two-sided paired test on the per-case differences: are positive and negative
+    differences balanced around 0?<sup class="r">[8]</sup> Gives the p values.</td></tr>
+  <tr><td>Holm correction</td><td>Step-down correction of the 4 main-arm p values for multiple comparisons: sort ascending,
+    multiply the i-th smallest by (5 − i), keep the running maximum.<sup class="r">[9]</sup></td></tr>
+  <tr><td>Noise floor, clear win</td><td>The two identical <i>all</i> runs differ by +0.004 in mean tumour Dice; any effect
+    must exceed 0.01. A clear win = Holm p &lt; 0.05 and mean gain &gt; 0.01 (fixed 12 Nov). "Better / same / worse" per
+    case uses the same ±0.01.</td></tr>
+</table>
+
+<h3>Training</h3>
+<table class="data defs">
+  <tr><td>nnU-Net 3d_fullres</td><td>Self-configuring U-Net framework;<sup class="r">[10]</sup> default plans, 1000 epochs of 250
+    iterations, the same for every arm.</td></tr>
+  <tr><td>Validation loss</td><td>nnU-Net's training loss (soft Dice + cross-entropy; negative because the Dice term is
+    subtracted) on patches of the 20 real validation cases. Lower is better.</td></tr>
+  <tr><td>Pseudo Dice</td><td>nnU-Net's running validation Dice, computed on sampled patches rather than whole volumes and
+    smoothed with an exponential moving average; it tracks trends, not the final test Dice.</td></tr>
+  <tr><td>Train/val gap</td><td>Validation minus training loss (centred 51-epoch mean); a growing gap means overfitting.</td></tr>
+  <tr><td>checkpoint_final / best</td><td>Weights after the last epoch (used for every result here, fixed in advance) / at
+    the best smoothed pseudo Dice (secondary check, running).</td></tr>
+</table>
+
+<h3>References</h3>
+<ol class="refs">
+  <li>Dice LR. Measures of the amount of ecologic association between species. <i>Ecology</i> 26(3):297–302, 1945.</li>
+  <li>Maier-Hein L, Reinke A, et al. Metrics reloaded: recommendations for image analysis validation. <i>Nature
+    Methods</i> 21:195–212, 2024.</li>
+  <li>Bilic P, Christ P, et al. The Liver Tumor Segmentation Benchmark (LiTS). <i>Medical Image Analysis</i> 84:102680,
+    2023.</li>
+  <li>Reinke A, Tizabi MD, et al. Understanding metric-related pitfalls in image analysis validation. <i>Nature
+    Methods</i> 21:182–194, 2024.</li>
+  <li>Mann HB, Whitney DR. On a test of whether one of two random variables is stochastically larger than the other.
+    <i>Annals of Mathematical Statistics</i> 18(1):50–60, 1947.</li>
+  <li>Hanley JA, McNeil BJ. The meaning and use of the area under a receiver operating characteristic (ROC) curve.
+    <i>Radiology</i> 143(1):29–36, 1982.</li>
+  <li>Efron B, Tibshirani RJ. <i>An Introduction to the Bootstrap.</i> Chapman &amp; Hall, 1993.</li>
+  <li>Wilcoxon F. Individual comparisons by ranking methods. <i>Biometrics Bulletin</i> 1(6):80–83, 1945.</li>
+  <li>Holm S. A simple sequentially rejective multiple test procedure. <i>Scandinavian Journal of Statistics</i>
+    6(2):65–70, 1979.</li>
+  <li>Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep
+    learning-based biomedical image segmentation. <i>Nature Methods</i> 18:203–211, 2021.</li>
+  <li>Guo P, Zhao C, et al. MAISI: Medical AI for Synthetic Imaging. arXiv:2409.11169, 2024 (the generator of the
+    synthetic pool).</li>
 </ol>
 
 <footer class="end">Sources: <code>reports/data/test_eval_liver/</code> (summary.md, confusion.md, per-case CSVs,
-progress/training_curves.csv, fp_location/), <code>reports/figures/filter_review/</code>,
+progress/training_curves.csv, fp_location/, auc_post/, auc_post_val/), <code>PLAN_followups.md</code>, <code>reports/figures/filter_review/</code>,
 <code>reports/figures/ccpost_review/</code> (README + reading), NOTES.md (decisions 12 and 14 Nov). Charts:
 <code>reports/liver_results/make_charts.py</code>. Style: <code>reports/style/</code>.</footer>
 

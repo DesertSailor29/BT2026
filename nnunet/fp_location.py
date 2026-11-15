@@ -21,6 +21,8 @@ Descriptive and exploratory: the main analysis stays predict_test.py on the save
   python nnunet/fp_location.py                       # the 6 liver runs, 8 workers
   python nnunet/fp_location.py --runs 101:0 104:0 --workers 4
   python nnunet/fp_location.py --tables-only         # summary from the cache
+  python nnunet/fp_location.py --checkpoint best     # checkpoint_best predictions (fold_X/test_best)
+                                                     # -> $nnUNet_results/test_eval_liver_best/fp_location/
 """
 import argparse
 import csv
@@ -49,6 +51,16 @@ VARIANTS = ("none", "ccPost")
 SIZE_BINS = [(0, 0.01), (0.01, 0.1), (0.1, 1.0), (1.0, 10.0), (10.0, float("inf"))]
 OUT = f"{os.environ['nnUNet_results']}/test_eval_liver/fp_location"
 PUB = f"{REPO}/reports/data/test_eval_liver/fp_location"
+CKPT = "final"  # set by --checkpoint
+
+
+def use_checkpoint(ckpt):
+    """Point OUT/PUB at test_eval_liver_best/... for checkpoint_best (as predict_test.py eval does)."""
+    global OUT, PUB, CKPT
+    CKPT = ckpt
+    if ckpt == "best":
+        OUT = f"{os.environ['nnUNet_results']}/test_eval_liver_best/fp_location"
+        PUB = f"{REPO}/reports/data/test_eval_liver_best/fp_location"
 
 
 def metrics(r, p, voxel_ml):
@@ -128,7 +140,7 @@ def tables(runs, cases, names):
 
     nc = len(cases)
     L = ["# False-positive tumour pieces: where they sit, and the cc rule applied to the predictions", "",
-         f"{nc} real LiTS test cases, checkpoint_final predictions. Piece = 26-connected predicted tumour component; "
+         f"{nc} real LiTS test cases, checkpoint_{CKPT} predictions. Piece = 26-connected predicted tumour component; "
          "FP = overlaps no reference lesion. *Predicted main structure* = the piece of predicted liver ∪ tumour that "
          "holds the largest predicted liver piece (the training cc rule). *Reference liver share* = fraction of the "
          "piece's voxels with reference label > 0. ccPost = everything outside the predicted main structure set to "
@@ -215,15 +227,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", nargs="+", default=RUNS, help="dataset:fold (default: the 6 liver runs)")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--checkpoint", choices=("final", "best"), default="final",
+                    help="which predictions: fold_X/test_final (default) or fold_X/test_best")
     ap.add_argument("--tables-only", action="store_true")
     a = ap.parse_args()
+    use_checkpoint(a.checkpoint)
     cases = [f"lits_{i:03d}" for i in pt.split()["test"]]
     names = {r: f"D{r.split(':')[0]} f{r.split(':')[1]} {pt.arm_name(*map(int, r.split(':')))}" for r in a.runs}
     if not a.tables_only:
         jobs = []
         for run in a.runs:
             did, fold = map(int, run.split(":"))
-            pdir = f"{pt.res_dir(did)}/fold_{fold}/test_final"
+            pdir = f"{pt.res_dir(did)}/fold_{fold}/test_{a.checkpoint}"
             cdir = f"{OUT}/cache/{run.replace(':', '_')}"
             os.makedirs(cdir, exist_ok=True)
             for c in cases:

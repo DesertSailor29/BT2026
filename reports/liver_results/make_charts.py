@@ -10,6 +10,8 @@ Reads reports/data/test_eval_liver/ (per-case CSVs, training_curves.csv) and wri
   curves.svg       smoothed validation loss + tumour pseudo Dice over training
   fp_where.svg     false-positive tumour pieces / ml per case, inside vs outside the predicted main liver structure
   ccpost.svg       tumour Dice gain over baseline, as saved vs both post-processed with the cc rule (ccPost)
+  aucpost.svg      tumour Dice per run: as saved -> ccPost -> ccAucPost (AUC rule on the predictions, cut 0.5475)
+  sweep.svg        stricter AUC cuts on the predictions: test Dice, val Dice, test lesions lost (auc_post.py)
 and prints the numbers it plotted (to check against summary.md).
 
   python reports/liver_results/make_charts.py <out_dir>
@@ -29,6 +31,9 @@ from training_curves import smooth  # noqa: E402  (same smoothing as training_cu
 
 DATA = os.path.join(HERE, "..", "data", "test_eval_liver")
 FPL = os.path.join(DATA, "fp_location")
+AUP = os.path.join(DATA, "auc_post")
+CUTS = ["ccPost", "ccAucPost0.5475", "ccAucPost0.6", "ccAucPost0.637", "ccAucPost0.7"]
+CUT_X = [0.50, 0.5475, 0.60, 0.637, 0.70]  # ccPost drawn at 0.50 (= no AUC rule)
 RUN_ID = {"all": "101:0", "all_rep2": "101:1", "ccReject": "101:2", "ccRepair": "103:0", "ccRepairDel": "103:1",
           "ccAucRepair": "104:0"}
 RUNS = {"all": "D101_fold_0", "all_rep2": "D101_fold_1", "ccReject": "D101_fold_2", "ccRepair": "D103_fold_0",
@@ -316,6 +321,74 @@ def ccpost(out, plt):
     return res
 
 
+def aucpost(out, plt):
+    """Mean tumour Dice per run for none -> ccPost -> ccAucPost0.5475 (auc_post.py per_case.csv, test)."""
+    p = pd.read_csv(f"{AUP}/per_case.csv")
+    runs = ["all", "all_rep2"] + ARMS
+    vs = [("none", "as saved"), ("ccPost", "ccPost"), ("ccAucPost0.5475", "ccAucPost (cut 0.5475)")]
+    res = {}
+    fig, ax = plt.subplots(figsize=style.size(1.0, 0.34))
+    for i, r in enumerate(runs):
+        g = p[p.run == RUN_ID[r]]
+        m = [g[g.variant == v].tumour_dice.mean() for v, _ in vs]  # NaN (both empty) skipped, as summary.md
+        res[r] = m
+        col = style.arm_color(r)
+        ax.plot(m, [i] * 3, color=col, linewidth=1.4, alpha=0.5, zorder=1)
+        for k, (x, mk) in enumerate(zip(m, ["o", "o", "o"])):
+            fill = [style.SURFACE, style.SURFACE, col][k]
+            ax.plot(x, i, mk, color=col, markersize=[5, 7, 8][k], markerfacecolor=fill, markeredgewidth=1.4,
+                    markeredgecolor=col, zorder=2)
+        ax.annotate(f"{m[0]:.3f} → {m[1]:.3f} → {m[2]:.3f}", (max(m), i), xytext=(9, 0), textcoords="offset points",
+                    va="center", fontsize=7.6, color=style.INK)
+    label_rows(ax, runs, [style.arm_color(r) for r in runs])
+    ax.set_xlim(0.28, 0.52)
+    ax.set_xlabel("mean tumour Dice per case, 111 test cases")
+    h = [plt.Line2D([], [], marker="o", color=style.INK2, markerfacecolor=style.SURFACE, markersize=5, linestyle="none"),
+         plt.Line2D([], [], marker="o", color=style.INK2, markerfacecolor=style.SURFACE, markersize=7, linestyle="none"),
+         plt.Line2D([], [], marker="o", color=style.INK2, markersize=8, linestyle="none")]
+    ax.legend(h, [l for _, l in vs], ncol=3, loc="lower left", bbox_to_anchor=(-0.02, 1.0), fontsize=7.6)
+    style.save_svg(fig, f"{out}/aucpost.svg")
+    return res
+
+
+def sweep(out, plt):
+    """Tumour Dice (test, val) and test lesions lost vs ccPost over the AUC cut on the predictions."""
+    t = pd.read_csv(f"{AUP}/per_case.csv")
+    v = pd.read_csv(f"{AUP}_val/per_case.csv")
+    runs = ["all", "all_rep2"] + ARMS
+    fig, axes = plt.subplots(1, 3, figsize=style.size(1.0, 0.36))
+    res = {}
+    for r in runs:
+        col = style.arm_color(r)
+        ls = (0, (4, 2.5)) if "_rep" in r else "-"
+        for ax, df, key in ((axes[0], t, "test"), (axes[1], v, "val")):
+            g = df[df.run == RUN_ID[r]]
+            y = [g[g.variant == c].tumour_dice.mean() for c in CUTS]
+            res[(r, key)] = y
+            ax.plot(CUT_X, y, color=col, linestyle=ls, linewidth=1.5, marker="o", markersize=3.5)
+        g = t[t.run == RUN_ID[r]]
+        det0 = g[g.variant == "ccPost"].les_det.sum()
+        lost = [det0 - g[g.variant == c].les_det.sum() for c in CUTS]
+        res[(r, "lost")] = lost
+        axes[2].plot(CUT_X, lost, color=col, linestyle=ls, linewidth=1.5, marker="o", markersize=3.5, label=r)
+    titles = ["tumour Dice, 111 test cases", "tumour Dice, 20 val cases", "real test lesions lost vs ccPost"]
+    for ax, title in zip(axes, titles):
+        ax.set_title(title, fontsize=8.3)
+        ax.set_xticks(CUT_X)
+        ax.set_xticklabels(["cc\nonly", ".5475", ".60", ".637", ".70"], fontsize=7.2)
+        ax.axvline(0.5475, color=style.MUTED, linewidth=0.8, linestyle=":")
+        ax.grid(axis="y", visible=True)
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylim(0.36, 0.46)
+    axes[1].set_ylim(0.32, 0.46)
+    axes[2].legend(loc="upper left", fontsize=6.8, handlelength=1.6)
+    fig.supxlabel("AUC cut applied to the predictions (dotted = training cut, fixed in advance)", fontsize=8,
+                  color=style.INK2, y=-0.07)
+    fig.subplots_adjust(wspace=0.36)
+    style.save_svg(fig, f"{out}/sweep.svg")
+    return res
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "build")
     os.makedirs(out, exist_ok=True)
@@ -334,6 +407,8 @@ def main():
     print("val loss low (epoch, low, last):", curves(out, plt))
     print("fp where (per case):", {r: {k: round(v, 2) for k, v in x.items()} for r, x in fp_where(out, plt).items()})
     print("ccpost:", {k: tuple(round(x, 4) for x in v) for k, v in ccpost(out, plt).items()})
+    print("aucpost (none, ccPost, ccAucPost0.5475):", {k: [round(x, 3) for x in v] for k, v in aucpost(out, plt).items()})
+    print("sweep:", {k: [round(x, 3) for x in v] for k, v in sweep(out, plt).items()})
 
 
 if __name__ == "__main__":

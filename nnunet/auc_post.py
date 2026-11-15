@@ -25,6 +25,9 @@ and copies summary.md + the CSVs to reports/data/test_eval_liver/auc_post/ (not 
   python nnunet/auc_post.py --runs 101:0 101:1 101:2 103:0 103:1 104:0 104:1   # + ccAucRepair_rep2 once tested
   python nnunet/auc_post.py --tables-only
   python nnunet/auc_post.py --split val --workers 8   # the 20 val cases
+  python nnunet/auc_post.py --checkpoint best         # checkpoint_best test predictions (fold_X/test_best)
+                                                      # -> $nnUNet_results/test_eval_liver_best/auc_post/
+(--split val exists for checkpoint_final only: nnU-Net writes fold_X/validation with the final weights.)
 Memory: up to ~4 GB per worker (image float32 + label + crops).
 """
 import argparse
@@ -54,6 +57,7 @@ MAIN_CUT = CUTS[0]
 VERSION = f"aucpost1 {fm.VERSION} cuts={','.join(map(str, CUTS))}"
 VARIANTS = ("none", "ccPost") + tuple(f"ccAucPost{c:g}" for c in CUTS)
 MAIN = f"ccAucPost{MAIN_CUT:g}"
+CKPT = "final"  # set by --checkpoint
 OUT = f"{os.environ['nnUNet_results']}/test_eval_liver/auc_post"
 PUB = f"{REPO}/reports/data/test_eval_liver/auc_post"
 RULES = (os.environ.get("MAISI_RUNS", f"{os.environ.get('PROJ', '/work/Research')}/maisi_runs")
@@ -179,7 +183,7 @@ def tables(runs, cases, names):
         return np.where(nb > 0, np.nansum(b, axis=0) / np.maximum(nb, 1), np.nan)
 
     L = ["# The AUC rule applied to the predictions (ccAucPost) + a sweep of stricter cuts", "",
-         f"{nc} real LiTS {'val' if OUT.endswith('_val') else 'test'} cases, checkpoint_final predictions. ccPost = training cc rule on the prediction; "
+         f"{nc} real LiTS {'val' if OUT.endswith('_val') else 'test'} cases, checkpoint_{CKPT} predictions. ccPost = training cc rule on the prediction; "
          f"ccAucPost<cut> = ccPost, then predicted tumour pieces inside the predicted main structure with sep < cut -> "
          "their surroundings' label (filter_metrics' separability with the predicted liver as organ). Decisions use "
          f"image + prediction only. **Main cut {MAIN_CUT}** (= the training cut, fixed before results); 0.60 / 0.637 / "
@@ -266,13 +270,21 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--rules", default=RULES, help="filter_metrics rules.json (cut + version check)")
     ap.add_argument("--split", choices=("test", "val"), default="test")
+    ap.add_argument("--checkpoint", choices=("final", "best"), default="final",
+                    help="which test predictions: fold_X/test_final (default) or fold_X/test_best")
     ap.add_argument("--tables-only", action="store_true")
     a = ap.parse_args()
     check_rules(a.rules)
-    global OUT, PUB
+    global OUT, PUB, CKPT
+    CKPT = a.checkpoint
+    if CKPT == "best":
+        if a.split == "val":
+            sys.exit("--split val needs --checkpoint final (fold_X/validation holds checkpoint_final predictions)")
+        OUT = OUT.replace("/test_eval_liver/", "/test_eval_liver_best/")
+        PUB = PUB.replace("/test_eval_liver/", "/test_eval_liver_best/")
     if a.split == "val":
         OUT, PUB = OUT + "_val", PUB + "_val"
-    sub, img_dir, lab_dir = (("test_final", pt.IMG, pt.LAB) if a.split == "test"
+    sub, img_dir, lab_dir = ((f"test_{CKPT}", pt.IMG, pt.LAB) if a.split == "test"
                              else ("validation", f"{pt.RAW}/imagesTr", f"{pt.RAW}/labelsTr"))
     cases = [f"lits_{i:03d}" for i in pt.split()[a.split]]
     names = {r: f"D{r.split(':')[0]} f{r.split(':')[1]} {pt.arm_name(*map(int, r.split(':')))}" for r in a.runs}

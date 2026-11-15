@@ -84,3 +84,10 @@ footer.end { margin-top: 6mm; padding-top: 2mm; border-top: 1px solid var(--grid
 .ct .p { break-inside: avoid; display: flex; flex-direction: column; justify-content: flex-end; }
 .ct .lb { font-size: 6.9pt; line-height: 1.25; color: var(--ink2); margin-bottom: 0.6mm; }
 .ct img { width: 100%; display: block; border-radius: 1px; }
+
+/* Metric definitions + references (end of a report) */
+table.defs td:first-child { width: 27%; font-weight: 600; color: var(--ink); }
+table.defs td { font-size: 8.2pt; line-height: 1.42; }
+ol.refs { font-size: 8.1pt; color: var(--ink2); padding-left: 6mm; }
+ol.refs li { margin-bottom: 0.8mm; }
+sup.r { font-size: 6.6pt; color: var(--ink2); }
