@@ -7,3 +7,4 @@
 | D101 | 2 | ccReject | 343 |
 | D103 | 0 | ccRepair | 999 |
 | D103 | 1 | ccRepairDel | 842 |
+| D104 | 0 | ccAucRepair | 999 |
