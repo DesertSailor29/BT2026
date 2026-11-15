@@ -6,3 +6,4 @@
 | D101 | 1 | all_rep2 | 999 |
 | D101 | 2 | ccReject | 343 |
 | D103 | 0 | ccRepair | 999 |
+| D103 | 1 | ccRepairDel | 842 |
