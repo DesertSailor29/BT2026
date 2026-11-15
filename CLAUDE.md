@@ -56,6 +56,10 @@ folder) is shared by both machines through git.
     axial anterior up, coronal/sagittal superior up); aspect from the voxel spacing, so anatomy is not stretched;
   - labelling: case id + slice index in the title, volumes in ml where useful; a legend or caption names the colours,
     the window and the convention.
+- **One style for every chart, diagram and report page** (non-CT visuals): **`reports/style/`** (`style.py` for
+  matplotlib, `diagrams.js` for Mermaid diagrams, `report.css` for PDF pages; README there). Fixed colour per arm
+  (all blue, ccReject orange, ccRepair aqua, ccRepairDel yellow, ccAucRepair magenta), anatomy in the CT overlay
+  green/red, Inter font. Import it, never restyle. Example: `reports/liver_results/` (report → PDF via Chromium).
 - Long-running UCloud commands: see "Running jobs on UCloud" below. This holds for commands Claude runs itself and
   for commands handed to the user.
 

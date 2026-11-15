@@ -1,0 +1,86 @@
+/* One page style for every report printed to PDF (pairs with style.py and diagrams.js).
+   A4, 18 mm side margins, Inter. Building blocks:
+     header.title  .kicker / h1 / .meta          .tiles > .tile (.num, .lbl)   stat tiles
+     .box (.finding | .why | .caveat)            figure > (img|svg) + figcaption
+     table.data (td.num, tr.base, tr.best)        .arm-<name> colour swatch, .organ / .tumour inline text
+     .pb  page break before                       .two  two columns
+     .ct (style="--n:4") > .hd + .p (.lb + img)   strip of CT panels, one heading line per example   */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  --ink: #1f1f1e; --ink2: #5f5e58; --muted: #8a8985; --grid: #e6e5e0; --surface: #ffffff; --panel: #f6f5f2;
+  --organ: #138a13; --organ-tint: #e3f7e3; --tumour: #c81414; --tumour-tint: #fde4e4;
+  --all: #2a78d6; --ccReject: #eb6834; --ccRepair: #1baf7a; --ccRepairDel: #eda100; --ccAucRepair: #e87ba4;
+  --accent: #2a78d6;
+}
+@page { size: A4; margin: 16mm 18mm 16mm 18mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: var(--surface); color: var(--ink); font: 9.6pt/1.5 Inter, "DejaVu Sans", sans-serif;
+       font-feature-settings: "tnum" 1, "cv11" 1; }
+h1 { font-size: 21pt; line-height: 1.15; margin: 2mm 0 2mm; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 13pt; margin: 7mm 0 2mm; font-weight: 650; letter-spacing: -0.005em; break-after: avoid; }
+h2 .n { color: var(--muted); font-weight: 500; margin-right: 2.5mm; }
+h3 { font-size: 10.2pt; margin: 4mm 0 1mm; font-weight: 600; break-after: avoid; }
+p { margin: 0 0 2.4mm; }
+ul, ol { margin: 0 0 2.4mm; padding-left: 5mm; }
+li { margin-bottom: 1mm; }
+b, strong { font-weight: 600; }
+code { font: 8.6pt "Fira Code", "DejaVu Sans Mono", monospace; background: var(--panel); padding: 0 1mm; border-radius: 2px; }
+.small { font-size: 8.4pt; color: var(--ink2); }
+
+header.title { border-bottom: 1px solid var(--grid); padding-bottom: 3mm; margin-bottom: 4mm; }
+header.title .kicker { font-size: 8pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+header.title .meta { color: var(--ink2); font-size: 8.6pt; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin: 3mm 0 4mm; }
+.tile { background: var(--panel); border-radius: 2.5mm; padding: 3mm 3.4mm; break-inside: avoid; }
+.tile .num { font-size: 17pt; font-weight: 650; line-height: 1.1; letter-spacing: -0.01em; }
+.tile .num small { font-size: 9pt; font-weight: 500; color: var(--ink2); }
+.tile .lbl { font-size: 8pt; color: var(--ink2); line-height: 1.35; margin-top: 1mm; }
+
+.box { border-left: 2.4px solid var(--ink2); background: var(--panel); padding: 2.6mm 3.6mm; margin: 3mm 0;
+       border-radius: 0 2mm 2mm 0; break-inside: avoid; }
+.box > :last-child { margin-bottom: 0; }
+.box .tag { font-size: 7.6pt; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink2);
+            display: block; margin-bottom: 0.6mm; }
+.box.finding { border-color: var(--accent); }
+.box.finding .tag { color: var(--accent); }
+.box.why { border-color: var(--organ); }
+.box.why .tag { color: var(--organ); }
+.box.caveat { border-color: var(--ccRepairDel); }
+.box.caveat .tag { color: #9a6a00; }
+
+figure { margin: 3.5mm 0 4mm; break-inside: avoid; }
+figure img, figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+figure .diagram { text-align: center; }
+figure .diagram svg { margin: 0 auto; }
+figcaption { font-size: 8.2pt; color: var(--ink2); margin-top: 1.6mm; line-height: 1.45; }
+figcaption b { color: var(--ink); }
+
+table.data { width: 100%; border-collapse: collapse; font-size: 8.4pt; margin: 2mm 0 3.5mm; break-inside: avoid; }
+table.data th { text-align: left; font-weight: 600; color: var(--ink2); border-bottom: 1px solid var(--ink2);
+                padding: 1.2mm 1.6mm; vertical-align: bottom; }
+table.data td { border-bottom: 1px solid var(--grid); padding: 1.1mm 1.6mm; vertical-align: top; }
+table.data td.num, table.data th.num { text-align: right; white-space: nowrap; }
+table.data tr.base td { color: var(--ink2); }
+table.data tr.best td { font-weight: 600; }
+
+.sw { display: inline-block; width: 2.4mm; height: 2.4mm; border-radius: 50%; margin-right: 1.4mm; vertical-align: 0.1mm; }
+.arm-all { background: var(--all); } .arm-ccReject { background: var(--ccReject); }
+.arm-ccRepair { background: var(--ccRepair); } .arm-ccRepairDel { background: var(--ccRepairDel); }
+.arm-ccAucRepair { background: var(--ccAucRepair); }
+.organ { color: var(--organ); font-weight: 600; } .tumour { color: var(--tumour); font-weight: 600; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.pb { break-before: page; }
+.keep { break-inside: avoid; }
+footer.end { margin-top: 6mm; padding-top: 2mm; border-top: 1px solid var(--grid); font-size: 7.8pt; color: var(--muted); }
+
+/* CT strips: panels cut from a CT figure (maisi/viz.py style), a heading per example, a label per panel */
+.ct { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); column-gap: 1.4mm; row-gap: 0.8mm; }
+.ct .hd { grid-column: 1 / -1; font-size: 8.2pt; font-weight: 600; margin-top: 1.6mm; }
+.ct .hd:first-child { margin-top: 0; }
+.ct .p { break-inside: avoid; display: flex; flex-direction: column; justify-content: flex-end; }
+.ct .lb { font-size: 6.9pt; line-height: 1.25; color: var(--ink2); margin-bottom: 0.6mm; }
+.ct img { width: 100%; display: block; border-radius: 1px; }

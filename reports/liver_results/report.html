@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liver filter arms: test results</title>
+<link rel="stylesheet" href="style/report.css">
+</head>
+<body>
+
+<header class="title">
+  <div class="kicker">BT2026 · synthetic CT for liver tumour segmentation</div>
+  <h1>Liver filter arms: test results</h1>
+  <div class="meta">15 November 2026, updated in the evening with where the false positives sit and the cc rule applied to the predictions · 6 nnU-Net runs trained only on MAISI synthetic CT, tested on 111 real LiTS cases · checkpoint_final</div>
+</header>
+
+<p>We generated 999 synthetic liver CTs with MAISI, cleaned them with two simple rules, and trained one nnU-Net per
+version of the cleaned set. This report shows what the test set says, why the filters probably work, and what that
+means for the next steps and the paper.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="num">+0.100</div><div class="lbl">tumour Dice per case, best filter (ccAucRepair) vs training on all 999 (0.303 → 0.403)</div></div>
+  <div class="tile"><div class="num">+0.031</div><div class="lbl">ccAucRepair over the baseline when both get the cc rule at test time (the other arms: ≈ 0)</div></div>
+  <div class="tile"><div class="num">67 → 9 <small>/ case</small></div><div class="lbl">false-positive tumour pieces per test case, all → ccAucRepair</div></div>
+  <div class="tile"><div class="num">±0.004</div><div class="lbl">run-to-run noise: two identical "all" runs differ by +0.004 tumour Dice</div></div>
+</div>
+
+<div class="box finding"><span class="tag">Main findings</span>
+<ol>
+  <li><b>Every filter beats training on everything.</b> Tumour Dice rises by +0.067 to +0.100, more than 15 times the
+    run-to-run noise. All 4 arms are clear wins (Holm p &lt; 0.05, gain &gt; 0.01). Liver Dice barely moves (−0.003 to −0.022).</li>
+  <li><b>The gain comes from far fewer false positives, mostly outside the liver.</b> The unfiltered model predicts 46 to
+    67 tumour pieces per case where there is no tumour, 84–88 % of them outside the predicted liver. The filtered models
+    predict 9 to 12, mostly inside it. They still find about as many real lesions.</li>
+  <li><b>It helps most where tumours are small.</b> There, false positives dominate the Dice score. For large tumours the
+    effect is small, and rejecting volumes even hurts.</li>
+  <li><b>Repair beats reject.</b> ccReject (343 volumes) and ccRepair (999) reach a similar mean, but ccReject misses more
+    tumour, does worse on large tumours and overfits. Repairing labels keeps the data.</li>
+  <li><b>Invisible tumour labels matter too.</b> Adding the visibility (AUC) repair on top of the
+    connectivity repair adds a further +0.028 (exploratory, p 0.004), the best arm overall.</li>
+  <li><b>A test-time cc rule does most of the same job.</b> Applying the cc rule to the unfiltered model's predictions
+    ("ccPost") lifts it by +0.078, as much as the cc filters. With both sides post-processed, ccReject, ccRepair and
+    ccRepairDel no longer beat the baseline (−0.004 to +0.005).</li>
+  <li><b>Only the visibility repair survives that.</b> ccAucRepair stays ahead under ccPost: +0.031 [+0.011, +0.051],
+    Holm p 0.002. Relabelling invisible tumours inside the liver teaches the model something a post-processing step
+    cannot (exploratory, added after the results).</li>
+</ol>
+</div>
+
+<h2><span class="n">1</span>What was compared</h2>
+
+<p>MAISI draws a full-body label map first, then the CT image from it. Two kinds of label errors are common in our pool
+(figures in <code>reports/figures/filter_review/</code>). <b>Wrong-place tumours:</b> 534 of 999 volumes have a tumour
+label ≥ 30 mm from the liver, often big blobs in the pelvis. <b>Invisible tumours:</b> tumour labels on tissue that looks
+exactly like its surroundings. LiTS labels only liver tumours, so both teach the model something wrong.</p>
+
+<figure>
+  <img src="off_liver.jpg" alt="Two synthetic volumes with large tumour labels in the pelvis, far from the liver">
+  <figcaption><b>Figure 1a. Wrong-place tumour labels.</b> Two MAISI volumes with 95 ml and 52 ml tumour labels in the pelvis,
+  103–131 mm from the liver. Left to right: zoomed image alone, zoomed image with label, full axial slice, coronal slice
+  (component circled). The image shows normal pelvic tissue under the label. W400/L40, radiological convention,
+  <span class="organ">green liver</span>, <span class="tumour">red tumour</span>.</figcaption>
+</figure>
+
+<figure>
+  <img src="invisible.jpg" alt="Two synthetic volumes with tumour labels inside the liver but no visible lesion">
+  <figcaption><b>Figure 1b. Invisible tumour labels.</b> Labels inside the liver (49 ml and 4 ml) with nothing visible
+  under them. Core vs surrounding HU: 53 vs 57 and 49 vs 54. Separability (sep, AUC of core vs shell HU) is 0.54 for both.
+  0.5 means indistinguishable. Every real validation lesion scores ≥ 0.547 (after excluding lits_049, whose labels are
+  unreliable).</figcaption>
+</figure>
+
+<p>Each tumour component of each synthetic volume goes through the same two questions. The rules were fixed before any
+filtered model was trained (decisions of 12 and 14 Nov):</p>
+
+<figure>
+<script type="text/x-mermaid">
+flowchart LR
+  c["each tumour component<br/>of a synthetic volume"]:::tumour
+  q1{"in the main<br/>liver?"}:::decision
+  q2{"visible?<br/>sep ≥ 0.547"}:::decision
+  wp["<b>wrong place</b><br/>reject: drop the volume<br/>repair: label → background"]:::muted
+  inv["<b>invisible label</b><br/>ccAucRepair only:<br/>label → surroundings"]:::muted
+  keep["keep as tumour"]:::tumour
+  c --> q1
+  q1 -- no --> wp
+  q1 -- yes --> q2
+  q2 -- no --> inv
+  q2 -- yes --> keep
+</script>
+<figcaption><b>Figure 2. The two rules.</b> <b>cc rule:</b> the main liver structure is the 26-connected piece of
+liver ∪ tumour that holds the largest liver piece. Tumour outside it is in the wrong place, and detached liver specks
+outside it also become background. <b>AUC rule</b> (only in ccAucRepair): a tumour component inside the liver that is
+less visible than every real validation lesion is relabelled to its surroundings' label (liver if ≥ 50 % of its shell
+is liver).</figcaption>
+</figure>
+
+<p>From these rules come four training sets ("arms") and the unfiltered baseline. All arms use the same nnU-Net setup,
+the same 20 real LiTS validation cases and the same 111 real LiTS test cases. Each arm changes one thing compared with
+the arm before it:</p>
+
+<figure>
+<!--svg:composition-->
+<figcaption><b>Figure 3. What each arm trains on.</b> <b>ccReject</b> keeps only the 343 volumes the cc rule leaves
+unchanged. <b>ccRepair</b> keeps all 999 with the labels repaired. 157 of them have no tumour left after repair.
+<b>ccRepairDel</b> = ccRepair without those 157. <b>ccAucRepair</b> = ccRepair plus the AUC repair: 162 invisible
+components inside the liver relabelled in 144 volumes, 177 tumour-free in total. <b>all</b> = the 999 volumes as
+generated, trained twice (all, all_rep2). Their per-case mean is the baseline.</figcaption>
+</figure>
+
+<figure>
+<script type="text/x-mermaid">
+flowchart LR
+  pool[("MAISI pool<br/>999 synthetic liver CTs")]:::data
+  rules{"cc / AUC<br/>rules"}:::decision
+  a1["all · 999<br/>(trained twice)"]:::all
+  a2["ccReject · 343"]:::ccReject
+  a3["ccRepair · 999"]:::ccRepair
+  a4["ccRepairDel · 842"]:::ccRepairDel
+  a5["ccAucRepair · 999"]:::ccAucRepair
+  nn["nnU-Net 3d_fullres<br/>1000 epochs per arm"]:::step
+  val[("20 real LiTS<br/>validation")]:::data
+  test["111 real LiTS test cases<br/>checkpoint_final"]:::result
+  pool --> a1
+  pool --> rules
+  rules --> a2 & a3 & a4 & a5
+  a1 & a2 & a3 & a4 & a5 --> nn
+  val -. "monitoring only" .-> nn
+  nn --> test
+</script>
+<figcaption><b>Figure 4. Study design.</b> Training uses synthetic data only. Real LiTS cases are used only for
+validation monitoring (20) and the test (111, including the 40 thesis test cases). Main comparison: per-case tumour Dice
+of each filter arm vs the baseline, paired Wilcoxon test with Holm correction over the 4 arms. A "clear win" also needs
+a mean gain above the 0.01 noise floor.</figcaption>
+</figure>
+
+<h2><span class="n">2</span>Every filter beats training on everything</h2>
+
+<figure>
+<!--svg:dice_gain-->
+<figcaption><b>Figure 5. Tumour Dice gain over the baseline.</b> Mean of the per-case differences on 111 test cases, with
+a paired bootstrap 95 % CI (10,000 resamples). The grey band is the ±0.01 noise floor. Bottom row: the same comparison
+between the two identical <i>all</i> runs. That is how far a model moves just by retraining.</figcaption>
+</figure>
+
+<table class="data">
+  <tr><th>run</th><th class="num">train vols</th><th class="num">tumour Dice</th><th class="num">gain [95 % CI]</th><th class="num">Holm p</th><th class="num">tumour Dice, global</th><th class="num">liver Dice</th></tr>
+  <tr class="base"><td><span class="sw arm-all"></span>all / all_rep2</td><td class="num">999</td><td class="num">0.301 / 0.305</td><td class="num">baseline 0.303</td><td class="num">–</td><td class="num">0.582 / 0.590</td><td class="num">0.870 / 0.876</td></tr>
+  <tr><td><span class="sw arm-ccReject"></span>ccReject</td><td class="num">343</td><td class="num">0.382</td><td class="num">+0.079 [+0.038, +0.120]</td><td class="num">0.0011</td><td class="num">0.594</td><td class="num">0.857</td></tr>
+  <tr><td><span class="sw arm-ccRepair"></span>ccRepair</td><td class="num">999</td><td class="num">0.375</td><td class="num">+0.072 [+0.051, +0.094]</td><td class="num">2.4e−9</td><td class="num">0.651</td><td class="num">0.866</td></tr>
+  <tr><td><span class="sw arm-ccRepairDel"></span>ccRepairDel</td><td class="num">842</td><td class="num">0.370</td><td class="num">+0.067 [+0.043, +0.092]</td><td class="num">2.2e−7</td><td class="num">0.651</td><td class="num">0.851</td></tr>
+  <tr class="best"><td><span class="sw arm-ccAucRepair"></span>ccAucRepair</td><td class="num">999</td><td class="num">0.403</td><td class="num">+0.100 [+0.072, +0.129]</td><td class="num">2.4e−10</td><td class="num">0.675</td><td class="num">0.870</td></tr>
+</table>
+<p class="small">Tumour Dice = mean of per-case Dice (primary metric). Global = all tumour voxels of all cases pooled,
+which weights large tumours. Each arm also beats each <i>all</i> run separately (p ≤ 0.002). On the 40 thesis test
+cases alone the repair arms stay significant (+0.055 to +0.099). ccReject does not (+0.057 [−0.005, +0.123], p 0.20).</p>
+
+<div class="box why"><span class="tag">What this means</span>
+The comparison holds up statistically. The noise between two identical runs is +0.004 [−0.007, +0.015]. The smallest
+filter gain is 15 times larger, and every CI stays well clear of the noise band. Filtering MAISI output is clearly
+better than using it as generated. Section 4 shows how much of this gain a cc rule applied at test time gets too.
+</div>
+
+<h2><span class="n">3</span>The gain is fewer false positives</h2>
+
+<figure>
+<!--svg:detection-->
+<figcaption><b>Figure 6. Detection on the test set.</b> Voxel sensitivity and precision for the tumour label (all 111
+cases pooled), and lesion-wise recall (a reference lesion counts as found if any prediction overlaps it). False-positive
+pieces = predicted 26-connected tumour pieces that touch no reference lesion, averaged per case. Hollow dot = the repeat
+run all_rep2.</figcaption>
+</figure>
+
+<p>The filters change one thing above all: <b>how much tumour the model invents.</b> The unfiltered models put 46–67
+tumour pieces per case where there is no tumour (35–41 ml per case). Filtered models put 9–12 (3–15 ml). Tumour precision
+rises from 0.55–0.57 to 0.70–0.85. Sensitivity and lesion recall stay within a few points of the baseline for the three
+repair arms. Only ccReject loses noticeably (sensitivity 0.46 vs 0.59–0.64, recall 0.35 vs 0.42–0.44).</p>
+
+<figure>
+<script type="text/x-mermaid">
+flowchart LR
+  e1["wrong-place tumour labels<br/>(pelvis, lung, bowel)"]:::tumour
+  e2["invisible tumour labels<br/>in normal-looking liver"]:::tumour
+  l1["model learns: tumour can<br/>appear outside the liver"]:::step
+  l2["model learns: normal liver<br/>texture can be tumour"]:::step
+  f["many false-positive<br/>tumour pieces"]:::muted
+  d["low precision → low Dice,<br/>worst when the real tumour is small"]:::result
+  e1 --> l1 --> f
+  e2 --> l2 --> f
+  f --> d
+</script>
+<figcaption><b>Figure 7. Likely mechanism (hypothesis).</b> nnU-Net fits the labels it is given. If many synthetic tumour
+labels sit in the wrong place or on invisible tissue (1,701 of 3,873 components lie outside the liver), the model learns to fire on ordinary-looking
+tissue. The cc rule removes the first path, the AUC rule the second. Section 4 checks this on the test predictions:
+the unfiltered model's false positives are indeed mostly outside the liver.</figcaption>
+</figure>
+
+<h2><span class="n">4</span>Where the false positives sit, and the cc rule at test time</h2>
+
+<p>For every predicted tumour piece we checked whether it lies inside the <b>predicted</b> main liver structure (the same
+cc rule as for the training labels, applied to the prediction: the piece of predicted liver ∪ tumour that holds the
+largest predicted liver piece). <b>ccPost</b> sets everything outside that structure to background. It needs no
+training and no extra data, so it is the obvious question a reviewer will ask: why not just post-process?</p>
+
+<figure>
+<!--svg:fp_where-->
+<figcaption><b>Figure 8. Where the false-positive tumour pieces sit.</b> Per test case, split into pieces inside the
+predicted main liver structure (solid) and outside it (light; these are what ccPost removes). Left: number of pieces.
+Right: volume. 111 test cases, checkpoint_final.</figcaption>
+</figure>
+
+<p><b>The unfiltered model fires all over the body.</b> 59 and 39 of its 67 and 46 false-positive pieces per case lie
+outside the predicted liver. Most are specks (median 0.05 ml, 61 % below 0.1 ml), but they hold half of its
+false-positive volume. The filter arms have only 2–3 such pieces per case left. Their remaining false positives sit
+inside the liver and are larger (median 0.14–0.16 ml for the repair arms). The off-liver false positives are not random
+noise: the models paint tumour on round, low-contrast structures anywhere, the same places where MAISI drew wrong-place
+labels (lung, bowel, pelvis).</p>
+
+<figure>
+<!--ct:caught-->
+<figcaption><b>Figure 9. What ccPost removes.</b> Two of the largest off-liver false positives of the unfiltered model
+(chosen by fixed rules: largest of each kind). A1: a mass in the right chest. A5: stool in the right colon of a test case
+without any tumour. The reference has no label in either zoom. Labels: whole-case tumour Dice, false-positive pieces and
+lesions found. W400/L40, radiological convention, <span class="organ">green liver</span>,
+<span class="tumour">red tumour</span>.</figcaption>
+</figure>
+
+<figure>
+<!--svg:ccpost-->
+<figcaption><b>Figure 10. Arm gains with and without the test-time cc rule.</b> Hollow: arm minus baseline as saved
+(the main analysis, Figure 5). Filled: arm minus baseline when both are post-processed with ccPost. Bottom row: what
+ccPost alone does to the baseline. Grey band: ±0.01 noise floor.</figcaption>
+</figure>
+
+<table class="data">
+  <tr><th>run</th><th class="num">tumour Dice saved → ccPost</th><th class="num">FP pieces / case</th><th class="num">lesion recall</th><th class="num">lesions lost</th><th class="num">liver Dice</th></tr>
+  <tr class="base"><td><span class="sw arm-all"></span>all</td><td class="num">0.301 → 0.379</td><td class="num">66.8 → 7.7</td><td class="num">0.422 → 0.408</td><td class="num">10</td><td class="num">0.870 → 0.885</td></tr>
+  <tr class="base"><td><span class="sw arm-all"></span>all_rep2</td><td class="num">0.305 → 0.383</td><td class="num">46.3 → 7.4</td><td class="num">0.443 → 0.437</td><td class="num">4</td><td class="num">0.876 → 0.903</td></tr>
+  <tr><td><span class="sw arm-ccReject"></span>ccReject</td><td class="num">0.382 → 0.386</td><td class="num">9.5 → 6.8</td><td class="num">0.354 → 0.350</td><td class="num">3</td><td class="num">0.857 → 0.874</td></tr>
+  <tr><td><span class="sw arm-ccRepair"></span>ccRepair</td><td class="num">0.375 → 0.380</td><td class="num">10.8 → 8.7</td><td class="num">0.416 → 0.408</td><td class="num">6</td><td class="num">0.866 → 0.883</td></tr>
+  <tr><td><span class="sw arm-ccRepairDel"></span>ccRepairDel</td><td class="num">0.370 → 0.377</td><td class="num">12.0 → 9.0</td><td class="num">0.403 → 0.399</td><td class="num">3</td><td class="num">0.851 → 0.870</td></tr>
+  <tr class="best"><td><span class="sw arm-ccAucRepair"></span>ccAucRepair</td><td class="num">0.403 → 0.412</td><td class="num">9.4 → 6.3</td><td class="num">0.413 → 0.410</td><td class="num">2</td><td class="num">0.870 → 0.892</td></tr>
+</table>
+<p class="small">Arms vs baseline, both after ccPost (baseline 0.381; Holm over the 4 arms): ccReject +0.005 [−0.028,
++0.039], p 0.89 · ccRepair −0.001 [−0.011, +0.008], p 0.86 · ccRepairDel −0.004 [−0.021, +0.012], p 0.62 ·
+<b>ccAucRepair +0.031 [+0.011, +0.051], p 0.0005, Holm 0.002</b>. Lesions lost = reference lesions found as saved but
+not after ccPost.</p>
+
+<div class="box why"><span class="tag">What this means</span>
+The cc filters work mainly by teaching the model not to predict tumour outside the liver. A cc rule at test time does
+that just as well for the unfiltered model (+0.078) and costs only 2–10 lesions per run. So for wrong-place labels,
+filtering the training data and post-processing the output are interchangeable. Invisible labels inside the liver are
+different: their harm sits where ccPost cannot reach, and fixing them in the training data gives +0.031 on top of
+ccPost. That part is the contribution a post-processing step cannot replace.
+</div>
+
+<h3>Where ccPost goes wrong</h3>
+
+<p>ccPost trusts that the largest predicted liver piece is the liver and that the liver is one connected piece. When a
+model breaks down on a case, both can fail. Every run still improves its liver Dice under ccPost (+0.015 to +0.027),
+but each loses some real lesions.</p>
+
+<figure>
+<!--ct:harm-->
+<figcaption><b>Figure 11. ccPost removing real anatomy.</b> A3 (lits_043): <i>all_rep2</i> calls most of the liver tumour,
+so the largest predicted liver piece is the spleen. ccPost keeps the spleen and deletes the real liver with its tumour
+(lesions found 1 → 0). B1 (lits_130): a correctly found tumour in the left lobe is not connected to the predicted liver
+because the liver around it is missing. ccPost deletes it (Dice 0.14 → 0.02). The same happens at a gap in lits_023 and
+lits_109 (review figures B2, B4).</figcaption>
+</figure>
+
+<h3>What ccPost cannot reach</h3>
+
+<p>The false positives left after ccPost are mostly <b>fluid or low-contrast structures touching the liver</b>: a pleural
+effusion, fluid-filled bowel or gallbladder below the liver, a region at the liver's back edge near the vena cava. This is
+also why no run gets any of the 10 tumour-free test cases fully clean, with or without ccPost: their false positives lie
+inside the predicted liver. A connectivity rule cannot fix these. A check on the HU or shape of predicted tumour pieces
+might (not tested).</p>
+
+<figure>
+<!--ct:kept-->
+<figcaption><b>Figure 12. False positives that stay after ccPost.</b> C2 (lits_120): a right pleural effusion labelled
+tumour by ccAucRepair. It touches the predicted liver on other slices, so it belongs to the main structure. C1 (lits_020):
+<i>all</i> calls large parts of a heterogeneous right lobe tumour, while the reference labels it liver.</figcaption>
+</figure>
+
+<h2><span class="n">5</span>Biggest gain where tumours are small</h2>
+
+<figure>
+<!--svg:burden-->
+<figcaption><b>Figure 13. Tumour Dice by tumour burden.</b> The 101 test cases with tumour, split into thirds by reference
+tumour voxel count. The 10 tumour-free cases are left out: every model predicts some tumour in all of them, so their
+Dice is 0 for every run (see section 8).</figcaption>
+</figure>
+
+<p>With a small tumour, a few false-positive pieces outweigh the real lesion. In the smallest third the baseline's voxel
+precision is only 0.02. That is where the filters help most: Dice rises from 0.09 to 0.19–0.27. With large tumours,
+false positives matter less (baseline precision 0.79), so the gain shrinks to +0.01 to +0.03. <b>ccReject falls below the
+baseline there (0.53 vs 0.60):</b> it under-segments big tumours.</p>
+
+<div class="box why"><span class="tag">Why ccReject loses on large tumours (likely)</span>
+Rejecting a volume removes all of it, including its correctly placed liver tumours. Volumes with large or many tumour
+labels are more likely to have at least one bad component, so ccReject probably sees fewer large tumours. The trained
+model becomes conservative: highest precision of all (0.85), lowest sensitivity (0.46). The pool's tumour sizes per arm
+can be counted from the filter metrics to confirm this.
+</div>
+
+<figure>
+<!--ct:lits088-->
+<figcaption><b>Figure 14. The test case where the runs differ most</b> (lits_088, tumour Dice spread 0.73). A large tumour
+at the liver hilum. ccReject segments almost none of it (Dice 0.03), while every repair arm finds most of it (0.63–0.76)
+and so do the unfiltered runs (0.54, 0.71). One case, but it matches ccReject's weak sensitivity on large tumours. Panels cropped to the
+liver region of the same slice.</figcaption>
+</figure>
+
+<h2><span class="n">6</span>Repair beats reject, though their means are close</h2>
+
+<figure>
+<!--svg:per_case-->
+<figcaption><b>Figure 15. Per-case differences behind the means.</b> One dot per test case: tumour Dice of the arm minus the
+baseline. "Same" = within ±0.01 (includes the 10 tumour-free cases, Dice 0 everywhere).</figcaption>
+</figure>
+
+<p>ccReject's mean (+0.079) comes with the widest spread: 49 cases better, 31 worse, median gain 0.000. Its CI is twice as
+wide as the repair arms'. The repair arms move almost every case up a little (ccAucRepair: 66 better, 11 worse, median
++0.054). Pooled over all voxels, ccReject barely beats the baseline (global Dice 0.594 vs 0.58–0.59). The repair arms
+reach 0.651–0.675.</p>
+
+<figure>
+<!--svg:curves-->
+<figcaption><b>Figure 16. Training curves</b> (centred 51-epoch mean, dot = lowest validation loss). ccReject's
+validation loss bottoms out at epoch 756 and then rises (−0.390 → −0.327), and its train/val gap is the largest (0.35).
+Its validation loss is also the worst throughout. ccRepairDel (from epoch 623) and ccRepair (from 854) rise a little
+too. <i>all</i> and ccAucRepair keep improving until near the end.</figcaption>
+</figure>
+
+<div class="box why"><span class="tag">What this means</span>
+Reject and repair use the same criterion, so their difference is the action alone. Repair is the better default: same
+or higher Dice, fewer losers, better on large tumours, a smaller train/val gap (0.18–0.26 vs 0.35), and it keeps N = 999. The checkpoint_best
+predictions now running on UCloud will show how much of ccReject's weakness is overfitting (its best epoch was 775).
+Under ccPost the reject/repair difference in mean Dice disappears too (+0.005 vs −0.001), so the case for repair rests on
+the spread, large tumours and N, not on the mean.
+</div>
+
+<h2><span class="n">7</span>Tumour-free volumes and the visibility rule</h2>
+
+<p>Comparisons between arms are exploratory (no correction, one run per arm):</p>
+<table class="data">
+  <tr><th>comparison</th><th>what it isolates</th><th class="num">tumour Dice diff [95 % CI]</th><th class="num">p</th><th class="num">FP pieces / case</th></tr>
+  <tr class="best"><td>ccAucRepair − ccRepair</td><td>repairing 162 invisible labels inside the liver</td><td class="num">+0.028 [+0.010, +0.048]</td><td class="num">0.004</td><td class="num">−1.4</td></tr>
+  <tr><td>ccRepair − ccRepairDel</td><td>keeping the 157 volumes left tumour-free</td><td class="num">+0.005 [−0.009, +0.018]</td><td class="num">0.46</td><td class="num">−1.2</td></tr>
+  <tr><td>ccRepair − ccReject</td><td>repair vs reject (same criterion)</td><td class="num">−0.007 [−0.039, +0.025]</td><td class="num">0.87</td><td class="num">+1.3</td></tr>
+  <tr><td>ccAucRepair − ccReject</td><td>best repair vs reject</td><td class="num">+0.021 [−0.006, +0.049]</td><td class="num">0.40</td><td class="num">−0.05</td></tr>
+</table>
+
+<ul>
+  <li><b>Visibility rule: a real extra gain.</b> Relabelling invisible tumours inside the liver raises precision
+    (0.725 → 0.771) at equal sensitivity. It is the only arm-vs-arm difference with a CI clear of zero. Invisible labels
+    are a separate MAISI failure that connectivity alone does not catch. It is also the only gain that survives the
+    test-time cc rule (+0.031, section 4).</li>
+  <li><b>Tumour-free volumes: keep them.</b> Dropping them changes tumour Dice by nothing measurable. Keeping them gives
+    slightly fewer false positives and better liver Dice (0.866 vs 0.851, the largest liver drop of any arm). They are
+    free extra liver examples.</li>
+</ul>
+
+<figure>
+<!--ct:missed-->
+<figcaption><b>Figure 17. Lesions one model finds and the other misses.</b> D4 (lits_074): a 125 ml lesion in the left
+lobe, hardly darker than the liver. Both <i>all</i> runs find it, ccAucRepair calls it background. D5 (lits_046): the
+opposite, a clearly darker 9 ml lesion that both <i>all</i> runs leave as a hole and ccAucRepair finds. A possible side
+effect of the AUC repair (relabelling invisible synthetic tumours may teach the model that low-contrast regions are not
+tumour) is not tested. These are single cases chosen as the largest of their kind.</figcaption>
+</figure>
+
+<h2><span class="n">8</span>What did not get better</h2>
+<ul>
+  <li><b>Tumour-free cases still get tumour.</b> All six models predict tumour in all 10 tumour-free test cases. Filtering
+    cuts the amount (ccAucRepair: 11–23 pieces, 2–38 ml per case, vs 36–142 pieces for <i>all</i>), but not to zero.
+    ccPost does not help here (0/10 clean in every run): these false positives lie inside the predicted liver.</li>
+  <li><b>Lesion recall stays near 0.41</b> (0.75 for lesions ≥ 1 ml). Filtering removes wrong signal but adds no new
+    signal. Small real lesions remain hard for a model trained only on synthetic data.</li>
+  <li><b>Liver Dice dips slightly</b> in every arm (−0.003 to −0.022). The largest dips are in the arms with fewer
+    volumes (ccRepairDel, ccReject). The same cases fail in every run (lits_043 ≈ 0, lits_013 0.04–0.43), so these
+    failures are not caused by filtering.</li>
+  <li><b>Absolute level:</b> the best arm reaches 0.377 tumour Dice on the 40 thesis test cases. The thesis model trained
+    on real LiTS reached 0.653. Synthetic-only training is still far from real-data training. That was expected and is
+    not what this study compares.</li>
+</ul>
+
+<h2><span class="n">9</span>How sure are we</h2>
+<div class="box caveat"><span class="tag">Caveats</span>
+<ul>
+  <li><b>One training run per filter arm.</b> The noise floor comes from a single pair of identical runs. A second
+    ccAucRepair run is training now and will give a second estimate. The main claim (filter vs no filter) is far above
+    any plausible noise. The arm-vs-arm differences (0.005–0.028) are not, except ccAucRepair vs ccRepair.</li>
+  <li><b>Per-case mean Dice rewards removing false positives in small-tumour cases.</b> That matches the clinical aim
+    (don't invent lesions), but global Dice and lesion recall tell a more modest story for ccReject.</li>
+  <li><b>checkpoint_final only</b> (fixed before results). The best-checkpoint test, a secondary check, is running.</li>
+  <li><b>Leakage:</b> MAISI was trained on data that includes LiTS. This affects every arm equally, so it matters for
+    absolute numbers, not for the comparison.</li>
+  <li><b>ccPost was added after the results.</b> The main analysis (saved predictions) was fixed in advance. The ccPost
+    comparison is exploratory, but it changes how the main result should be read, so it belongs in the paper.</li>
+  <li><b>CT examples</b> are picked by fixed rules (largest case of each kind), not by eye, and read by eye. They
+    illustrate patterns found in the numbers. Single cases do not prove them.</li>
+  <li><b>Size confound in ccReject:</b> it has a third of the volumes, so "fewer but cleaner" and "fewer" are mixed. A
+    random 343-volume control (backlog) would separate them.</li>
+</ul>
+</div>
+
+<h2><span class="n">10</span>Implications and next steps</h2>
+<ol>
+  <li><b>For the paper, the story gets sharper.</b> MAISI makes two kinds of label errors, and they behave
+    differently. <b>Wrong-place tumours</b> make the model fire outside the liver. Filtering the training data fixes
+    this (+0.07 to +0.10), but so does a cc rule at test time (+0.078). <b>Invisible tumours inside the liver</b> make
+    the model fire inside the liver, where post-processing cannot reach. Only fixing those labels helps (+0.031 under
+    ccPost). Report the main table and the ccPost table side by side; that answers "why not just post-process?" before
+    a reviewer asks.</li>
+  <li><b>Recommended pipeline: ccAucRepair + ccPost</b> (tumour Dice 0.412, the best of all variants). Confirm with the
+    second ccAucRepair run (training now), then rerun the false-positive analysis with it
+    (<code>fp_location.py --runs … 104:1</code>).</li>
+  <li><b>Decide how to present ccPost</b> (open question in NOTES): main results stay as fixed in advance; ccPost as a
+    clearly marked secondary analysis.</li>
+  <li><b>The false positives that remain sit inside the liver</b> (fluid, low-contrast structures touching it). A
+    stricter visibility cut, a HU or shape check on predicted tumour, or training tumours closer to real sizes (the
+    pool's tumours are much smaller than LiTS's) are the next candidates.</li>
+  <li><b>Check the possible AUC side effect</b> (Figure 17): compare how many low-contrast real lesions <i>all</i> and
+    ccAucRepair find, using the per-lesion visibility already measured for LiTS. CPU only.</li>
+  <li><b>Generalisation:</b> run the same rules on the pancreas pool (measurements done: cc keeps 911, cut 0.509) to see
+    whether the effect transfers. Report ccPost there from the start.</li>
+</ol>
+
+<footer class="end">Sources: <code>reports/data/test_eval_liver/</code> (summary.md, confusion.md, per-case CSVs,
+progress/training_curves.csv, fp_location/), <code>reports/figures/filter_review/</code>,
+<code>reports/figures/ccpost_review/</code> (README + reading), NOTES.md (decisions 12 and 14 Nov). Charts:
+<code>reports/liver_results/make_charts.py</code>. Style: <code>reports/style/</code>.</footer>
+
+<script type="module">
+  import { renderDiagrams } from "./style/diagrams.js";
+  await renderDiagrams();
+</script>
+</body>
+</html>

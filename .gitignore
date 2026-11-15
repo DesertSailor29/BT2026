@@ -16,6 +16,7 @@ predictions*/
 *.nii.gz
 
 # Run outputs
+reports/*/build/
 *.log
 *.csv
 charts/
