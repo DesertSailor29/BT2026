@@ -10,6 +10,8 @@ the liver target uses these same files. A run = dataset id + fold (= one experim
   python predict_test.py predict --dataset 103 --fold 0
   python predict_test.py eval --runs 103:0 101:2         # arms vs the baseline (mean of 101:0 + 101:1)
   python predict_test.py eval                           # baseline runs only (+ the noise row)
+  python predict_test.py predict --fold 2 --checkpoint best   # checkpoint_best -> fold_2/test_best
+  python predict_test.py eval --checkpoint best --runs ...    # same eval on test_best -> test_eval_liver_best
 
 Everything is resumable: prepare skips existing files, predict uses --continue_prediction, eval reuses a run's
 per-case CSV when it is newer than all its predictions (delete it to force a recompute).
@@ -47,7 +49,8 @@ PROJ = os.environ.get("PROJ", "/work/Research")
 DS = "Dataset101_LiverSynth"
 RAW = f"{os.environ['nnUNet_raw']}/{DS}"
 IMG, LAB = f"{RAW}/imagesTs_real", f"{RAW}/labelsTs_real"
-CHK = "checkpoint_final.pth"
+CHK = "checkpoint_final.pth"  # set by --checkpoint (final | best)
+PRED_SUB = "test_final"
 TRAINER = "nnUNetTrainer__nnUNetPlans__3d_fullres"
 STRUCT26 = np.ones((3, 3, 3), bool)
 BIG_ML = 1.0
@@ -107,7 +110,7 @@ def prepare(workers):
 
 def predict(did, fold, npp, nps):
     prepare(16)
-    out = f"{res_dir(did)}/fold_{fold}/test_final"
+    out = f"{res_dir(did)}/fold_{fold}/{PRED_SUB}"
     cmd = ["nnUNetv2_predict", "-i", IMG, "-o", out, "-d", str(did), "-c", "3d_fullres", "-f", str(fold),
            "-chk", CHK, "-npp", str(npp), "-nps", str(nps), "--continue_prediction"]
     print(" ".join(cmd), flush=True)
@@ -153,7 +156,7 @@ def score(args):
 
 
 def run_rows(did, fold, cases, thesis_test, out_dir, workers):
-    pdir = f"{res_dir(did)}/fold_{fold}/test_final"
+    pdir = f"{res_dir(did)}/fold_{fold}/{PRED_SUB}"
     preds = [f"{pdir}/{c}.nii.gz" for c in cases]
     missing = [c for c, f in zip(cases, preds) if not os.path.exists(f)]
     if missing:
@@ -359,7 +362,7 @@ def confusion_tables(rows, names, every, cases, out_dir):
     nvox = {c: int(np.prod(nib.load(f"{LAB}/{c}.nii.gz").shape)) for c in cases}
     tot = lambda rs, k: sum(float(r[k]) for r in rs)  # noqa: E731
     lines = ["# Test set: true / false positives and negatives per run", "",
-             f"{len(cases)} real LiTS test cases, checkpoint_final. Sums over all cases. Written by `predict_test.py eval`.", ""]
+             f"{len(cases)} real LiTS test cases, {CHK[:-4]}. Sums over all cases. Written by `predict_test.py eval`.", ""]
     for struct, label in (("tumour", "label 2"), ("liver", "label 1 only, without tumour")):
         lines += [f"## {struct.capitalize()}, voxel-level ({label}; millions of voxels)", "",
                   "| run | TP | FP | FN | TN | sensitivity | precision | FP / TP |", "|---|---|---|---|---|---|---|---|"]
@@ -417,21 +420,28 @@ def main():
     p.add_argument("--fold", type=int, required=True)
     p.add_argument("--npp", type=int, default=3, help="nnU-Net preprocessing workers")
     p.add_argument("--nps", type=int, default=3, help="nnU-Net export workers")
+    p.add_argument("--checkpoint", choices=("final", "best"), default="final")
     e = sp.add_parser("eval")
     e.add_argument("--baseline", nargs="+", default=["101:0", "101:1"],
                    help="dataset:fold runs whose per-case mean is the baseline (default: `all` + `all_rep2`)")
     e.add_argument("--runs", nargs="*", default=[], help="arms to compare, dataset:fold, e.g. 103:0 101:2")
     e.add_argument("--family", nargs="+", default=list(FAMILY), help="arm names in the Holm family (main comparison)")
     e.add_argument("--workers", type=int, default=12)
-    e.add_argument("--out", default=f"{os.environ['nnUNet_results']}/test_eval_liver")
+    e.add_argument("--checkpoint", choices=("final", "best"), default="final",
+                   help="which checkpoint's predictions (fold_X/test_<checkpoint>) to score")
+    e.add_argument("--out", help="default $nnUNet_results/test_eval_liver (final) or test_eval_liver_best (best)")
+    ap.set_defaults(checkpoint="final")
     a = ap.parse_args()
+    global CHK, PRED_SUB
+    CHK, PRED_SUB = f"checkpoint_{a.checkpoint}.pth", f"test_{a.checkpoint}"
     if a.cmd == "prepare":
         prepare(16)
     elif a.cmd == "predict":
         predict(a.dataset, a.fold, a.npp, a.nps)
     else:
         parse = lambda xs: [tuple(int(v) for v in x.split(":")) for x in xs]  # noqa: E731
-        eval_runs(parse(a.baseline), parse(a.runs), a.family, a.workers, a.out)
+        out = a.out or f"{os.environ['nnUNet_results']}/test_eval_liver" + ("" if a.checkpoint == "final" else "_best")
+        eval_runs(parse(a.baseline), parse(a.runs), a.family, a.workers, out)
 
 
 if __name__ == "__main__":
