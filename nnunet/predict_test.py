@@ -23,7 +23,7 @@ Lesion-wise (tumour label, 26-connected components): a reference lesion is *dete
 overlaps it; a predicted component is a *false positive* if it overlaps no reference tumour. Recall = detected /
 reference lesions (all, and lesions >= 1 ml), precision = hit predicted components / predicted components, FP count
 and FP volume per case, and how many tumour-free cases get any predicted tumour.
-Comparisons (PLAN_training.md "Evaluation and analysis"): baseline = the per-case mean of the `--baseline` runs (the
+Comparisons (plans/PLAN_training.md "Evaluation and analysis"): baseline = the per-case mean of the `--baseline` runs (the
 two `all` runs). Main: tumour Dice per case on all test cases, arm - baseline, paired Wilcoxon, Holm over the arms of
 `--family` (the 4 main arms); clear win = Holm p < 0.05 and mean difference > 0.01 (noise floor). Every difference
 gets a paired bootstrap 95% CI. Secondary (exploratory, uncorrected): liver / liver+tumour Dice, FP components and
@@ -55,7 +55,7 @@ TRAINER = "nnUNetTrainer__nnUNetPlans__3d_fullres"
 STRUCT26 = np.ones((3, 3, 3), bool)
 BIG_ML = 1.0
 CSV_VERSION = "lesion1"
-MAIN_KEY = "tumour_dice"  # main metric (PLAN_training.md "Evaluation and analysis")
+MAIN_KEY = "tumour_dice"  # main metric (plans/PLAN_training.md "Evaluation and analysis")
 SECONDARY = ("liver_dice", "liver_tumour_dice", "les_fp", "fp_ml")
 NOISE_FLOOR = 0.01  # |mean diff| between the two `all` runs was < 0.01
 BOOT = 10000

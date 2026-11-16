@@ -332,6 +332,20 @@ git -C "$PROJ/BT2026" pull
 
 Everything else (venv, MAISI clone, weights, runs) is already in `/work`.
 
+## Job conventions (detached jobs, logs, status files)
+
+The rule itself is in `CLAUDE.md` "Running jobs on UCloud" (`setsid nohup … > $PROJ/logs/<name>_<ts>.log`).
+
+- **Every detached job gets a status file** at the top of `$PROJ` whose name says what runs and its projected finish:
+  `<NAME>__<done>of<total>__ETA_<day-time>_CET.txt`, renamed to `DONE_…` / `STOPPED_…` at the end. Start it detached
+  right after the job: `job_status.py` (generic: `--name`, `--glob` of the output files, `--total`, `--pid` of the
+  job), or the richer `maisi/status_file.py` (MAISI runs) / `nnunet/train_status.py` (nnU-Net training). Rough ETAs are
+  fine. Finished status files go to `$PROJ/status_done/` (`job_status.py` moves old ones when it starts).
+- Logs always go to a timestamped file in `$PROJ/logs` (persistent), never only to the screen.
+- Follow progress with short checks (`tail -n 30 <log>`); don't block on `tail -f`.
+- `pgrep -f <pattern>` can match the watcher's own command line; use a pattern that only the job has, or `--pid`.
+- Jobs must be resumable: re-running the same command skips finished work (as `run_jobs.py` does).
+
 ## Optional: Claude Code on UCloud
 
 The home folder is wiped when a session ends, so the program is reinstalled each session (a few seconds). Your

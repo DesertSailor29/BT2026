@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Tumour-size test (PLAN_followups.md, part 3): split the ccAucRepair training set (Dataset104 labels) by the
+"""Tumour-size test (plans/PLAN_followups.md, part 3): split the ccAucRepair training set (Dataset104 labels) by the
 measured tumour burden per volume. CPU; writes id lists only (no fold is registered, nothing is trained).
 
 Burden = tumour voxels (label 2) in the Dataset104 label x voxel volume, i.e. exactly the tumour the network sees

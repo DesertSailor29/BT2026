@@ -2,8 +2,8 @@
 
 Question: does a synthetic training set with the faulty labels **removed (reject)** or **fixed (repair)** beat
 training on all 999 synthetic liver volumes, for real LiTS liver/tumour segmentation? Liver first; pancreas (MSD07)
-later with the same code. Decisions with dates and reasons are in NOTES.md "Decisions"; the candidate filters with
-arguments in `PLAN_filtering_options.md`.
+later with the same code. Decisions with dates and reasons are in `notes/DECISIONS.md`; the candidate filters with
+arguments were in `PLAN_filtering_options.md` (removed 2026-11-16, see git history).
 
 ## Design (fixed)
 

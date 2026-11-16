@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Liver checks for the MAISI pool (PLAN_training.md "Amendment candidates", 2026-11-14). CPU. DESCRIPTIVE ONLY:
+"""Liver checks for the MAISI pool (plans/PLAN_training.md "Amendment candidates", 2026-11-14). CPU. DESCRIPTIVE ONLY:
 nothing here changes a filter decision. It measures, counts and draws figures so the user can decide.
 
 Per volume (the liver pool, and all 131 real LiTS: the 20 val cases are the reference, the 111 test cases are

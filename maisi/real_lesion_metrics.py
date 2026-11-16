@@ -2,7 +2,7 @@
 """The filter metrics of filter_metrics.py (per tumour component: touch, contact, distance, separability) on ALL real
 LiTS cases (20 val + 111 test), measured by the same code (component_rows). DESCRIPTIVE ONLY.
 
-The filter rules and the AUC cut come from the 20 val cases only (filter_metrics.py, PLAN_training.md). This script
+The filter rules and the AUC cut come from the 20 val cases only (filter_metrics.py, plans/PLAN_training.md). This script
 never writes into the filter_metrics dir and nothing reads its output for a decision: the 111 test cases describe
 how real lesions look (for the paper and as a robustness check of the val-derived cut), they do not set it.
 

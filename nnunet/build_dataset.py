@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Build one nnU-Net raw dataset per target: all synthetic MAISI pairs + a fixed set of real validation cases.
 
-Design (PLAN_training.md, decided 2026-11-07):
+Design (plans/PLAN_training.md, decided 2026-11-07):
 - Training is synthetic only. Every experiment arm is one fold in splits_final.json (make_splits.py):
   train = the arm's synthetic ids, val = the same real cases. So the dataset is preprocessed once for all arms.
 - Real validation cases (used by nnU-Net for checkpoint_best) come from the thesis train split (LiTS imagesTr,

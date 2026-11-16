@@ -297,7 +297,7 @@ themselves be invisible in the CT. <b>ccAucPost</b> tests that: first ccPost, th
 the predicted liver whose separability is below <b>0.5475</b> (the training cut) is relabelled to its surroundings
 (liver if ≥ 50 % of its shell is predicted liver, else background). It uses the same code as the training labels, with
 the predicted liver in place of the label, and decides from the CT and the prediction only; the reference is read only
-for scoring. The cut and the main comparison were fixed in <code>PLAN_followups.md</code> before the script ran.</p>
+for scoring. The cut and the main comparison were fixed in <code>plans/PLAN_followups.md</code> before the script ran.</p>
 
 <p><b>Separability does tell false positives from real hits.</b> Inside the predicted liver, real hits have a median sep
 of 0.89–0.90 and false-positive pieces 0.60–0.64 (AUROC 0.79–0.83 per run). At the training cut the rule removes
@@ -636,7 +636,7 @@ tumour) is not tested. These are single cases chosen as the largest of their kin
 </ol>
 
 <footer class="end">Sources: <code>reports/data/test_eval_liver/</code> (summary.md, confusion.md, per-case CSVs,
-progress/training_curves.csv, fp_location/, auc_post/, auc_post_val/), <code>PLAN_followups.md</code>, <code>reports/figures/filter_review/</code>,
+progress/training_curves.csv, fp_location/, auc_post/, auc_post_val/), <code>plans/PLAN_followups.md</code>, <code>reports/figures/filter_review/</code>,
 <code>reports/figures/ccpost_review/</code> (README + reading), NOTES.md (decisions 12 and 14 Nov). Charts:
 <code>reports/liver_results/make_charts.py</code>. Style: <code>reports/style/</code>.</footer>
 

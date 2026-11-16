@@ -1,135 +1,68 @@
 # BT2026: synthetic MAISI data for CT segmentation
 
 Continuation of Sebestyén's BSc thesis (SDU 2026, "On the impact of synthetic data in medical image segmentation"):
-MAISI synthetic CT/mask pairs added to LiTS for nnU-Net liver/tumour segmentation. Direction chosen: **Option B,
-automatic filtering of bad synthetic scans**. Target venue MIDL 2027.
+MAISI synthetic CT/mask pairs for nnU-Net liver/tumour segmentation on LiTS. Direction: **Option B, automatic
+filtering of bad synthetic scans**. Target venue MIDL 2027.
 
 This repo is public (github.com/DesertSailor29/BT2026). Don't commit credentials, data or patient files.
 
-## Two machines
+## Machines
 
-Claude may run on either. Check which one before acting (`uname`, `pwd`):
+Check which one before acting (`uname`, `pwd`):
 
-| | Mac (`/Users/sebi/Documents/0Denmark/University/Research/`) | UCloud (`/work/<folder>/`, Ubuntu) |
+| | Kali VM (`~/Documents/Research/`) / Mac (`/Users/sebi/Documents/0Denmark/University/Research/`) | UCloud (`/work/<folder>/`, Ubuntu) |
 |---|---|---|
-| Role | write code, plan, read papers | run MAISI generation and nnU-Net training |
-| GPU | none | B200 MIG slices (23 GB each) or a full B200, depending on the session |
-| Only here | thesis PDF, `Progression Ideas.docx`, `MAISI_generation_options.pdf`, local `LiTS/` (split script, seed 42; 91 train / 40 test) | venvs, MAISI clone + weights, `maisi_runs/`, logs |
-| Commands | hand UCloud commands to the user to copy across | may run them directly; source `maisi/env.sh` first |
+| Role | write code, fake-test, plan, reports | run MAISI generation, nnU-Net training, evaluations |
+| GPU / data | none (fake tests in the scratchpad) | full B200 or MIG slices; all data |
+| Only here | `Research/` PDFs (reports, thesis), Mac: `Progression Ideas.docx`, local `LiTS/` | venvs, MAISI clone + weights, `$MAISI_RUNS`, `$PROJ/logs` |
+| Commands | hand UCloud commands to the user | may run them (source `maisi/env.sh` first) |
 
-UCloud specifics: the home folder is wiped when a session ends; everything persistent lives in `$PROJ` (the mounted
-`/work/<folder>`). Background processes die with the session. GPU hours are limited: don't leave GPU work running
-that the user didn't ask for, and say when a session can be stopped. How-to for everything there:
+UCloud: the home folder is wiped when a session ends; everything persistent lives in `$PROJ`. GPU hours are limited:
+don't leave GPU work running that the user didn't ask for, and say when a session can be stopped. How-to:
 `maisi/GUIDE.md`.
 
-## Session notes (mandatory)
+## Notes (mandatory; sessions can time out without warning)
 
-Sessions can time out without warning, so notes are kept **as work happens**, not at the end. `NOTES.md` (this
-folder) is shared by both machines through git.
+`NOTES.md` is loaded every session and shared through git; keep it short (~8 KB). Details live in `notes/`, read only
+when needed: `RESULTS.md` (finished experiments + numbers), `DECISIONS.md` (all decisions with reasons),
+`LOG.md` (full history), `BACKLOG.md`, `PAPER.md`, `MAISI.md` (MAISI gotchas, versions, thesis numbers, data paths).
 
-1. At session start, `git pull` (the other machine may have pushed newer notes), then continue from "Next steps"
-   in `NOTES.md` unless the user says otherwise. Note in the log which machine the session ran on.
-2. After every meaningful step (decision made, file changed, command handed to the user, result received, problem found):
-   - update **Current state** and **Next steps** in place (keep them short and true),
-   - append a dated line to **Log** (`YYYY-MM-DD: what happened / outcome`),
-   - record decisions with their reason under **Decisions**, open items under **Open questions**.
-3. When UCloud output arrives (timings, errors, metrics), copy the key numbers into the log.
-4. If the Log section grows past ~150 lines, move older entries to `NOTES_ARCHIVE.md`.
-5. Notes only reach the other machine when committed and pushed. At the end of a block of work, remind the user
-   to let Claude commit and push (see Rules), so the other machine is up to date.
+1. At session start, `git pull`, then continue from "Next steps" in `NOTES.md` unless the user says otherwise.
+2. After every meaningful step (decision, file changed, command handed over, result received, problem found), as it
+   happens:
+   - update **Current state** and **Next steps** in `NOTES.md` in place (short, true; drop what is done);
+   - add a dated line at the top of the `NOTES.md` **Log** (`YYYY-MM-DD HH:MM (machine): what / outcome`); when it has
+     more than ~6 entries, move the older ones to the top of `notes/LOG.md`;
+   - decisions: full record with reason at the top of `notes/DECISIONS.md`, one-liner under "Decisions in force" if it
+     changes them; finished results: key numbers into `notes/RESULTS.md`; parked ideas: `notes/BACKLOG.md`.
+3. When UCloud output arrives (timings, errors, metrics), copy the key numbers into the Log (and RESULTS when final).
+4. Notes only reach the other machine when pushed: at the end of a block of work, remind the user to let Claude
+   commit and push.
 
 ## Rules
 
 - Never add Claude as co-author or "Generated with Claude Code" to commits or PRs.
-- Commit only when asked, and don't push without asking. **Exception on UCloud (standing permission from the
-  user):** whenever NOTES.md gets a started job's log path, a job's results or a status change, commit **only
-  NOTES.md** (`git add NOTES.md`, message like `notes: <what>`) and push it immediately, without asking. Pull first
-  (`git pull --rebase --autostash`) so the push doesn't fail on newer commits from the Mac. Code changes still need asking.
-- **One visual style for every CT figure** (previews, overviews, contact sheets, paper figures; real and synthetic
-  alike, so they can be compared side by side). Implemented once in **`maisi/viz.py`** (`to_ras`, `plane`,
-  `draw`, `legend_handles`, `CAPTION`); every figure script imports it, never restyles:
-  - contrast: CT window **W400/L40** (−160..240 HU), gray colormap, `interpolation="nearest"`;
-  - shading: organ (liver/pancreas, label 1) **green (0, 0.85, 0)**, tumour (label 2) **red (1, 0.1, 0.1)**, filled at
-    **alpha 0.4**;
-  - contours: same colours, `levels=[0.5]`, linewidth **0.6**, on top of the fill;
-  - orientation: reorient to RAS in memory, then show in **radiological convention** (patient right on image left;
-    axial anterior up, coronal/sagittal superior up); aspect from the voxel spacing, so anatomy is not stretched;
-  - labelling: case id + slice index in the title, volumes in ml where useful; a legend or caption names the colours,
-    the window and the convention.
-- **One style for every chart, diagram and report page** (non-CT visuals): **`reports/style/`** (`style.py` for
-  matplotlib, `diagrams.js` for Mermaid diagrams, `report.css` for PDF pages; README there). Fixed colour per arm
-  (all blue, ccReject orange, ccRepair aqua, ccRepairDel yellow, ccAucRepair magenta), anatomy in the CT overlay
-  green/red, Inter font. Import it, never restyle. Example: `reports/liver_results/` (report → PDF via Chromium).
-- Long-running UCloud commands: see "Running jobs on UCloud" below. This holds for commands Claude runs itself and
-  for commands handed to the user.
+- Commit only when asked, and don't push without asking. **Exception on UCloud (standing permission):** whenever the
+  notes get a started job's log path, a job's results or a status change, commit **only `NOTES.md` and `notes/`**
+  (message `notes: <what>`) and push right away, after `git pull --rebase --autostash`. Code changes still need asking.
+- **Figures:** every CT figure imports `maisi/viz.py`; every chart, diagram and report page imports `reports/style/`
+  (see its README). Never restyle; real and synthetic figures must look the same.
 
 ## Running jobs on UCloud (mandatory: terminals close without warning)
 
-A UCloud terminal (and a Claude session in it) can close at any moment, outside the user's control, and every
-process attached to it dies with it. So **every command that does work (computes, writes files, installs, downloads,
-trains, makes figures; MAISI, postprocessing, reorienting, nnU-Net, ...) is started with `setsid nohup`, detached and
-logged, however short it is expected to be.** Only instant read-only checks (`ls`, `cat`, `tail`, `git status`,
-`pgrep`, a quick `python -c`) run directly. Never in the foreground and never with Claude's own background tasks
-(`run_in_background`, Monitor), which die together with Claude; also status watchers and follow-up steps (scoring,
-figures, summaries) go through `setsid nohup`:
+Every command that does work (computes, writes files, installs, downloads, trains, makes figures), however short, is
+started detached and logged; only instant read-only checks (`ls`, `cat`, `tail`, `git status`, `pgrep`, a quick
+`python -c`) run directly. Never in the foreground, never with Claude's own background tasks (`run_in_background`,
+Monitor), which die with Claude:
 
 ```bash
 setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && <cmd>' \
   > "$PROJ/logs/<name>_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 ```
 
-- `setsid` + `nohup` detach the job from the terminal; `source env.sh` inside the quotes, because the job gets a
-  fresh shell. Logs always go to a timestamped file in `$PROJ/logs` (persistent), never only to the screen.
-- Right after starting, check it is alive (`pgrep -af <script>` or `tail` of the log), write the log path into
-  the NOTES.md log, and **commit + push NOTES.md right away** (see Rules), so a new session or the Mac can pick it
-  up if this one dies. Same again when the job finishes and its results are in NOTES.md.
-- **Every detached job gets a status file** at the top of `$PROJ` whose name says what runs and its projected finish
-  (`<NAME>__<done>of<total>__ETA_<day-time>_CET.txt` → `DONE_…` / `STOPPED_…`), started detached right after the
-  job: `job_status.py` (generic: output glob + total + `--pid`), or the richer `maisi/status_file.py` /
-  `nnunet/train_status.py`. Rough ETAs are fine. Finished status files go to `$PROJ/status_done/` (`job_status.py`
-  moves them on start).
-- Follow progress by reading the log (`tail -n 30 <log>`), in short checks; don't block on `tail -f`.
-- Jobs must be resumable (re-running the same command skips finished work, as `run_jobs.py` does).
-- They still die when the UCloud **job** ends (time limit or stopped), only the terminal closing is survived. Check
-  the remaining session time before starting something long.
-- Claude on UCloud may run these itself (the user approves the commands). After a run it evaluates the output
-  against the "Check" list of the GUIDE step, copies the key numbers into NOTES.md, and says whether the GPU
-  session can be stopped.
-
-## Key facts (so they don't need re-researching)
-
-- MAISI = github.com/NVIDIA-Medtech/NV-Generate-CTMR, pinned at `dba166e`. Params: `docs/inference.md`,
-  `configs/config_infer*.json`; memory/time table: `docs/performance.md`. Weights: huggingface.co/nvidia/NV-Generate-CT.
-  The thesis used the hosted NIM v1 API (docs.nvidia.com/nim/medical/maisi/api-reference), no seeds.
-- The v2 mask model accepts **only one** `controllable_anatomy_size` entry (the thesis used liver + tumour via NIM v1).
-  Non-empty = Path A (mask generated; `body_region`/`anatomy_list` ignored). Empty = Path B (real mask from database).
-- MAISI bug at `dba166e`: `scripts/inference.py` calls `.to()` on the v2 mask checkpoint's `scale_factor`, a float
-  → AttributeError in every Path A run. `setup_maisi.sh` patches the clone (`torch.as_tensor(...)`); keep the patch
-  if the pin moves, unless upstream fixes it.
-- MAISI Path A geometry bug at `dba166e`: the v2 mask model always makes a 256³ mask at native 1.5 mm, but `scripts/sample.py`
-  conditions it on and labels it with the target spacing, then only pads to `output_size` → at 512³ @ 0.8 mm the anatomy is
-  ~half scale (body ~180 mm). `maisi/patches/mask_native_spacing.patch` (applied by `setup_maisi.sh`) uses 1.5 mm for both,
-  so MAISI resamples the mask (nearest) to the target spacing: 480×480×384 voxels of content, padded to 512³.
-- **No contrast-phase control in MAISI** (checked 2026-11-14 at `dba166e`): no input for phase (non-contrast /
-  arterial / portal venous / delayed). The image diffusion UNet only takes spacing + a `modality` class integer
-  (`configs/modality_mapping.json`: `ct` 1, `ct_wo_contrast` 2, `ct_contrast` 3, MR 8+); the code passes it through
-  (`scripts/sample.py` → `infer_image_from_mask.py`), but the docs list only 1 for CT ("always set as 'ct' but
-  expandable") and say nothing on whether rflow-ct learned 2/3. We generate with 1 (`make_jobs.py`), so the phase is
-  whatever the model draws from noise + mask. Training data: "~35 datasets, 60,000 volumes", phases undocumented.
-  Measured per pool volume by `maisi/liver_metrics.py` (vessel HU from the raw 132-class mask: aorta 6, IVC 7,
-  portal + splenic vein 17, hepatic vessel 25, spleen 3, kidneys 5/14).
-- rflow-ct needs `num_inference_steps` 30; the shipped 80g presets say 1000 (a DDPM value).
-- B200 (sm_100) needs a CUDA 12.8+ torch build: we use torch 2.9.1+cu128 + MONAI 1.6.1 (MONAI 1.6 needs torch ≥ 2.8).
-  The old nnU-Net `setup.sh` pins torch 2.3.0+cu121, which has no Blackwell kernels.
-- `scripts.download_model_data` writes models to `./models` relative to the CWD; run MAISI from inside its clone or
-  use absolute paths in `environment.json` (`run_jobs.py` does the latter).
-- Path A with `num_output_samples` 1: a QC-failed volume is still saved (log line "quality check for label 'X'
-  failed"). A missing target label makes MAISI retry the mask 5×, then it continues anyway.
-- Thesis MAISI config: 512³ @ 0.75 mm, body_region abdomen, hepatic tumour ∈ {0.1..0.9} × liver ∈ {0.4, 0.5, 0.6},
-  90 jobs, 82 usable. Thesis filter: keep a volume if ≥ 90% of tumour voxels are within 15 mm of the liver.
-  LM30-filtered vs LM0 tumour Dice 0.704 vs 0.653, p = 0.033 (1000 epochs).
-- Progression options (Progression Ideas.docx): A real-vs-synthetic equivalence, **B automatic filtering** (HU
-  stats, connected components, topology, CNR, model agreement), C synthetic-only nnU-Net → SAM prompting,
-  D nnU-Net uncertainty → SAM on uncertain regions.
+Then: check it is alive (`pgrep -af`, `tail` of the log), start its **status file** (`job_status.py` or a specialised
+one; conventions in `maisi/GUIDE.md` "Job conventions"), write the log path into the NOTES Log and push the notes.
+Jobs must be resumable. They still die when the UCloud job ends: check the remaining session time first. After a run,
+evaluate against the GUIDE step's checks, copy the key numbers into the notes, and say whether the session can stop.
 
 @NOTES.md

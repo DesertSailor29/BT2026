@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Build a repair-arm dataset: Dataset101 with the labels of one criterion repaired.
 
-PLAN_training.md "Filter rules" (amended 2026-11-14). The decisions are those of maisi/cc_rules.py (cc, ccAuc) and
+plans/PLAN_training.md "Filter rules" (amended 2026-11-14). The decisions are those of maisi/cc_rules.py (cc, ccAuc) and
 maisi/filter_metrics.py (auc, touch, both): same functions, same cached measurements, same AUC cut from rules.json,
 so a repair arm and its reject arm (ids_<c>Reject.json) judge identical components.
   Main arms:

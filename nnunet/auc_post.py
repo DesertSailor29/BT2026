@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """The AUC (visibility) rule applied to the predictions: does a test-time ccAucPost do what training on the ccAuc
-labels (ccAucRepair) did? Plus a sweep of stricter cuts. CPU, exploratory (PLAN_followups.md, parts 1-2).
+labels (ccAucRepair) did? Plus a sweep of stricter cuts. CPU, exploratory (plans/PLAN_followups.md, parts 1-2).
 
 For every run (dataset:fold) and every real LiTS test case, on the saved checkpoint_final predictions (fold_X/test_final):
 

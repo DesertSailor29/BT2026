@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Filter metrics for the MAISI pool (Option B): per tumour component pass / fail for the reject and repair arms. CPU.
 
-Rules: PLAN_training.md "Filter rules" (touch/auc fixed 2026-11-12 before looking at the pool metrics; since the
+Rules: plans/PLAN_training.md "Filter rules" (touch/auc fixed 2026-11-12 before looking at the pool metrics; since the
 2026-11-14 amendment the main arms use maisi/cc_rules.py (cc, ccAuc), which builds on the components, separability
 and cut measured here; touch/auc/both remain for follow-up and comparison arms). Unit = tumour component
 (26-connected tumour voxels). A criterion decides pass / fail per component, and the same decision drives both arms:
@@ -161,7 +161,7 @@ def component_rows(label, spacing, img=None):
 
 # --- decisions (shared with nnunet/build_repair_dataset.py) -------------------------------------------------------
 def fails(c, criterion, cut=None):
-    """Does tumour component row `c` fail `criterion`? (PLAN_training.md "Filter rules")"""
+    """Does tumour component row `c` fail `criterion`? (plans/PLAN_training.md "Filter rules")"""
     if criterion == "touch":
         return not c["touches"]
     if criterion in ("auc", "both"):
@@ -378,7 +378,7 @@ def write_tables(out_dir, target, exclusions_path):
 def summary_lines(target, recs, real, real_rows, scored, cut, cut_from, crits, excl):
     n = len(recs)
     L = [f"# Filter metrics: {target} ({n} synthetic volumes, {len(real)} real val cases)", "",
-         "Rules: PLAN_training.md \"Filter rules\". A component fails touch if no voxel is 26-adjacent to the organ; "
+         "Rules: plans/PLAN_training.md \"Filter rules\". A component fails touch if no voxel is 26-adjacent to the organ; "
          "it fails auc if its sep < the minimum sep of the real val lesions; both = either. reject = keep volumes "
          "without a failing component; repair = relabel the failing components (fails touch -> background, otherwise "
          "auc -> surroundings' label).", "",

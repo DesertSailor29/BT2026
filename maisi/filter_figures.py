@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Contact sheets for the filter sanity checks (PLAN_training.md "Filter rules"), in the shared figure style (viz.py).
+"""Contact sheets for the filter sanity checks (plans/PLAN_training.md "Filter rules"), in the shared figure style (viz.py).
 
 Reads filter_metrics.py's output (caches + rules.json) and writes <metrics>/figures/:
     real_least_visible.png   the 6 least visible real val lesions (check 2: is the minimum a label error?)
