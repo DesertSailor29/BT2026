@@ -81,8 +81,15 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   baseline+ccAucPost +0.000 [−0.013, 0.014], both ccAucPost +0.019 p 0.049. At 0.60 both sides: rep2 0.452 vs 0.437
   +0.015 [0.003, 0.029] p 0.046, mean of runs +0.012 p 0.21. Val: neither run ahead at any cut. Differences sit in
   the small-tumour third (0.27 vs 0.22).
-- **checkpoint_best** (sensitivity check): predictions + postproc running on UCloud (see NOTES.md Current state);
-  output `reports/data/test_eval_liver_best/`.
+- **checkpoint_best** (secondary, 2026-11-16, `reports/data/test_eval_liver_best/`): tumour Dice saved, best (final):
+  baseline 0.315 (0.303), ccReject 0.333 (0.382), ccRepair 0.330 (0.375), ccRepairDel 0.349 (0.370), ccAucRepair 0.378
+  (0.403), rep2 0.381 (0.381). vs baseline (Holm over 4): ccReject +0.018 p 0.57, ccRepair +0.015 Holm 0.41,
+  ccRepairDel +0.034 Holm 0.0009, ccAucRepair +0.063 Holm 1e-6, rep2 +0.066. Under ccPost (baseline 0.386): ccReject
+  −0.043 Holm 0.004, ccRepair −0.047 Holm 4e-8, ccRepairDel −0.023 Holm 0.015, ccAucRepair +0.014 Holm 0.69, rep2 +0.009
+  Holm 0.56. ccAucPost0.5475 adds +0.021 to the baseline (0.407); AUC-training ccPost − baseline ccAucPost: f0 −0.007
+  p 0.11, rep2 −0.012 p 0.08. → No late overfitting of ccReject: its val-best checkpoint is much worse than final
+  (−0.049); the cc arms gain from late training, the baseline does not. Only the AUC arms beat the baseline at both
+  checkpoints; at best, nothing beats the baseline once both are post-processed.
 
 ## Pancreas (measured only)
 

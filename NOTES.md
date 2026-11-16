@@ -11,23 +11,18 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   across runs. Details `notes/RESULTS.md`, `reports/data/test_eval_liver/`, report `Research/4 - Liver filter arms -
   test results.pdf` (19 pages, VM only; rep2 in every chart/table since 2026-11-16, checkpoint_best not yet).
   The two ccAucRepair runs differ by 0.022 (p 7e-5; `all` pair 0.004) → noise floor too small for arm-vs-arm claims.
-- **UCloud GPU session (full B200) ends Tue 17 Nov ~13:24.** Running, detached: checkpoint_best predictions of all
-  7 liver runs (485/777 at 08:15 Mon; status `$PROJ/LIVER_best_ckpt_predict__*.txt`, log
-  `$PROJ/logs/best_checkpoint_chain_20261115_173658.log`), then the orchestrator `$PROJ/logs/final_then_best_postproc.sh`
-  runs fp_location + auc_post `--checkpoint best` and pushes `reports/data/test_eval_liver_best/` (log
-  `$PROJ/logs/final_then_best_postproc_20261115_224005.log`; ETA ~14:30–15:00 Mon 16 Nov).
-- Uncommitted on UCloud: `nnunet/model_diff_figures.py` + `reports/figures/model_diff/` (19 PNGs, 9.5 MB; per-case
-  comparison of all 7 runs).
+- **checkpoint_best done** (secondary): no late overfitting of ccReject (best 0.333 vs final 0.382); only ccAucRepair
+  (0.378, rep2 0.381; baseline 0.315) beats the baseline at both checkpoints; under ccPost at best the cc arms fall below
+  the baseline and the AUC arms are n.s. (+0.014 / +0.009). Numbers `notes/RESULTS.md`. Not yet in report 4.
+- model_diff figures (`nnunet/model_diff_figures.py`, `reports/figures/model_diff/`) committed 2026-11-16.
+- UCloud GPU session idle, all jobs done: can be stopped (ends anyway Tue 17 Nov ~13:24).
 - **New experiments paused** until the findings are presented to the supervisor (size test ids ready, stricter cut,
   tumour-free generation, pancreas arms → `notes/BACKLOG.md`). Pancreas: measured only (`notes/RESULTS.md`).
 
 ## Next steps
 1. **Slide deck for the supervisor meeting** (before anything else): (1) user gives feedback on report 4; (2) Claude
    interviews the user (audience, length, which findings, format); (3) build it.
-2. **UCloud, when the best postproc is pushed:** compare best vs final (does ccReject's late overfitting show?), key
-   numbers into the Log + `notes/RESULTS.md`; ask the user about committing the model_diff figures; then the GPU
-   session can be stopped.
-3. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
+2. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
    Builds need a venv with pandas/matplotlib/Pillow (Kali VM has none; one-off venv in the session scratchpad).
 
 ## Decisions in force (full records + reasons: `notes/DECISIONS.md`)
@@ -58,9 +53,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-16 (UCloud): Compared checkpoint_best vs final (numbers → `notes/RESULTS.md`): ccReject drops 0.382 → 0.333 at best, i.e. no late overfitting, late training helps the cc arms; baseline 0.303 → 0.315; AUC arms beat the baseline at both checkpoints (best +0.063 / +0.066 Holm 1e-6), under ccPost at best cc arms below baseline (Holm ≤ 0.015), AUC arms n.s. Committed model_diff figures per user. GPU idle, session can be stopped.
 - 2026-11-16 13:34 (UCloud, auto): checkpoint_best predictions done; plain eval + ccPost + ccAucPost on best (runs: 101:0 101:1 101:2 103:0 103:1 104:0 104:1; missing: none; ok=1) → `reports/data/test_eval_liver_best/`, log `/work/Research/logs/final_then_best_postproc_20261115_224005.log`. GPU idle: session can be stopped once checked.
 - 2026-11-16 08:35 (Kali VM): Per user added ccAucRepair_rep2 + its post-processing to report 4 (`make_charts.py`: rep2 in every per-run chart, hollow/dashed, + a ccAucRepair noise row in the gain chart; `report.html`: tiles, main findings (new item: run-to-run noise), tables in sections 2, 4, 5, 8, sweep, caveats, next steps; Holm in the postproc tables now over 5 as in summary.md: f0 ccPost 0.003, ccAucPost 0.043). Rebuilt `Research/4 - Liver filter arms - test results.pdf` (19 pages). New derived numbers → `notes/RESULTS.md` (rep2 − f0 −0.022 p 7e-5; mean-of-runs readout +0.000). Uncommitted.
 - 2026-11-16 (Kali VM): Per user split the notes (NOTES.md 143 KB → 7 KB, CLAUDE.md 11 → 4.5 KB; ~38k → ~3k tokens per session): details in `notes/` (RESULTS, DECISIONS, LOG, BACKLOG, PAPER, MAISI), plans in `plans/`, status-file conventions in GUIDE "Job conventions". Removed: done/superseded Next steps (incl. 00a), stale Current state bullets, superseded decisions (MIG 10-19, 11-12 next-GPU-session, touch v2, 11-07 Q answers), resolved open questions, ~36 noise/duplicate log lines (October MIG/OOM/bench summarised in one line), `PLAN_training_questions.md`, `PLAN_filtering_options.md`, `CLAUDE.worklog.md`. Standing UCloud push permission now covers `NOTES.md` + `notes/`.
 - 2026-11-16 08:15 (UCloud): Checked: final-checkpoint postproc (ccPost + ccAucPost, 7 runs incl. 104:1) done 03:29 and pushed (96cd183). rep2 confirms the direction but weaker: saved 0.381 (+0.079 vs baseline, like ccReject); under ccPost +0.014 [0.003, 0.025] Holm p 0.092 (ccAucRepair f0 +0.031, Holm 0.0027); under ccAucPost0.5475 +0.014 p 0.18 (f0 +0.023 Holm 0.043); readout rep2 ccPost − baseline ccAucPost0.5475 = −0.008 p 0.053 (f0 +0.009 p 0.42) → the AUC-training edge over AUC post-processing is not robust across the two runs. Per user, new `nnunet/model_diff_figures.py` (uncommitted): one figure per case, CT | reference | all 7 runs as saved, full slice + zoom on the largest disagreement blob; cases by fixed rules (6 largest Dice range, largest ± diff for 6 arm pairs incl. 2 noise pairs, tumour-free case with largest FP range) → `reports/figures/model_diff/` (19 PNGs + README, 9.5 MB, uncommitted). Log `$PROJ/logs/model_diff_figures_20261116_081253.log`. Seen: lits_088 ccReject misses the large hilar tumour (0.03 vs 0.54–0.76); lits_104 most runs label a large hypodense lesion as nothing; lits_034 (tumour-free) right renal mass called tumour by all runs, 440 ml in `all_rep2`. Best-ckpt chain 485/777.
 - 2026-11-16 03:29 (UCloud, auto): ccPost + ccAucPost (checkpoint_final) rerun with all 7 runs incl. ccAucRepair_rep2 (ok=1); `reports/data/test_eval_liver/{fp_location,auc_post,auc_post_val}/summary.md`, log `/work/Research/logs/final_then_best_postproc_20261115_224005.log`. Best-checkpoint chain resumed.
-- 2026-11-15 22:40 (UCloud): git pull (92a3665, `--checkpoint best` in fp_location/auc_post ready, no code changes needed). Per user (meeting Mon early afternoon: final-checkpoint postproc results first): **paused the best-checkpoint chain** (SIGSTOP of its process group, at 160/777: ccReject done, `all` f0 ~49/111) so ccAucRepair_rep2 trains + test-predicts alone (epoch 469/1000 at 38 s/epoch shared → ~17.4 alone). Detached orchestrator `$PROJ/logs/final_then_best_postproc.sh`, log `$PROJ/logs/final_then_best_postproc_20261115_224005.log`, status `$PROJ/LIVER_postproc_final_then_best__*.txt`: waits for the queue to exit → resumes the chain (SIGCONT) → fp_location + auc_post (test + val) on checkpoint_final with all 7 runs incl. 104:1 → commit + push `reports/data/test_eval_liver/` + auto NOTES line → waits for the chain → fp_location + auc_post `--checkpoint best` (7 runs) → commit + push `reports/data/test_eval_liver_best/`. Rough ETA: rep2 trained ~01:15, tested ~03:30, final postproc pushed ~04:30 Mon; best predictions ~13-14, best postproc ~14:30-15:00 Mon.
