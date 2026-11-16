@@ -12,6 +12,7 @@
 | D103 f0 ccRepair | 10.8 | 2.1 (19 %) | 13.41 | 0.63 (5 %) | 38 % | 10 | 0 |
 | D103 f1 ccRepairDel | 12.0 | 3.0 (25 %) | 14.80 | 2.12 (14 %) | 42 % | 7 | 0 |
 | D104 f0 ccAucRepair | 9.4 | 3.2 (33 %) | 9.17 | 2.47 (27 %) | 51 % | 11 | 0 |
+| D104 f1 ccAucRepair_rep2 | 12.2 | 4.2 (35 %) | 13.95 | 2.27 (16 %) | 56 % | 14 | 0 |
 
 ## 2. Size of the false-positive pieces (count, share of the run's FP pieces)
 
@@ -29,6 +30,8 @@
 | D103 f1 ccRepairDel | outside pred. main | 67 (5 %) | 128 (10 %) | 107 (8 %) | 26 (2 %) | 2 (0 %) | 0.064 |
 | D104 f0 ccAucRepair | inside pred. main | 50 (5 %) | 234 (22 %) | 352 (34 %) | 46 (4 %) | 15 (1 %) | 0.146 |
 | D104 f0 ccAucRepair | outside pred. main | 79 (8 %) | 143 (14 %) | 110 (11 %) | 14 (1 %) | 4 (0 %) | 0.060 |
+| D104 f1 ccAucRepair_rep2 | inside pred. main | 54 (4 %) | 292 (22 %) | 446 (33 %) | 69 (5 %) | 20 (1 %) | 0.148 |
+| D104 f1 ccAucRepair_rep2 | outside pred. main | 78 (6 %) | 190 (14 %) | 164 (12 %) | 37 (3 %) | 2 (0 %) | 0.074 |
 
 ## 3. ccPost vs the saved prediction, per run
 
@@ -42,6 +45,7 @@ Means as predict_test.py (NaN = both empty, left out); diff/CI/p over the cases 
 | D103 f0 ccRepair | 0.375 → 0.380 | +0.005 [+0.002, +0.009] | 1.3e-09 | 0.866 → 0.883 | 0.416 → 0.408 | 10.8 → 8.7 | 13.41 → 12.78 | 6 | 0/10 |
 | D103 f1 ccRepairDel | 0.370 → 0.377 | +0.007 [+0.004, +0.011] | 2.9e-10 | 0.851 → 0.870 | 0.403 → 0.399 | 12.0 → 9.0 | 14.80 → 12.68 | 3 | 0/10 |
 | D104 f0 ccAucRepair | 0.403 → 0.412 | +0.009 [+0.004, +0.015] | 8.4e-12 | 0.870 → 0.892 | 0.413 → 0.410 | 9.4 → 6.3 | 9.17 → 6.71 | 2 | 0/10 |
+| D104 f1 ccAucRepair_rep2 | 0.381 → 0.395 | +0.013 [+0.007, +0.021] | 3.2e-13 | 0.873 → 0.896 | 0.413 → 0.403 | 12.2 → 7.9 | 13.95 → 11.68 | 7 | 0/10 |
 
 ## 4. Arms vs baseline when both are post-processed (exploratory)
 
@@ -52,8 +56,10 @@ Baseline = per-case mean of D101 f0 all + D101 f1 all_rep2 (NaN only if all are 
 | D101 f2 ccReject | none | 0.382 | 0.303 | +0.079 [+0.038, +0.120] | 0.0011 | 0.0011 |
 | D103 f0 ccRepair | none | 0.375 | 0.303 | +0.072 [+0.051, +0.094] | 8.1e-10 | 2.4e-09 |
 | D103 f1 ccRepairDel | none | 0.370 | 0.303 | +0.067 [+0.043, +0.092] | 1.1e-07 | 2.2e-07 |
-| D104 f0 ccAucRepair | none | 0.403 | 0.303 | +0.100 [+0.072, +0.129] | 6.1e-11 | 2.4e-10 |
+| D104 f0 ccAucRepair | none | 0.403 | 0.303 | +0.100 [+0.072, +0.129] | 6.1e-11 | 3e-10 |
+| D104 f1 ccAucRepair_rep2 | none | 0.381 | 0.303 | +0.079 [+0.057, +0.101] | 6.3e-11 | 3e-10 |
 | D101 f2 ccReject | ccPost | 0.386 | 0.381 | +0.005 [-0.028, +0.039] | 0.89 | 1 |
 | D103 f0 ccRepair | ccPost | 0.380 | 0.381 | -0.001 [-0.011, +0.008] | 0.86 | 1 |
 | D103 f1 ccRepairDel | ccPost | 0.377 | 0.381 | -0.004 [-0.021, +0.012] | 0.62 | 1 |
-| D104 f0 ccAucRepair | ccPost | 0.412 | 0.381 | +0.031 [+0.011, +0.051] | 0.00053 | 0.0021 |
+| D104 f0 ccAucRepair | ccPost | 0.412 | 0.381 | +0.031 [+0.011, +0.051] | 0.00053 | 0.0027 |
+| D104 f1 ccAucRepair_rep2 | ccPost | 0.395 | 0.381 | +0.014 [+0.003, +0.025] | 0.023 | 0.092 |

@@ -12,6 +12,7 @@
 | D103 f0 ccRepair | 10.9 (3.6, 7.3) | 9 | 0.902 / 0.607 | 0.81 | 35 / 0 (0.0) | 68 / 0 (0.0) | 80 / 1 (1.9) | 94 / 4 (24.2) |
 | D103 f1 ccRepairDel | 11.2 (3.5, 7.8) | 11 | 0.893 / 0.617 | 0.76 | 35 / 2 (0.3) | 66 / 4 (18.5) | 77 / 4 (18.5) | 91 / 8 (43.5) |
 | D104 f0 ccAucRepair | 8.9 (3.7, 5.2) | 6 | 0.904 / 0.702 | 0.70 | 16 / 0 (0.0) | 35 / 1 (0.1) | 40 / 1 (0.1) | 48 / 4 (19.3) |
+| D104 f1 ccAucRepair_rep2 | 10.3 (3.7, 6.6) | 9 | 0.896 / 0.712 | 0.67 | 26 / 0 (0.0) | 40 / 2 (0.5) | 47 / 3 (2.4) | 61 / 7 (26.1) |
 
 ## 2. Each variant vs ccPost, per run
 
@@ -55,6 +56,12 @@ Tumour Dice mean (NaN = both empty, left out) and the paired difference to ccPos
 | D104 f0 ccAucRepair | ccAucPost0.6 | 0.395 | +0.002 [+0.001, +0.004] | 0.021 | 0.876 | 0.291 | 3.5 | 1 | 36 |
 | D104 f0 ccAucRepair | ccAucPost0.637 | 0.395 | +0.003 [+0.001, +0.005] | 0.015 | 0.876 | 0.291 | 3.2 | 1 | 41 |
 | D104 f0 ccAucRepair | ccAucPost0.7 | 0.383 | -0.009 [-0.057, +0.023] | 0.11 | 0.876 | 0.276 | 2.8 | 4 | 52 |
+| D104 f1 ccAucRepair_rep2 | none | 0.389 | -0.001 [-0.011, +0.013] | 0.023 | 0.853 | 0.312 | 10.8 | – | – |
+| D104 f1 ccAucRepair_rep2 | ccPost | 0.390 | – | – | 0.886 | 0.302 | 6.6 | 0 | – |
+| D104 f1 ccAucRepair_rep2 | ccAucPost0.5475 | 0.394 | +0.004 [+0.001, +0.007] | 0.0033 | 0.887 | 0.302 | 5.3 | 0 | 26 |
+| D104 f1 ccAucRepair_rep2 | ccAucPost0.6 | 0.394 | +0.004 [+0.002, +0.007] | 0.0015 | 0.887 | 0.291 | 4.6 | 2 | 42 |
+| D104 f1 ccAucRepair_rep2 | ccAucPost0.637 | 0.411 | +0.021 [+0.004, +0.053] | 0.0015 | 0.887 | 0.286 | 4.2 | 3 | 50 |
+| D104 f1 ccAucRepair_rep2 | ccAucPost0.7 | 0.375 | -0.015 [-0.108, +0.050] | 0.023 | 0.887 | 0.271 | 3.5 | 6 | 68 |
 
 ## 3. Post-processing vs training (the question of this script)
 
@@ -65,8 +72,10 @@ Baseline = per-case mean of D101 f0 all + D101 f1 all_rep2. y − x per case, pa
 | baseline: ccAucPost0.5475 vs ccPost (what AUC post-processing adds) | 0.398 | 0.412 | +0.014 [+0.001, +0.032] | 0.0022 |
 | D104 f0 ccAucRepair ccPost − baseline ccAucPost0.5475 (training vs post-processing; ≈ 0 = post-processing does it) | 0.412 | 0.393 | -0.020 [-0.080, +0.030] | 0.73 |
 | D104 f0 ccAucRepair: ccAucPost0.5475 vs ccPost (AUC post on top of AUC training) | 0.393 | 0.394 | +0.002 [+0.000, +0.003] | 0.018 |
+| D104 f1 ccAucRepair_rep2 ccPost − baseline ccAucPost0.5475 (training vs post-processing; ≈ 0 = post-processing does it) | 0.412 | 0.390 | -0.022 [-0.078, +0.021] | 0.91 |
+| D104 f1 ccAucRepair_rep2: ccAucPost0.5475 vs ccPost (AUC post on top of AUC training) | 0.390 | 0.394 | +0.004 [+0.001, +0.007] | 0.0033 |
 
-Arms vs baseline when both get the same post-processing (Holm over the 4 arms listed):
+Arms vs baseline when both get the same post-processing (Holm over the 5 arms listed):
 
 | arm | variant | arm | baseline | diff [95% CI] | p | Holm p |
 |---|---|---|---|---|---|---|
@@ -74,9 +83,11 @@ Arms vs baseline when both get the same post-processing (Holm over the 4 arms li
 | D103 f0 ccRepair | ccPost | 0.381 | 0.398 | -0.017 [-0.073, +0.026] | 1 | 1 |
 | D103 f1 ccRepairDel | ccPost | 0.370 | 0.398 | -0.028 [-0.087, +0.021] | 0.39 | 1 |
 | D104 f0 ccAucRepair | ccPost | 0.393 | 0.398 | -0.006 [-0.068, +0.048] | 0.61 | 1 |
+| D104 f1 ccAucRepair_rep2 | ccPost | 0.390 | 0.398 | -0.008 [-0.067, +0.039] | 0.5 | 1 |
 | D101 f2 ccReject | ccAucPost0.5475 | 0.370 | 0.412 | -0.042 [-0.150, +0.052] | 0.92 | 1 |
 | D103 f0 ccRepair | ccAucPost0.5475 | 0.394 | 0.412 | -0.018 [-0.074, +0.023] | 0.86 | 1 |
 | D103 f1 ccRepairDel | ccAucPost0.5475 | 0.380 | 0.412 | -0.032 [-0.090, +0.015] | 0.39 | 1 |
 | D104 f0 ccAucRepair | ccAucPost0.5475 | 0.394 | 0.412 | -0.018 [-0.079, +0.032] | 0.86 | 1 |
+| D104 f1 ccAucRepair_rep2 | ccAucPost0.5475 | 0.394 | 0.412 | -0.018 [-0.075, +0.025] | 0.82 | 1 |
 
-Tumour-free test cases with no predicted tumour left (3 cases): D101 f0 all 0 / 0 / 0 / 0 / 0 / 0; D101 f1 all_rep2 0 / 0 / 0 / 0 / 0 / 0; D101 f2 ccReject 0 / 0 / 0 / 0 / 0 / 0; D103 f0 ccRepair 0 / 0 / 0 / 0 / 0 / 0; D103 f1 ccRepairDel 0 / 0 / 0 / 0 / 0 / 0; D104 f0 ccAucRepair 0 / 0 / 0 / 0 / 0 / 0 (variants in the order none, ccPost, ccAucPost0.5475, ccAucPost0.6, ccAucPost0.637, ccAucPost0.7).
+Tumour-free test cases with no predicted tumour left (3 cases): D101 f0 all 0 / 0 / 0 / 0 / 0 / 0; D101 f1 all_rep2 0 / 0 / 0 / 0 / 0 / 0; D101 f2 ccReject 0 / 0 / 0 / 0 / 0 / 0; D103 f0 ccRepair 0 / 0 / 0 / 0 / 0 / 0; D103 f1 ccRepairDel 0 / 0 / 0 / 0 / 0 / 0; D104 f0 ccAucRepair 0 / 0 / 0 / 0 / 0 / 0; D104 f1 ccAucRepair_rep2 0 / 0 / 0 / 0 / 0 / 0 (variants in the order none, ccPost, ccAucPost0.5475, ccAucPost0.6, ccAucPost0.637, ccAucPost0.7).
