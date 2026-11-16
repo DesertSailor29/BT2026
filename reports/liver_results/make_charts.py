@@ -10,6 +10,7 @@ Reads reports/data/test_eval_liver/ (per-case CSVs, training_curves.csv) and wri
   curves.svg       smoothed validation loss + tumour pseudo Dice over training
   fp_where.svg     false-positive tumour pieces / ml per case, inside vs outside the predicted main liver structure
   ccpost.svg       tumour Dice gain over baseline, as saved vs both post-processed with the cc rule (ccPost)
+(every per-run chart includes the repeat run ccAucRepair_rep2: hollow markers / dashed lines, outside the Holm family)
   aucpost.svg      tumour Dice per run: as saved -> ccPost -> ccAucPost (AUC rule on the predictions, cut 0.5475)
   sweep.svg        stricter AUC cuts on the predictions: test Dice, val Dice, test lesions lost (auc_post.py)
 and prints the numbers it plotted (to check against summary.md).
@@ -35,11 +36,14 @@ AUP = os.path.join(DATA, "auc_post")
 CUTS = ["ccPost", "ccAucPost0.5475", "ccAucPost0.6", "ccAucPost0.637", "ccAucPost0.7"]
 CUT_X = [0.50, 0.5475, 0.60, 0.637, 0.70]  # ccPost drawn at 0.50 (= no AUC rule)
 RUN_ID = {"all": "101:0", "all_rep2": "101:1", "ccReject": "101:2", "ccRepair": "103:0", "ccRepairDel": "103:1",
-          "ccAucRepair": "104:0"}
+          "ccAucRepair": "104:0", "ccAucRepair_rep2": "104:1"}
 RUNS = {"all": "D101_fold_0", "all_rep2": "D101_fold_1", "ccReject": "D101_fold_2", "ccRepair": "D103_fold_0",
-        "ccRepairDel": "D103_fold_1", "ccAucRepair": "D104_fold_0"}
-ARMS = ["ccReject", "ccRepair", "ccRepairDel", "ccAucRepair"]
-N_TRAIN = {"all": 999, "all_rep2": 999, "ccReject": 343, "ccRepair": 999, "ccRepairDel": 842, "ccAucRepair": 999}
+        "ccRepairDel": "D103_fold_1", "ccAucRepair": "D104_fold_0", "ccAucRepair_rep2": "D104_fold_1"}
+ARMS = ["ccReject", "ccRepair", "ccRepairDel", "ccAucRepair"]  # the Holm family of the main analysis
+ARMS_X = ARMS + ["ccAucRepair_rep2"]  # + the repeat run of the best arm (outside the family)
+RUNS_ALL = ["all", "all_rep2"] + ARMS_X
+N_TRAIN = {"all": 999, "all_rep2": 999, "ccReject": 343, "ccRepair": 999, "ccRepairDel": 842, "ccAucRepair": 999,
+           "ccAucRepair_rep2": 999}
 B = 10000
 
 
@@ -47,6 +51,11 @@ def load():
     d = {k: pd.read_csv(f"{DATA}/{v}_per_case.csv").set_index("case") for k, v in RUNS.items()}
     base = (d["all"].tumour_dice + d["all_rep2"].tumour_dice) / 2
     return d, base
+
+
+def face(r, col):
+    """Marker fill: a repeat run (<arm>_rep2) is drawn hollow in its arm's colour."""
+    return style.SURFACE if "_rep" in r else col
 
 
 def boot_ci(x, seed=0):
@@ -98,43 +107,47 @@ def composition(out, plt):
 
 def dice_gain(d, base, out, plt):
     rows = []
-    for a in ARMS:
+    for a in ARMS_X:
         rows.append((a, *boot_ci(d[a].tumour_dice - base)))
     noise = boot_ci(d["all_rep2"].tumour_dice - d["all"].tumour_dice)
-    names = ARMS + ["noise: all_rep2 − all"]
-    fig, ax = plt.subplots(figsize=style.size(1.0, 0.33))
+    noise_auc = boot_ci(d["ccAucRepair_rep2"].tumour_dice - d["ccAucRepair"].tumour_dice)
+    names = ARMS_X + ["noise: all_rep2 − all", "noise: ccAucRepair_rep2 − ccAucRepair"]
+    fig, ax = plt.subplots(figsize=style.size(1.0, 0.40))
     ax.axvspan(-0.01, 0.01, color=style.PANEL, zorder=0)
     ax.axvline(0, color=style.INK2, linewidth=0.8, zorder=1)
-    for i, (a, m, lo, hi) in enumerate(rows + [("noise", *noise)]):
-        c = style.arm_color(a) if a != "noise" else style.MUTED
+    for i, (a, m, lo, hi) in enumerate(rows + [("noise", *noise), ("noise_rep", *noise_auc)]):
+        c = style.arm_color(a) if not a.startswith("noise") else style.MUTED
         ax.plot([lo, hi], [i, i], color=c, linewidth=2.2, solid_capstyle="round", zorder=2)
-        ax.plot(m, i, "o", color=c, markersize=8, markeredgecolor=style.SURFACE, markeredgewidth=1.5, zorder=3)
+        ax.plot(m, i, "o", color=c, markersize=8, markerfacecolor=face(a, c),
+                markeredgecolor=c if "_rep" in a else style.SURFACE, markeredgewidth=1.5, zorder=3)
         ax.annotate(f"{m:+.3f}  [{lo:+.3f}, {hi:+.3f}]", (hi, i), xytext=(8, 0), textcoords="offset points",
                     va="center", fontsize=7.8, color=style.INK)
-    label_rows(ax, names, [style.arm_color(a) for a in ARMS] + [style.MUTED])
-    ax.set_xlim(-0.03, 0.20)
+    label_rows(ax, names, [style.arm_color(a) for a in ARMS_X] + [style.MUTED] * 2)
+    ax.set_xlim(-0.05, 0.20)
     ax.set_xlabel("tumour Dice per case, difference to baseline (mean of the two all runs)")
     ax.text(0.0, -0.75, "±0.01 noise floor", fontsize=7, color=style.MUTED, ha="center", va="bottom")
     style.save_svg(fig, f"{out}/dice_gain.svg")
-    return rows, noise
+    return rows, noise, noise_auc
 
 
 def per_case(d, base, out, plt):
     rng = np.random.default_rng(1)
-    fig, ax = plt.subplots(figsize=style.size(1.0, 0.34))
+    fig, ax = plt.subplots(figsize=style.size(1.0, 0.40))
     ax.axvline(0, color=style.INK2, linewidth=0.8)
     stats = {}
-    for i, a in enumerate(ARMS):
+    for i, a in enumerate(ARMS_X):
         x = (d[a].tumour_dice - base).to_numpy()
         y = i + rng.uniform(-0.22, 0.22, len(x))
-        ax.scatter(x, y, s=11, color=style.arm_color(a), alpha=0.75, linewidths=0.4, edgecolors=style.SURFACE)
+        c = style.arm_color(a)
+        ax.scatter(x, y, s=11, facecolors=face(a, c), alpha=0.75, linewidths=0.6 if "_rep" in a else 0.4,
+                   edgecolors=c if "_rep" in a else style.SURFACE)
         med = np.median(x)
         ax.plot([med, med], [i - 0.32, i + 0.32], color=style.INK, linewidth=1.6)
         w, t, l = (x > 0.01).sum(), (abs(x) <= 0.01).sum(), (x < -0.01).sum()
         stats[a] = (w, t, l, med)
         ax.annotate(f"better {w} · same {t} · worse {l}", (1, i), xycoords=("axes fraction", "data"),
                     xytext=(6, 0), textcoords="offset points", va="center", fontsize=7.6, color=style.INK2)
-    label_rows(ax, ARMS, [style.arm_color(a) for a in ARMS])
+    label_rows(ax, ARMS_X, [style.arm_color(a) for a in ARMS_X])
     ax.set_xlim(-0.75, 0.85)
     ax.set_xlabel("tumour Dice difference to baseline, one dot per test case (black tick = median)")
     style.save_svg(fig, f"{out}/per_case.svg")
@@ -146,8 +159,8 @@ def burden(d, base, out, plt):
     pos = ref[ref > 0]
     q = pd.qcut(pos, 3, labels=["small", "medium", "large"]).reindex(ref.index)
     ranges = pos.groupby(q[ref > 0], observed=True).agg(["min", "max", "count"])
-    runs = ["baseline"] + ARMS
-    fig, axes = plt.subplots(1, 3, figsize=style.size(1.0, 0.36), sharey=True)
+    runs = ["baseline"] + ARMS_X
+    fig, axes = plt.subplots(1, 3, figsize=style.size(1.0, 0.40), sharey=True)
     res = {}
     for j, (k, ax) in enumerate(zip(["small", "medium", "large"], axes)):
         m = q == k
@@ -157,7 +170,8 @@ def burden(d, base, out, plt):
             res[(k, r)] = mean
             c = style.arm_color("all") if r == "baseline" else style.arm_color(r)
             ax.plot([lo, hi], [i, i], color=c, linewidth=2, alpha=0.45)
-            ax.plot(mean, i, "o", color=c, markersize=7, markeredgecolor=style.SURFACE, markeredgewidth=1.2)
+            ax.plot(mean, i, "o", color=c, markersize=7, markerfacecolor=face(r, c),
+                    markeredgecolor=c if "_rep" in r else style.SURFACE, markeredgewidth=1.2)
             ax.annotate(f"{mean:.2f}", (mean, i), xytext=(0, 6.5), textcoords="offset points", ha="center",
                         fontsize=7, color=style.INK2)
         n, lo_v, hi_v = int(ranges.loc[k, "count"]), ranges.loc[k, "min"], ranges.loc[k, "max"]
@@ -166,7 +180,7 @@ def burden(d, base, out, plt):
                 color=style.MUTED, va="bottom")
         ax.set_xlim(0, 0.8)
         ax.set_xticks([0, 0.4, 0.8])
-    label_rows(axes[0], ["baseline (all)"] + ARMS, [style.arm_color("all")] + [style.arm_color(a) for a in ARMS])
+    label_rows(axes[0], ["baseline (all)"] + ARMS_X, [style.arm_color("all")] + [style.arm_color(a) for a in ARMS_X])
     for ax in axes[1:]:
         ax.grid(axis="y", visible=False)
     fig.supxlabel("mean tumour Dice per case (bar = 95% CI)", fontsize=8.5, color=style.INK2, y=-0.06)
@@ -176,7 +190,7 @@ def burden(d, base, out, plt):
 
 
 def detection(d, out, plt):
-    runs = ["all", "all_rep2"] + ARMS
+    runs = RUNS_ALL
     m = {}
     for r in runs:
         x = d[r]
@@ -186,7 +200,7 @@ def detection(d, out, plt):
               ("prec", "predicted tumour voxels that are tumour (precision)", (0, 1)),
               ("recall", "reference lesions found (lesion recall)", (0, 1)),
               ("fp", "false-positive tumour pieces per case", (0, 75))]
-    fig, axes = plt.subplots(2, 2, figsize=style.size(1.0, 0.56))
+    fig, axes = plt.subplots(2, 2, figsize=style.size(1.0, 0.62))
     for ax, (k, title, lim) in zip(axes.flat, panels):
         for i, r in enumerate(runs):
             v = m[r][k]
@@ -247,9 +261,9 @@ def fp_where(out, plt):
     c = pd.read_csv(f"{FPL}/components.csv")
     n = pd.read_csv(f"{FPL}/per_case.csv").query("variant == 'none'").groupby("run").case.nunique()
     fp = c[~c.hit]
-    runs = ["all", "all_rep2"] + ARMS
+    runs = RUNS_ALL
     res = {}
-    fig, axes = plt.subplots(1, 2, figsize=style.size(1.0, 0.34), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=style.size(1.0, 0.38), sharey=True)
     for r in runs:
         g = fp[fp.run == RUN_ID[r]]
         k = n[RUN_ID[r]]
@@ -282,12 +296,12 @@ def ccpost(out, plt):
     t = {(r, v): p[(p.run == RUN_ID[r]) & (p.variant == v)].set_index("case").tumour_dice
          for r in RUN_ID for v in ("none", "ccPost")}
     res = {}
-    fig, ax = plt.subplots(figsize=style.size(1.0, 0.36))
+    fig, ax = plt.subplots(figsize=style.size(1.0, 0.42))
     ax.axvspan(-0.01, 0.01, color=style.PANEL, zorder=0)
     ax.axvline(0, color=style.INK2, linewidth=0.8, zorder=1)
-    rows = ARMS + ["ccPost on all: all − all"]
+    rows = ARMS_X + ["ccPost on all: all − all"]
     for i, a in enumerate(rows):
-        if i < len(ARMS):
+        if i < len(ARMS_X):
             pairs = [("none", -0.17), ("ccPost", 0.17)]
             col = style.arm_color(a)
         else:
@@ -305,12 +319,13 @@ def ccpost(out, plt):
             res[(a, v)] = (m, lo, hi)
             filled = v != "none"
             ax.plot([lo, hi], [i + dy, i + dy], color=col, linewidth=2 if filled else 1.4,
-                    alpha=1 if filled else 0.6, solid_capstyle="round", zorder=2)
+                    alpha=1 if filled else 0.6, solid_capstyle="round", zorder=2,
+                    linestyle=(0, (4, 2)) if "_rep" in a else "-")
             ax.plot(m, i + dy, "o", color=col, markersize=7, markeredgecolor=col if not filled else style.SURFACE,
                     markerfacecolor=col if filled else style.SURFACE, markeredgewidth=1.4, zorder=3)
             ax.annotate(f"{m:+.3f}", (hi, i + dy), xytext=(6, 0), textcoords="offset points", va="center",
                         fontsize=7.4, color=style.INK if filled else style.MUTED)
-    label_rows(ax, rows, [style.arm_color(a) for a in ARMS] + [style.arm_color("all")])
+    label_rows(ax, rows, [style.arm_color(a) for a in ARMS_X] + [style.arm_color("all")])
     ax.set_xlim(-0.05, 0.20)
     ax.set_xlabel("tumour Dice per case, difference (mean, paired bootstrap 95% CI)")
     h = [plt.Line2D([], [], marker="o", color=style.INK2, markerfacecolor=style.SURFACE, linestyle="none"),
@@ -324,16 +339,16 @@ def ccpost(out, plt):
 def aucpost(out, plt):
     """Mean tumour Dice per run for none -> ccPost -> ccAucPost0.5475 (auc_post.py per_case.csv, test)."""
     p = pd.read_csv(f"{AUP}/per_case.csv")
-    runs = ["all", "all_rep2"] + ARMS
+    runs = RUNS_ALL
     vs = [("none", "as saved"), ("ccPost", "ccPost"), ("ccAucPost0.5475", "ccAucPost (cut 0.5475)")]
     res = {}
-    fig, ax = plt.subplots(figsize=style.size(1.0, 0.34))
+    fig, ax = plt.subplots(figsize=style.size(1.0, 0.38))
     for i, r in enumerate(runs):
         g = p[p.run == RUN_ID[r]]
         m = [g[g.variant == v].tumour_dice.mean() for v, _ in vs]  # NaN (both empty) skipped, as summary.md
         res[r] = m
         col = style.arm_color(r)
-        ax.plot(m, [i] * 3, color=col, linewidth=1.4, alpha=0.5, zorder=1)
+        ax.plot(m, [i] * 3, color=col, linewidth=1.4, alpha=0.5, zorder=1, linestyle=(0, (4, 2)) if "_rep" in r else "-")
         for k, (x, mk) in enumerate(zip(m, ["o", "o", "o"])):
             fill = [style.SURFACE, style.SURFACE, col][k]
             ax.plot(x, i, mk, color=col, markersize=[5, 7, 8][k], markerfacecolor=fill, markeredgewidth=1.4,
@@ -355,7 +370,7 @@ def sweep(out, plt):
     """Tumour Dice (test, val) and test lesions lost vs ccPost over the AUC cut on the predictions."""
     t = pd.read_csv(f"{AUP}/per_case.csv")
     v = pd.read_csv(f"{AUP}_val/per_case.csv")
-    runs = ["all", "all_rep2"] + ARMS
+    runs = RUNS_ALL
     fig, axes = plt.subplots(1, 3, figsize=style.size(1.0, 0.36))
     res = {}
     for r in runs:
@@ -381,10 +396,10 @@ def sweep(out, plt):
         ax.grid(axis="x", visible=False)
     axes[0].set_ylim(0.36, 0.46)
     axes[1].set_ylim(0.32, 0.46)
-    axes[2].legend(loc="upper left", fontsize=6.8, handlelength=1.6)
+    axes[2].legend(loc="upper left", bbox_to_anchor=(1.03, 1.0), fontsize=6.8, handlelength=1.6)
     fig.supxlabel("AUC cut applied to the predictions (dotted = training cut, fixed in advance)", fontsize=8,
                   color=style.INK2, y=-0.07)
-    fig.subplots_adjust(wspace=0.36)
+    fig.subplots_adjust(wspace=0.36, right=0.83)
     style.save_svg(fig, f"{out}/sweep.svg")
     return res
 
@@ -396,9 +411,9 @@ def main():
     import matplotlib.pyplot as plt
     d, base = load()
     composition(out, plt)
-    rows, noise = dice_gain(d, base, out, plt)
+    rows, noise, noise_auc = dice_gain(d, base, out, plt)
     print("dice gain (mean, lo, hi):", [(a, round(m, 4), round(lo, 4), round(hi, 4)) for a, m, lo, hi in rows],
-          "noise", [round(v, 4) for v in noise])
+          "noise", [round(v, 4) for v in noise], "noise ccAucRepair", [round(v, 4) for v in noise_auc])
     print("per case (better, same, worse, median):", per_case(d, base, out, plt))
     res, ranges = burden(d, base, out, plt)
     print("burden:", {k: round(v, 3) for k, v in res.items()})

@@ -73,6 +73,14 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   → **post-processing gives the baseline most of what AUC training gives; the AUC-training edge is not robust across
   the two runs.** Stricter cuts: 0.60 helps every run on test (+0.033 to +0.062 vs ccPost, 2–9 lesions lost), plateau
   to 0.637, 0.70 loses 16–33 lesions; val would pick ~0.60.
+- **Two ccAucRepair runs** (computed 2026-11-16 for report 4 from `auc_post/per_case.csv`, bootstrap 10k + Wilcoxon,
+  not in a summary.md): rep2 − f0 as saved −0.022 [−0.036, −0.008] p 7e−5 (vs +0.004 for the `all` pair), ccPost
+  −0.017, ccAucPost0.5475 −0.009, 0.60 +0.007 → **the 0.01 noise floor is too small for arm-vs-arm claims.**
+  ccAucRepair − ccRepair: f0 +0.028 p 0.004, rep2 +0.007 [−0.003, 0.017] p 0.54 (saved); under ccPost +0.032 / +0.015
+  p 0.019. Mean of both runs vs baseline: saved +0.089, ccPost +0.022 [0.008, 0.037] p 0.003, readout vs
+  baseline+ccAucPost +0.000 [−0.013, 0.014], both ccAucPost +0.019 p 0.049. At 0.60 both sides: rep2 0.452 vs 0.437
+  +0.015 [0.003, 0.029] p 0.046, mean of runs +0.012 p 0.21. Val: neither run ahead at any cut. Differences sit in
+  the small-tumour third (0.27 vs 0.22).
 - **checkpoint_best** (sensitivity check): predictions + postproc running on UCloud (see NOTES.md Current state);
   output `reports/data/test_eval_liver_best/`.
 
