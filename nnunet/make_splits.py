@@ -13,6 +13,7 @@ Folds are append-only: an arm keeps its fold number forever (arms.json maps fold
   python make_splits.py --target liver --arm ccReject_rep2 --same-as ccReject   # second run: identical train set
 (the ids files live in $MAISI_RUNS/pool/filter_metrics/liver/, written by maisi/cc_rules.py and filter_metrics.py)
   python make_splits.py --target liver --list
+  python make_splits.py --target pancreas --arm all                    # Dataset102 (val = the 43 MSD07 val cases)
 Then train:  nnUNetv2_train <id> 3d_fullres <fold>
 """
 import argparse
@@ -21,7 +22,7 @@ import json
 import os
 import random
 
-from build_dataset import TARGETS
+from build_dataset import TARGETS, real_case
 
 
 def main():
@@ -56,7 +57,7 @@ def main():
         raise SystemExit(f"arm {a.arm} already registered; folds are append-only")
 
     real = json.load(open(f"{raw}/real_split.json"))
-    val = [f"lits_{i:03d}" for i in real["val"]]
+    val = [real_case(a.target, i) for i in real["val"]]
     synth = sorted(os.path.basename(f)[: -len(".nii.gz")] for f in glob.glob(f"{raw}/labelsTr/{a.target}_*.nii.gz"))
     if a.same_as:
         src = [i for i, x in enumerate(arms) if x["arm"] == a.same_as]

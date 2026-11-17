@@ -1,9 +1,12 @@
 #!/usr/bin/env python
-"""Predict the real LiTS test cases with trained arms (folds of Dataset101, or of the repair datasets 103 / 104) and score them.
+"""Predict the real test cases with trained arms (folds of Dataset101, or of the repair datasets 103 / 104) and score them.
 
 Test cases = real_split.json "test" (111 LiTS cases: thesis train split minus the 20 val cases + the 40 thesis test
 cases), read from the RAS copy (raw_data/LiTS_RAS) into Dataset101's imagesTs_real / labelsTs_real; every dataset of
 the liver target uses these same files. A run = dataset id + fold (= one experiment arm, make_splits.py).
+--target pancreas (default liver): Dataset102_PancreasSynth, test = the 238 MSD07 test cases of maisi/msd07_split.json
+(msd_<NNN>, from raw_data/Task07_Pancreas imagesTr), organ metrics named pancreas_*, no thesis subset, baseline 102:0 +
+102:1, output test_eval_pancreas[_best] and reports/data/test_eval_pancreas/progress. Liver output is unchanged.
 
   python predict_test.py prepare                        # copy test images/labels into Dataset101 (int16/uint8, RAS)
   python predict_test.py predict --fold 0               # Dataset101 fold 0, checkpoint_final -> fold_0/test_final
@@ -12,6 +15,8 @@ the liver target uses these same files. A run = dataset id + fold (= one experim
   python predict_test.py eval                           # baseline runs only (+ the noise row)
   python predict_test.py predict --fold 2 --checkpoint best   # checkpoint_best -> fold_2/test_best
   python predict_test.py eval --checkpoint best --runs ...    # same eval on test_best -> test_eval_liver_best
+  python predict_test.py predict --target pancreas --fold 0   # Dataset102 fold 0 on the MSD07 test cases
+  python predict_test.py eval --target pancreas               # pancreas baseline runs (102:0 + 102:1)
 
 Everything is resumable: prepare skips existing files, predict uses --continue_prediction, eval reuses a run's
 per-case CSV when it is newer than all its predictions (delete it to force a recompute).
@@ -43,9 +48,10 @@ import numpy as np
 from scipy import ndimage
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_dataset import copy_real  # noqa: E402  (same int16/uint8 + qform/sform conversion as the val cases)
+from build_dataset import TARGETS, copy_real, real_case, real_files, target_of  # noqa: E402  (same int16/uint8 + qform/sform conversion as the val cases)
 
 PROJ = os.environ.get("PROJ", "/work/Research")
+TARGET, ORGAN, REAL_NAME = "liver", "liver", "LiTS"  # set_target() switches all of these (default: liver)
 DS = "Dataset101_LiverSynth"
 RAW = f"{os.environ['nnUNet_raw']}/{DS}"
 IMG, LAB = f"{RAW}/imagesTs_real", f"{RAW}/labelsTs_real"
@@ -57,9 +63,21 @@ BIG_ML = 1.0
 CSV_VERSION = "lesion1"
 MAIN_KEY = "tumour_dice"  # main metric (plans/PLAN_training.md "Evaluation and analysis")
 SECONDARY = ("liver_dice", "liver_tumour_dice", "les_fp", "fp_ml")
+BASELINE = {"liver": ["101:0", "101:1"], "pancreas": ["102:0", "102:1"]}  # `all` + `all_rep2` of each target
 NOISE_FLOOR = 0.01  # |mean diff| between the two `all` runs was < 0.01
 BOOT = 10000
 FAMILY = ("ccReject", "ccRepair", "ccRepairDel", "ccAucRepair")  # Decisions 2026-11-14
+
+
+def set_target(target):
+    """Point the module at one target's dataset (raw dir, real test copies, organ name)."""
+    global TARGET, ORGAN, REAL_NAME, DS, RAW, IMG, LAB, SECONDARY
+    did, name, _, _ = TARGETS[target]
+    TARGET, ORGAN, REAL_NAME = target, target, {"liver": "LiTS", "pancreas": "MSD07"}[target]
+    DS = f"Dataset{did:03d}_{name}"
+    RAW = f"{os.environ['nnUNet_raw']}/{DS}"
+    IMG, LAB = f"{RAW}/imagesTs_real", f"{RAW}/labelsTs_real"
+    SECONDARY = (f"{ORGAN}_dice", f"{ORGAN}_tumour_dice", "les_fp", "fp_ml")
 
 
 def dataset_name(did):
@@ -85,17 +103,14 @@ def split():
 def prepare(workers):
     s = split()
     src = s["source"]
-    thesis_test = set(s["thesis_test"])
     os.makedirs(IMG, exist_ok=True)
     os.makedirs(LAB, exist_ok=True)
     jobs, missing = [], []
     for i in s["test"]:
-        sub = "Ts" if i in thesis_test else "Tr"
-        si = glob.glob(f"{src}/images{sub}/volume-{i}_0000.nii*")
-        sl = glob.glob(f"{src}/labels{sub}/volume-{i}.nii*")
-        if len(si) == 1 and len(sl) == 1:
-            jobs.append((si[0], f"{IMG}/lits_{i:03d}_0000.nii.gz", sl[0], f"{LAB}/lits_{i:03d}.nii.gz"))
-        elif os.path.exists(f"{IMG}/lits_{i:03d}_0000.nii.gz") and os.path.exists(f"{LAB}/lits_{i:03d}.nii.gz"):
+        f, c = real_files(TARGET, s, i), real_case(TARGET, i)
+        if f:
+            jobs.append((f[0], f"{IMG}/{c}_0000.nii.gz", f[1], f"{LAB}/{c}.nii.gz"))
+        elif os.path.exists(f"{IMG}/{c}_0000.nii.gz") and os.path.exists(f"{LAB}/{c}.nii.gz"):
             continue
         else:
             missing.append(i)
@@ -115,7 +130,7 @@ def predict(did, fold, npp, nps):
            "-chk", CHK, "-npp", str(npp), "-nps", str(nps), "--continue_prediction"]
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
-    n = len(glob.glob(f"{out}/lits_*.nii.gz"))
+    n = len(glob.glob(f"{out}/{real_case(TARGET, 0)[:-3]}*.nii.gz"))
     print(f"D{did} fold {fold}: {n} predictions in {out}", flush=True)
 
 
@@ -141,14 +156,14 @@ def lesions(rt, pt, voxel_ml):
 
 
 def score(args):
-    ref_f, pred_f = args
+    ref_f, pred_f, organ = args
     ref = nib.load(ref_f)
     r = np.asarray(ref.dataobj)
     p = np.asarray(nib.load(pred_f).dataobj)
     assert r.shape == p.shape, (ref_f, r.shape, p.shape)
     voxel_ml = float(np.prod(np.sqrt((ref.affine[:3, :3] ** 2).sum(axis=0)))) / 1000.0
     row = {"case": os.path.basename(ref_f)[: -len(".nii.gz")]}
-    for name, rm, pm in (("liver", r == 1, p == 1), ("liver_tumour", r > 0, p > 0), ("tumour", r == 2, p == 2)):
+    for name, rm, pm in ((organ, r == 1, p == 1), (f"{organ}_tumour", r > 0, p > 0), ("tumour", r == 2, p == 2)):
         d, tp, a, b = dice(rm, pm)
         row.update({f"{name}_dice": d, f"{name}_tp": tp, f"{name}_ref": a, f"{name}_pred": b})
     row.update(lesions(r == 2, p == 2, voxel_ml))
@@ -167,7 +182,7 @@ def run_rows(did, fold, cases, thesis_test, out_dir, workers):
         if rows and rows[0].get("version") == CSV_VERSION and len(rows) == len(cases):
             return [{k: (v if k in ("case", "version") else float(v)) for k, v in r.items()} for r in rows]
     with Pool(workers) as p:
-        rows = sorted(p.map(score, [(f"{LAB}/{c}.nii.gz", f) for c, f in zip(cases, preds)]), key=lambda x: x["case"])
+        rows = sorted(p.map(score, [(f"{LAB}/{c}.nii.gz", f, ORGAN) for c, f in zip(cases, preds)]), key=lambda x: x["case"])
     for r in rows:
         r["thesis_test"] = int(r["case"] in thesis_test)
         r["version"] = CSV_VERSION
@@ -217,8 +232,8 @@ def fmt_diff(r, digits=4):
 
 def eval_runs(baseline, runs, family, workers, out_dir):
     s = split()
-    thesis_test = {f"lits_{i:03d}" for i in s["thesis_test"]}
-    cases = [f"lits_{i:03d}" for i in s["test"]]
+    thesis_test = {real_case(TARGET, i) for i in s.get("thesis_test", [])}
+    cases = [real_case(TARGET, i) for i in s["test"]]
     os.makedirs(out_dir, exist_ok=True)
     runs = [k for k in runs if k not in baseline]
     every = baseline + runs
@@ -250,8 +265,9 @@ def eval_runs(baseline, runs, family, workers, out_dir):
 
     base_name = " + ".join(names[k] for k in baseline)
     lines = [f"# Test set evaluation ({CHK})", "",
-             f"Test cases: {len(cases)} real LiTS (RAS), of which {len(thesis_test)} are the thesis test split. "
-             f"Baseline = per-case mean of {base_name}.",
+             f"Test cases: {len(cases)} real {REAL_NAME} (RAS)"
+             + (f", of which {len(thesis_test)} are the thesis test split. " if thesis_test else ". ")
+             + f"Baseline = per-case mean of {base_name}.",
              "Dice NaN (both empty) excluded from mean/median and from paired tests; n = cases counted. Lesion: "
              f"26-connected tumour components, detected = any overlap; 'big' = reference lesion >= {BIG_ML:g} ml.", ""]
 
@@ -293,11 +309,12 @@ def eval_runs(baseline, runs, family, workers, out_dir):
             for key in SECONDARY:
                 r = paired(base_vals(key), vals(k, key))
                 lines.append(f"| {names[k]} | {key} | {fmt_diff(r)} | {r['median']:+.4f} | {r['p']:.3g} |")
-        lines += ["", f"Tumour Dice on the {len(thesis_test)} thesis test cases (exploratory):", "",
-                  "| run | n | mean diff [95% CI] | Wilcoxon p |", "|---|---|---|---|"]
-        for k in runs:
-            r = paired(base_vals(MAIN_KEY, thesis_test), vals(k, MAIN_KEY, thesis_test))
-            lines.append(f"| {names[k]} | {r['n']} | {fmt_diff(r)} | {r['p']:.3g} |")
+        if thesis_test:
+            lines += ["", f"Tumour Dice on the {len(thesis_test)} thesis test cases (exploratory):", "",
+                      "| run | n | mean diff [95% CI] | Wilcoxon p |", "|---|---|---|---|"]
+            for k in runs:
+                r = paired(base_vals(MAIN_KEY, thesis_test), vals(k, MAIN_KEY, thesis_test))
+                lines.append(f"| {names[k]} | {r['n']} | {fmt_diff(r)} | {r['p']:.3g} |")
         pairs = [(kr, kj) for kr in runs for kj in runs
                  if arm_of[kr].startswith("repair") and arm_of[kj] == "reject" + arm_of[kr][len("repair"):]]
         if pairs:
@@ -309,14 +326,16 @@ def eval_runs(baseline, runs, family, workers, out_dir):
         lines.append("")
 
     # --- descriptive tables per run ------------------------------------------------------------------------------
-    for subset, filt in ((f"all {len(cases)}", lambda r: True), (f"thesis test {len(thesis_test)}", lambda r: r["thesis_test"])):
+    subsets = [(f"all {len(cases)}", lambda r: True)]
+    subsets += [(f"thesis test {len(thesis_test)}", lambda r: r["thesis_test"])] if thesis_test else []
+    for subset, filt in subsets:
         lines += [f"## {subset}: Dice", "",
-                  "| run | liver mean | liver median | liver+tumour mean | tumour mean | tumour median | tumour n (NaN) | tumour global |",
+                  f"| run | {ORGAN} mean | {ORGAN} median | {ORGAN}+tumour mean | tumour mean | tumour median | tumour n (NaN) | tumour global |",
                   "|---|---|---|---|---|---|---|---|"]
         for k in every:
             rs = [r for r in rows[k] if filt(r)]
-            lm, lmed, _, _ = mean_med(rs, "liver")
-            ltm, _, _, _ = mean_med(rs, "liver_tumour")
+            lm, lmed, _, _ = mean_med(rs, ORGAN)
+            ltm, _, _, _ = mean_med(rs, f"{ORGAN}_tumour")
             tm, tmed, tn, tnan = mean_med(rs, "tumour")
             lines.append(f"| {names[k]} | {lm:.3f} | {lmed:.3f} | {ltm:.3f} | {tm:.3f} | {tmed:.3f} | {tn} ({tnan}) | {glob_dice(rs, 'tumour'):.3f} |")
         lines += ["", f"## {subset}: lesions", "",
@@ -331,8 +350,8 @@ def eval_runs(baseline, runs, family, workers, out_dir):
                          f"{sum(r['les_pred'] > 0 for r in free)}/{len(free)} |")
         lines.append("")
     for k in every:
-        worst = sorted(rows[k], key=lambda r: r["liver_dice"])[:5]
-        lines.append(f"Lowest liver Dice ({names[k]}): " + ", ".join(f"{r['case']} {r['liver_dice']:.2f}" for r in worst))
+        worst = sorted(rows[k], key=lambda r: r[f"{ORGAN}_dice"])[:5]
+        lines.append(f"Lowest {ORGAN} Dice ({names[k]}): " + ", ".join(f"{r['case']} {r[f'{ORGAN}_dice']:.2f}" for r in worst))
     txt = "\n".join(lines) + "\n"
     open(f"{out_dir}/summary.md", "w").write(txt)
     print(txt)
@@ -347,23 +366,23 @@ def eval_runs(baseline, runs, family, workers, out_dir):
         print(f"progress plots failed: {ex!r}", flush=True)
     try:
         import training_curves
-        training_curves.main()
+        training_curves.main(TARGET)
     except Exception as ex:  # noqa: BLE001
         print(f"training curves failed: {ex!r}", flush=True)
 
 
 def confusion_tables(rows, names, every, cases, out_dir):
-    """confusion.md: TP / FP / FN / TN per run at voxel (tumour, liver), lesion and case level, summed over all test cases.
+    """confusion.md: TP / FP / FN / TN per run at voxel (tumour, organ), lesion and case level, summed over all test cases.
 
-    Voxel TN = all voxels of the case minus TP, FP, FN (shapes from the reference label headers). Liver = label 1 only,
+    Voxel TN = all voxels of the case minus TP, FP, FN (shapes from the reference label headers). Organ = label 1 only,
     as in the Dice tables. Lesion level has no TN. Case level: tumour cases count as TP if >= 1 lesion is detected,
     tumour-free cases as FP if any tumour voxel is predicted, else TN.
     """
     nvox = {c: int(np.prod(nib.load(f"{LAB}/{c}.nii.gz").shape)) for c in cases}
     tot = lambda rs, k: sum(float(r[k]) for r in rs)  # noqa: E731
     lines = ["# Test set: true / false positives and negatives per run", "",
-             f"{len(cases)} real LiTS test cases, {CHK[:-4]}. Sums over all cases. Written by `predict_test.py eval`.", ""]
-    for struct, label in (("tumour", "label 2"), ("liver", "label 1 only, without tumour")):
+             f"{len(cases)} real {REAL_NAME} test cases, {CHK[:-4]}. Sums over all cases. Written by `predict_test.py eval`.", ""]
+    for struct, label in (("tumour", "label 2"), (ORGAN, "label 1 only, without tumour")):
         lines += [f"## {struct.capitalize()}, voxel-level ({label}; millions of voxels)", "",
                   "| run | TP | FP | FN | TN | sensitivity | precision | FP / TP |", "|---|---|---|---|---|---|---|---|"]
         for k in every:
@@ -397,13 +416,15 @@ def confusion_tables(rows, names, every, cases, out_dir):
 
 def copy_progress_plots():
     """Copy every run's nnU-Net progress.png (losses + pseudo Dice per epoch) into the repo next to the test results,
-    as reports/data/test_eval_liver/progress/D<id>_f<fold>_<arm>.png; run_queue.py's publish() commits that folder.
-    A run still training gets its current plot (refreshed at the next eval)."""
+    as reports/data/test_eval_<target>/progress/D<id>_f<fold>_<arm>.png (only this target's datasets);
+    run_queue.py's publish() commits the liver folder. A run still training gets its current plot (refreshed at the next eval)."""
     import shutil
-    dst = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports/data/test_eval_liver/progress")
+    dst = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f"reports/data/test_eval_{TARGET}/progress")
     os.makedirs(dst, exist_ok=True)
     n = 0
     for f in sorted(glob.glob(f"{os.environ['nnUNet_results']}/Dataset1*/{TRAINER}/fold_*/progress.png")):
+        if target_of(f.split("/Dataset")[1].split("/")[0]) != TARGET:
+            continue
         did = int(f.split("/Dataset")[1][:3])
         fold = int(f.split("/fold_")[1].split("/")[0])
         shutil.copy(f, f"{dst}/D{did}_f{fold}_{arm_name(did, fold)}.png")
@@ -413,35 +434,39 @@ def copy_progress_plots():
 
 def main():
     ap = argparse.ArgumentParser()
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--target", choices=TARGETS, default="liver")
     sp = ap.add_subparsers(dest="cmd", required=True)
-    sp.add_parser("prepare")
-    p = sp.add_parser("predict")
-    p.add_argument("--dataset", type=int, default=101)
+    sp.add_parser("prepare", parents=[common])
+    p = sp.add_parser("predict", parents=[common])
+    p.add_argument("--dataset", type=int, help="dataset id (default: the target's base dataset, 101 / 102)")
     p.add_argument("--fold", type=int, required=True)
     p.add_argument("--npp", type=int, default=3, help="nnU-Net preprocessing workers")
     p.add_argument("--nps", type=int, default=3, help="nnU-Net export workers")
     p.add_argument("--checkpoint", choices=("final", "best"), default="final")
-    e = sp.add_parser("eval")
-    e.add_argument("--baseline", nargs="+", default=["101:0", "101:1"],
-                   help="dataset:fold runs whose per-case mean is the baseline (default: `all` + `all_rep2`)")
+    e = sp.add_parser("eval", parents=[common])
+    e.add_argument("--baseline", nargs="+",
+                   help="dataset:fold runs whose per-case mean is the baseline (default: `all` + `all_rep2`, "
+                        "101:0 101:1 / 102:0 102:1)")
     e.add_argument("--runs", nargs="*", default=[], help="arms to compare, dataset:fold, e.g. 103:0 101:2")
     e.add_argument("--family", nargs="+", default=list(FAMILY), help="arm names in the Holm family (main comparison)")
     e.add_argument("--workers", type=int, default=12)
     e.add_argument("--checkpoint", choices=("final", "best"), default="final",
                    help="which checkpoint's predictions (fold_X/test_<checkpoint>) to score")
-    e.add_argument("--out", help="default $nnUNet_results/test_eval_liver (final) or test_eval_liver_best (best)")
+    e.add_argument("--out", help="default $nnUNet_results/test_eval_<target> (final) or test_eval_<target>_best (best)")
     ap.set_defaults(checkpoint="final")
     a = ap.parse_args()
+    set_target(a.target)
     global CHK, PRED_SUB
     CHK, PRED_SUB = f"checkpoint_{a.checkpoint}.pth", f"test_{a.checkpoint}"
     if a.cmd == "prepare":
         prepare(16)
     elif a.cmd == "predict":
-        predict(a.dataset, a.fold, a.npp, a.nps)
+        predict(a.dataset or TARGETS[a.target][0], a.fold, a.npp, a.nps)
     else:
         parse = lambda xs: [tuple(int(v) for v in x.split(":")) for x in xs]  # noqa: E731
-        out = a.out or f"{os.environ['nnUNet_results']}/test_eval_liver" + ("" if a.checkpoint == "final" else "_best")
-        eval_runs(parse(a.baseline), parse(a.runs), a.family, a.workers, out)
+        out = a.out or f"{os.environ['nnUNet_results']}/test_eval_{a.target}" + ("" if a.checkpoint == "final" else "_best")
+        eval_runs(parse(a.baseline or BASELINE[a.target]), parse(a.runs), a.family, a.workers, out)
 
 
 if __name__ == "__main__":

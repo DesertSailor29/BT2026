@@ -7,8 +7,8 @@
 #   3 cc_rules.py             main structure per volume -> ids_cc*.json, cc_summary.md
 #   4 real_lesion_metrics.py  the same metrics + what cc would change, on all 281 MSD07 cases (descriptive)
 #   5 cc_review_figures.py    example figures per violation -> reports/figures/pancreas_rules/
-# Run from a worktree of the 'pancreas' branch (see NOTES.md), detached:
-#   setsid nohup bash -c 'source "$PROJ/BT2026-pancreas/maisi/env.sh" && bash "$PROJ/BT2026-pancreas/maisi/pancreas_measure.sh"' \
+# Detached (merged into main 2026-11-17; was run from a worktree of the 'pancreas' branch):
+#   setsid nohup bash -c 'source "$PROJ/BT2026/maisi/env.sh" && bash "$PROJ/BT2026/maisi/pancreas_measure.sh"' \
 #     > "$PROJ/logs/pancreas_measure_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

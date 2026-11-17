@@ -4,16 +4,19 @@
 Design (plans/PLAN_training.md, decided 2026-11-07):
 - Training is synthetic only. Every experiment arm is one fold in splits_final.json (make_splits.py):
   train = the arm's synthetic ids, val = the same real cases. So the dataset is preprocessed once for all arms.
-- Real validation cases (used by nnU-Net for checkpoint_best) come from the thesis train split (LiTS imagesTr,
-  91 cases), drawn with a fixed seed. Everything else in LiTS (71 remaining train + 40 thesis test = 111) is test.
-  The split is written to <dataset>/real_split.json and never changes.
+- Real validation cases (used by nnU-Net for checkpoint_best), fixed once in <dataset>/real_split.json:
+  liver: 20 from the thesis train split (LiTS imagesTr, 91 cases, seed 42); test = the other 111 (71 + 40 thesis test).
+  pancreas: the fixed MSD07 split of maisi/msd07_split.json (43 val / 238 test, seed 42; MSD imagesTr only).
+  Real case names: lits_<NNN> / msd_<NNN> (never the synthetic prefix liver_ / pancreas_, which make_splits.py globs).
 - Synthetic volumes: only MAISI's constant padding is cropped (in-plane 16..495, z 64..447 of the 512^3 volume,
   pure -1000 HU in the image and 0 in the label; checked per volume, a volume with content there is kept whole).
   No anatomy crop.
 
-Resumable: existing output files are skipped. Real data must be RAS (raw_data/LiTS_RAS, GUIDE 6b).
+Resumable: existing output files are skipped. Real data must be RAS (raw_data/LiTS_RAS, GUIDE 6b; MSD07 is RAS as
+shipped, maisi/msd07_overview.py).
 
   python build_dataset.py --target liver      # Dataset101_LiverSynth
+  python build_dataset.py --target pancreas   # Dataset102_PancreasSynth
 """
 import argparse
 import glob
@@ -22,6 +25,8 @@ import os
 import random
 import re
 from multiprocessing import Pool
+
+import sys
 
 import nibabel as nib
 import numpy as np
@@ -32,6 +37,46 @@ TARGETS = {
     "liver": (101, "LiverSynth", f"{PROJ}/raw_data/LiTS_RAS", {"background": 0, "liver": 1, "tumor": 2}),
     "pancreas": (102, "PancreasSynth", f"{PROJ}/raw_data/Task07_Pancreas", {"background": 0, "pancreas": 1, "tumor": 2}),
 }
+REAL_PREFIX = {"liver": "lits", "pancreas": "msd"}  # real case names <prefix>_<NNN>
+
+
+def real_case(target, i):
+    return f"{REAL_PREFIX[target]}_{i:03d}"
+
+
+def target_of(dataset_name):
+    """'liver' / 'pancreas' from a dataset folder name (Dataset101_LiverSynth, Dataset102_PancreasSynth, ...)."""
+    return "pancreas" if "Pancreas" in dataset_name else "liver"
+
+
+def real_files(target, split, i):
+    """(image, label) source paths of real case i under split['source'], or None if not (yet) there."""
+    src = split["source"]
+    if target == "liver":
+        sub = "Ts" if i in set(split.get("thesis_test", [])) else "Tr"
+        si = glob.glob(f"{src}/images{sub}/volume-{i}_0000.nii*")
+        sl = glob.glob(f"{src}/labels{sub}/volume-{i}.nii*")
+        return (si[0], sl[0]) if len(si) == 1 and len(sl) == 1 else None
+    si, sl = f"{src}/imagesTr/pancreas_{i:03d}.nii.gz", f"{src}/labelsTr/pancreas_{i:03d}.nii.gz"
+    return (si, sl) if os.path.exists(si) and os.path.exists(sl) else None
+
+
+def make_real_split(target, real_dir, seed, val_n):
+    if target == "liver":
+        ids_dir = f"{PROJ}/raw_data/LiTS"  # original split (same ids as LiTS_RAS, complete before the conversion ends)
+        tr = sorted(int(re.search(r"volume-(\d+)_0000", f).group(1)) for f in glob.glob(f"{ids_dir}/imagesTr/volume-*_0000.nii*"))
+        ts = sorted(int(re.search(r"volume-(\d+)_0000", f).group(1)) for f in glob.glob(f"{ids_dir}/imagesTs/volume-*_0000.nii*"))
+        assert len(tr) == 91 and len(ts) == 40, (len(tr), len(ts))
+        val = sorted(random.Random(seed).sample(tr, val_n))
+        return {"source": real_dir, "seed": seed, "val": val,
+                "test": sorted([i for i in tr if i not in val] + ts), "thesis_test": ts}
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "maisi"))
+    import msd07_split  # the fixed MSD07 split (maisi/msd07_split.json; the filter rules' real reference = its val)
+    m = msd07_split.load_or_make(real_dir)
+    return {"source": real_dir, "seed": m["seed"], "val": list(m["val"]), "test": list(m["test"]), "thesis_test": [],
+            "from": "maisi/msd07_split.json"}
+
+
 CROP = (slice(16, 496), slice(16, 496), slice(64, 448))  # MAISI Path A content box: 480x480x384 inside 512^3
 AIR = -1000
 
@@ -75,7 +120,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", choices=TARGETS, default="liver")
     ap.add_argument("--pool", default=f"{os.environ.get('MAISI_RUNS', PROJ + '/maisi_runs')}/pool")
-    ap.add_argument("--val-n", type=int, default=20)
+    ap.add_argument("--val-n", type=int, default=20, help="liver only (pancreas: fixed by maisi/msd07_split.json)")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--limit", type=int, default=0, help="only the first N synthetic volumes (testing)")
@@ -91,27 +136,16 @@ def main():
     if os.path.exists(split_file):
         split = json.load(open(split_file))
     else:
-        if a.target != "liver":
-            raise SystemExit("real split for pancreas not implemented yet")
-        ids_dir = f"{PROJ}/raw_data/LiTS"  # original split (same ids as LiTS_RAS, complete before the conversion ends)
-        tr = sorted(int(re.search(r"volume-(\d+)_0000", f).group(1)) for f in glob.glob(f"{ids_dir}/imagesTr/volume-*_0000.nii*"))
-        ts = sorted(int(re.search(r"volume-(\d+)_0000", f).group(1)) for f in glob.glob(f"{ids_dir}/imagesTs/volume-*_0000.nii*"))
-        assert len(tr) == 91 and len(ts) == 40, (len(tr), len(ts))
-        val = sorted(random.Random(a.seed).sample(tr, a.val_n))
-        split = {"source": real_dir, "seed": a.seed, "val": val,
-                 "test": sorted([i for i in tr if i not in val] + ts), "thesis_test": ts}
+        split = make_real_split(a.target, real_dir, a.seed, a.val_n)
         json.dump(split, open(split_file, "w"), indent=1)
     print(f"real: {len(split['val'])} val, {len(split['test'])} test")
 
-    def real_path(sub, i, lab=False):
-        f = glob.glob(f"{real_dir}/{sub}/volume-{i}{'' if lab else '_0000'}.nii*")
-        return f[0] if len(f) == 1 else None
-
     real_jobs, real_missing = [], []
     for i in split["val"]:
-        si, sl = real_path("imagesTr", i), real_path("labelsTr", i, True)
-        if si and sl:
-            real_jobs.append((si, f"{out}/imagesTr/lits_{i:03d}_0000.nii.gz", sl, f"{out}/labelsTr/lits_{i:03d}.nii.gz"))
+        f = real_files(a.target, split, i)
+        c = real_case(a.target, i)
+        if f:
+            real_jobs.append((f[0], f"{out}/imagesTr/{c}_0000.nii.gz", f[1], f"{out}/labelsTr/{c}.nii.gz"))
         else:
             real_missing.append(i)
     if real_missing:

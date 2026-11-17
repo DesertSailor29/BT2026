@@ -9,8 +9,8 @@ New experiments are paused until the findings are presented to the supervisor (D
   a larger-tumour pool (size control is weak: oversample high sizes, keep large outcomes; ~30 GPU h per 1000).
 - **Stricter AUC cut as a training arm** (0.60 helped at test time, see RESULTS ccAucPost); choose on val.
 - **Tumour-free generated volumes** against FPs (low priority).
-- **Pancreas arms:** which of all / ccReject 911 / ccRepair 999 / ccRepairDel 924 / ccAucRepair; `all` needs its own
-  run(s) for the pancreas baseline + noise floor. Better pancreas filter options in report 3 (cc + regenerate the 75,
+- **Pancreas arms:** which of all / ccReject 911 / ccRepair 999 / ccRepairDel 924 / ccAucRepair; `all` + `all_rep2`
+  (baseline + noise floor) are ready to run: `nnunet/pancreas_all.sh` (NOTES Next steps). Better pancreas filter options in report 3 (cc + regenerate the 75,
   TotalSegmentator organ agreement).
 - aucReject (732) + aucRepair alone (AUC without cc; mostly repeats cc); ccAucReject; random subset of the best reject
   arm's size; train on the rejects; a real-only reference model (would cost test cases).
