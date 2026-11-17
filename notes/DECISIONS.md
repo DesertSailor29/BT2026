@@ -3,6 +3,7 @@
 The decisions in force are summarised in `NOTES.md`; this file keeps every record with its reason, including the
 amendment history (rules fixed before seeing data, then amended with reasons), which the paper needs.
 
+- 2026-11-17: **Pancreas baseline started before the supervisor meeting**: `all` + `all_rep2` (Dataset102, liver rules unchanged, `nnunet/pancreas_all.sh`); the other pancreas arms and msd_025 keep/exclude stay open. Reason: user asked to start it (uses GPU time while the deck is reviewed).
 - 2026-11-16: **Notes split into `NOTES.md` (loaded every session) + `notes/` (read on demand).** Reason: NOTES.md had grown to
   143 KB (~38k tokens per session start).
 - 2026-11-15: **No new experiments for now** (size test, stricter-cut arm, tumour-free generation all paused). Let ccAucRepair_rep2 + the best-checkpoint predictions finish, run only CPU evaluation of the existing predictions (incl. checkpoint_best), then stop the GPU session. Reason: user wants to evaluate the findings properly and present them to the supervisor first.
