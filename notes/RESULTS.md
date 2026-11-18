@@ -99,6 +99,12 @@ repair-delete 924; ccAuc unchanged 883 (30 components). Real MSD07 has detached 
 AUC rule near its floor (real pancreas lesions are low-contrast too). Branch `pancreas`, report
 `Research/3 - Pancreas filter rules - measurement findings.pdf`.
 
+**Pancreas baseline `all` (999 synthetic, Dataset102, 2 runs)**, 2026-11-18, checkpoint_final, 238 MSD07 test: val Dice
+at ep1000 0.300/0.294; pancreas Dice 0.209/0.173 (medians 0.126/0.087), **tumour 0.183/0.172** (medians 0.016/0.002),
+run-to-run f1−f0 −0.0105 [−0.024, +0.002] (p 0.84). Lesion recall 0.55/0.52, precision 0.035/0.096, FP components per
+case 17.0/5.3. Pancreas Dice 0 in several cases (msd_005, msd_018, …). `reports/data/test_eval_pancreas/`,
+`$nnUNet_results/test_eval_pancreas/summary.md`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in
