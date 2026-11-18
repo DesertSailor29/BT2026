@@ -7,8 +7,8 @@
 #   2 nnUNetv2_plan_and_preprocess -d 102 -c 3d_fullres (default nnUNetPlans, as liver)
 #   3 make_splits.py: fold 0 = all, fold 1 = all_rep2 (val = the 43 real MSD07 val cases)
 #   4 train fold 0, then fold 1 (default trainer, 1000 epochs, nnUNet_compile=f, nnUNet_n_proc_DA=24, as liver);
-#     each fold's test prediction (238 MSD07 test cases, checkpoint_final) runs in the background during the next
-#     fold's training, as the liver queue did
+#     then the test predictions (238 MSD07 test cases, checkpoint_final) fold by fold, strictly sequential: nothing
+#     shares the GPU (predicting alongside training slowed liver training 2.2x)
 #   5 predict_test.py eval --target pancreas -> $nnUNet_results/test_eval_pancreas/summary.md (+ confusion.md),
 #     progress plots + training curves -> reports/data/test_eval_pancreas/progress/
 # Status: PANCREAS_all__<n>of<N>__ETA_...txt (job_status.py, outputs of all steps) + one NNUNET_D102_... file per
@@ -67,7 +67,7 @@ arms = [a["arm"] for a in json.load(open(sys.argv[1]))]
 assert arms[:2] == ["all", "all_rep2"], f"fold 0/1 must be all/all_rep2, arms.json has {arms}"
 EOF
 
-step "3b copy the $NTEST MSD07 test cases (once, before predictions may run in parallel)"
+step "3b copy the $NTEST MSD07 test cases"
 python "$HERE/predict_test.py" prepare --target pancreas
 
 predict() {  # test prediction + nothing else; logs to its own file
@@ -78,8 +78,7 @@ predict() {  # test prediction + nothing else; logs to its own file
   python "$HERE/predict_test.py" predict --target pancreas --fold "$f"
 }
 
-step "4 train + predict, folds: $FOLDS"
-pred_pids=()
+step "4a train, folds: $FOLDS"
 for f in $FOLDS; do
   fd="$RES/fold_$f"
   if [ -f "$fd/checkpoint_final.pth" ] && [ -f "$fd/validation/summary.json" ]; then
@@ -93,12 +92,13 @@ for f in $FOLDS; do
     nnUNetv2_train $DID 3d_fullres "$f" $mode
   fi
   python -c "import json; m=json.load(open('$fd/validation/summary.json'))['mean']; print('fold $f val Dice (43 real MSD07):', {k: round(v['Dice'], 3) for k, v in m.items()})"
-  step "predict fold $f (background)"
-  predict "$f" > "$PROJ/logs/pancreas_predict_f${f}_$TS.log" 2>&1 &
-  pred_pids+=($!)
 done
-step "waiting for the test predictions (logs $PROJ/logs/pancreas_predict_f*_$TS.log)"
-for p in "${pred_pids[@]}"; do wait "$p" || { echo "a prediction failed, see its log"; exit 1; }; done
+
+step "4b predict the $NTEST test cases, folds: $FOLDS (one after the other)"
+for f in $FOLDS; do
+  step "predict fold $f (log $PROJ/logs/pancreas_predict_f${f}_$TS.log)"
+  predict "$f" > "$PROJ/logs/pancreas_predict_f${f}_$TS.log" 2>&1 || { echo "fold $f prediction failed, see its log"; exit 1; }
+done
 
 step "5 eval"
 base=(); for f in $FOLDS; do base+=("$DID:$f"); done
