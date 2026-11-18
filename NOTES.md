@@ -34,7 +34,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
    <pptx skill>/scripts/apply_theme.js`; needs `nodejs npm libreoffice-impress` (installed on the VM 2026-11-16).
 2. **Pancreas baseline done + diagnosed**: discuss with the user (and supervisor) the appearance gap (fat, lobulation,
-   thick slices) and options (thick-slice/blur augmentation, MAISI fatty glands, real data) vs training filter arms; commit `nnunet/pancreas_all.sh` + `reports/data/test_eval_pancreas/` (ask).
+   thick slices) and options (thick-slice/blur augmentation, MAISI fatty glands, real data) vs training filter arms.
 3. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
    Builds need a venv with pandas/matplotlib/Pillow (Kali VM has none; one-off venv in the session scratchpad).
 
