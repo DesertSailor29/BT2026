@@ -21,7 +21,11 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   next step from how pancreas behaves (its synthetic scans lack the liver's obvious visual faults).
 - **Pancreas baseline done** (2026-11-18 13:57; 238 MSD07 test): tumour Dice 0.183 / 0.172 (rep2 − f0 −0.011, p 0.84),
   pancreas Dice only 0.209 / 0.173 (medians 0.13 / 0.09); much weaker than liver. Numbers `notes/RESULTS.md`.
-  `nnunet/pancreas_all.sh` (sequential edit) and `reports/data/test_eval_pancreas/` still uncommitted.
+  **Why it misses** (`reports/figures/pancreas_cases/README.md`, numbers `case_diagnostics/summary.md`): ~80 % of
+  the reference gland predicted as background (under-segmentation, no label swap); fails on fat around/in the gland
+  (26 % of real test, 2 % of synthetic; gland Dice 0.15 vs 0.30) and 5 mm slices (0.16 vs 0.30); synthetic glands
+  are smooth, unlobulated, in uniform grey tissue → an image-appearance gap a volume filter cannot fix.
+  `nnunet/pancreas_all.sh` (sequential edit) + `reports/data/test_eval_pancreas/progress/` still uncommitted.
   GPU idle: UCloud session can be stopped.
 
 ## Next steps
@@ -29,8 +33,8 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
    <pptx skill>/scripts/apply_theme.js`; needs `nodejs npm libreoffice-impress` (installed on the VM 2026-11-16).
-2. **Pancreas baseline done**: discuss with the user (and supervisor) what the weak pancreas organ Dice (0.19) means
-   and whether to train filter arms; commit `nnunet/pancreas_all.sh` + `reports/data/test_eval_pancreas/` (ask).
+2. **Pancreas baseline done + diagnosed**: discuss with the user (and supervisor) the appearance gap (fat, lobulation,
+   thick slices) and options (thick-slice/blur augmentation, MAISI fatty glands, real data) vs training filter arms; commit `nnunet/pancreas_all.sh` + `reports/data/test_eval_pancreas/` (ask).
 3. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
    Builds need a venv with pandas/matplotlib/Pillow (Kali VM has none; one-off venv in the session scratchpad).
 
@@ -62,9 +66,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-18 15:10 (UCloud): Per user, pancreas case figures + miss diagnosis done (`nnunet/pancreas_case_figures.py`, logs `pancreas_case_figures_20261118_150139/150341/150546.log`, last = final): 15 CT figures P00-P14 (synthetic vs real; 4 best, 2 median, 2 per failure type) in `reports/figures/pancreas_cases/` + READING.md; diagnostics/charts in `reports/data/test_eval_pancreas/case_diagnostics/`. Gland → background 0.79/0.82, recall 0.21/0.18, precision 0.55, z coverage 0.65/0.59; types: gland missed 57, under-seg 88, tumour missed 8, pancreas→tumour 2, none 83. Fat around gland (< 0 HU): 26 % real vs 2 % synthetic, Dice 0.15 vs 0.30; 5 mm slices (38) 0.16; pancreas < 40 HU (18) 0.05. Committed + pushed per user.
 - 2026-11-18 15:02 (UCloud): Per user: figures of succeeding/failing pancreas test cases + why they miss. New `nnunet/pancreas_case_figures.py` (CPU): per-case diagnostics (where the reference gland goes, recall by gland third, HU/size/spacing vs synthetic), charts → `reports/data/test_eval_pancreas/case_diagnostics/`, CT figures → `reports/figures/pancreas_cases/`. Log `/work/Research/logs/pancreas_case_figures_20261118_150139.log`, status `PANCREAS_case_figures__*`.
 - 2026-11-18 14:55 (UCloud): Pancreas `all` + `all_rep2` done 13:57 (f0 train done 04:07, f1 09:25; val Dice 0.300/0.294). Test 238: tumour Dice 0.183/0.172 (diff −0.011 [−0.024, +0.002], p 0.84), pancreas Dice 0.209/0.173, lesion recall 0.55/0.52, FP comps/case 17.0/5.3. No errors in log. GPU idle, session can be stopped.
 - 2026-11-17 22:41 (UCloud): Per user: supervisor meeting agreed pancreas baseline → test → decide. Stopped the first run during build (399/999 written; 8 partial `.tmp.nii.gz` removed) and changed `pancreas_all.sh` so nothing shares the GPU (it predicted fold 0 during fold-1 training, which slowed liver training 2.2×): train both folds, then predict both, then eval. Restarted, resumed with 399 skipped. Log `/work/Research/logs/pancreas_all_20261117_224044.log`. ETA ~Wed 10:30-11:00.
 - 2026-11-17 22:38 (UCloud): Per user started pancreas `all` + `all_rep2` (Dataset102, folds 0/1): `setsid nohup … nnunet/pancreas_all.sh`, log `/work/Research/logs/pancreas_all_20261117_223800.log`; alive, step 1 build (999 synth + 43 val, 238 test) running, status `PANCREAS_all__0of2562`. ~12-14 h on the full B200.
 - 2026-11-17 21:50 (Kali VM): Per user merged branch `pancreas` into main (clean; replayed linearly as ac8e2b0..f0b21f5 by pull --rebase, pushed 2026-11-17 with 5f7ab2c) and made the pancreas `all` training ready: `build_dataset.py` real split for pancreas = `maisi/msd07_split.json` (43 val / 238 test, cases `msd_NNN`), shared helpers `real_case` / `real_files` / `target_of`; `make_splits.py` val names per target; `predict_test.py --target pancreas` (Dataset102, organ metrics `pancreas_*`, no thesis subset, baseline 102:0 + 102:1, out `test_eval_pancreas`; liver stays default); `training_curves.py` one chart per target; new runner `nnunet/pancreas_all.sh`. Fake-tested in the scratchpad (fake MSD07 + pool + fake nnUNetv2_*): full run, rerun skips all, partial resume (5 raw cases, fold 1 --c, missing predictions); liver regression old vs new: split, dataset.json, summary/confusion/per-case CSVs, training curves identical. Uncommitted.
-- 2026-11-16 16:25 (Kali VM): Per user, interviewed on report 4 (supervisor only, ~15 min + discussion; goals: progress, why these filters, what led to post-processing and what it showed, decisions: size-split arms, ccPost in main results + MIDL track, how interesting "post-processing lifts the raw set to filtered quality" is; dislikes in report 4: small chart text, hollow/dashed rep2 markers). Built the deck: `reports/slides/make_assets.py` (simplified charts in reports/style colours, repeat runs as solid labelled rows, checkpoint_best chart new) + `build_deck.js` (pptxgenjs, Arial) → `Research/5 - Liver filter arms - supervisor slides.pptx`. Numbers re-derived from the CSVs, match RESULTS.md; deck uses 0.021 for the ccAucRepair run-to-run gap (exact −0.0215; report 4 text says 0.022). Uncommitted.

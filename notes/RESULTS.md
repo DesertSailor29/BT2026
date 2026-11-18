@@ -104,6 +104,12 @@ at ep1000 0.300/0.294; pancreas Dice 0.209/0.173 (medians 0.126/0.087), **tumour
 run-to-run f1−f0 −0.0105 [−0.024, +0.002] (p 0.84). Lesion recall 0.55/0.52, precision 0.035/0.096, FP components per
 case 17.0/5.3. Pancreas Dice 0 in several cases (msd_005, msd_018, …). `reports/data/test_eval_pancreas/`,
 `$nnUNet_results/test_eval_pancreas/summary.md`.
+Why it misses (2026-11-18, `reports/data/test_eval_pancreas/case_diagnostics/summary.md`, figures
+`reports/figures/pancreas_cases/`): reference gland → background 0.79/0.82, → tumour 0.06; gland recall 0.21/0.18,
+precision 0.55, predicted/reference gland volume median 0.30/0.21; recall equal in head/body/tail. Fat in the 3-voxel
+shell around the gland (< 0 HU) in 26 % of real test vs 2 % of synthetic → gland Dice 0.15 vs 0.30 (2.5 mm only 0.16 vs
+0.35); 5 mm slices (38 cases) 0.16 vs 0.30 at 2.5 mm (synthetic all 1.0 mm); pancreas < 40 HU (18) 0.05. Gland size,
+tumour share and z extent unrelated (|rho| ≤ 0.11).
 
 ## Size split (ids only, no training)
 
