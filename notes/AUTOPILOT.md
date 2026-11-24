@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s11 2026-11-24 23:55, event job_finished (B1_liver_prepost_D113)
+Saw: B1 exit 0 after 1.04 h (`$PROJ/logs/B1_liver_prepost_D113_20261124_224625.log`). Declared comparisons (s10),
+liver test 111: P1 ccRepair saved 0.375 vs baseline+tumTouch 0.365 +0.009 [−0.002, +0.021] p 0.14 (not within ±0.02,
+by 0.001); P2 +0.012 [+0.000, +0.023]; P3 vs baseline +0.072; R1 ccRepair vs baseline+ccPost −0.006 [−0.017, +0.003]
+**equivalent**, R2 (ccPost on both) −0.001 equivalent. ccRepair liver Dice −0.007 vs baseline. → pre ≈ post for the
+one-organ / tumour-in-organ rule (strongest evidence yet for the working thesis; tumTouch alone is slightly weaker
+than the training-time repair, the full cc rule matches it). D113 LiverSynthRepairPos built: 84 changed (= B0),
+tumour voxels −0.35 %, 14 tumour-free (was 3); preprocessed 1019/1019.
+gpu: thickSlice healthy (epoch 812, 17.2 s/epoch, EMA pseudo Dice 0.286, train ETA 00:43, then its test prediction
+~03:00).
+Decision: wrote `nnunet/liver_arm.sh` (the liver twin of `pancreas_arm.sh`: 20 val / 111 test / baseline 101:0+101:1,
+dataset must be preprocessed; `pancreas_arm.sh` untouched because it is being executed). GPU queue unchanged:
+thickSlice (→ ~03:00) → `predict_test_probs.sh 102 0 1` (F2-F4, ~4.4 h) → `liver_arm.sh posRepair 113 --all-synth`
+(~6-7 h), unless a pancreas B arm is confirmed by F2-F4 first. cpu: nothing to start now (no analysis waits: thickSlice
+eval needs its test predictions; F2-F4 need test probs).
+Reasons: MISSION B / s10 declarations; no queue in `ap`, so the next gpu job starts when thickSlice's end wakes a
+session.
+Assumptions: the steps 2-5 of liver_arm.sh work as in pancreas_arm.sh (same code with liver constants; make_splits
+--list on D113 and the missing-dataset error checked; train/predict not run here).
+Alternatives considered: posRepair before the pancreas test probs (rejected: pancreas is the contrast case and F2-F4
+were frozen first); idle cpu work (report 4 checkpoint_best is VM work).
+Started: nothing (both lanes: gpu busy, cpu has no waiting work).
+
 ### s10 2026-11-24 22:55, event job_finished (B0_liver_label_counts)
 Saw: B0 exit 0 after 0.22 h (`$PROJ/logs/B0_liver_label_counts_20261124_222754.log`; spine centre found 999/999).
 On the 999 synthetic D101 labels: **tumTouch changes 598 volumes** (all lose tumour; 1659281 tumour voxels = 4.64 %,

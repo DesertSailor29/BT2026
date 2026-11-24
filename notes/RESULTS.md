@@ -102,6 +102,13 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   `reports/data/post_rules/liver_label_counts/`): tumTouch changes 598 volumes (4.64 % of tumour voxels, 1701 pieces),
   pos 84 (0.35 %, 123 pieces), ccPost 656 (same tumour removal as tumTouch ±267 voxels). The generator often puts
   tumour outside the liver; tumTouch's label twin = ccRepair's tumour part (D103, already trained).
+- **Pre vs post, tumTouch / ccPost on liver** (B1, autopilot s10-s11, declared before; `nnunet/pre_vs_post_liver.py`,
+  `reports/data/post_rules/liver_test_pre_vs_post/summary.md`; 111 test, baseline mean of 101:0/101:1): P1 ccRepair
+  saved 0.375 vs baseline+tumTouch 0.365: +0.009 [−0.002, +0.021] p 0.14 (CI just misses ±0.02 equivalence);
+  P2 ccRepair+tumTouch vs baseline+tumTouch +0.012 [+0.000, +0.023]; P3 ccRepair vs baseline +0.072 [+0.051, +0.094];
+  R1 ccRepair vs baseline+ccPost −0.006 [−0.017, +0.003] **equivalent**; R2 with ccPost on both −0.001 [−0.011, +0.008]
+  equivalent. Liver Dice of ccRepair −0.007 (−0.028 vs baseline+ccPost). → label repair before training ≈ the same
+  rule on the predictions (pre ≈ post), as the working thesis says. D113 posRepair built (84 changed, counts match B0).
 
 ## Pancreas (measured only)
 
