@@ -26,15 +26,28 @@ First screen (s3 code, run s4-s5, `pancreas_val/summary_screen1.md`): **no rule 
 gains from any FP removal, f1 (6/case) loses real lesions from it; grow rules lift gland Dice (+0.05 at t 0.1) but
 dilation does about as much for the gland (under-segmentation: any growth helps), while hurting tumour.
 
-Second screen (s5, `postrules2`; rows added when the run ends):
+Second screen (s5 code, run s5-s6, `postrules2`, `pancreas_val/summary_screen2.md`; first-screen rules recomputed,
+same numbers):
 
 | # | rule | anatomical fact | parameter (source) | val effect f0 / f1 | verdict |
 |---|---|---|---|---|---|
-| 10 | grow0.05 / grow0.02 | as 8, lower t | t (sweep) | pending | |
-| 11 | grow0.1d20 / grow0.05d20 | as 8, wider window | 20 mm | pending | |
-| 12 | growT0.2 / growT0.1 | the tumour continues where the model was nearly sure | t; 10 mm, -50/300 HU | pending | |
-| 13 | minLes0.5 / minLes1.75 | as 7, sensitivity | 0.5 ml; 1.75 ml (p5 val lesions) | pending | |
-| 14 | pos | pancreas lies just anterior to the spine | spine from bone HU > 200 (image); 2D prior from the other 42 val labels (LOO), 10 mm margin, 50 % inside | pending | |
-| 15 | combos: minLes+tumNear10, pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.05+minLes, grow0.1+growT0.2+minLes, grow0.1+pos+minLes | | | pending | |
-| C | thr0.1 / thr0.05 | control: lower threshold without anatomy (no distance / connectivity / HU) | | pending | |
-| C | rand_minLes / rand_pos | control: random removal matched to minLes / pos | seeded | pending | |
+| 10 | grow0.05 / grow0.02 | as 8, lower t | t (sweep) | tumour -0.005/+0.009, -0.007/+0.007; gland +0.072/+0.064, +0.097/+0.088 | gland gain grows as t drops; tumour ±0 |
+| 11 | grow0.1d20 / grow0.05d20 | as 8, wider window | 20 mm | = d10 (±0.002) | window not binding |
+| 12 | growT0.2 / growT0.1 | the tumour continues where the model was nearly sure | t; 10 mm, -50/300 HU | -0.002/+0.004, -0.004/+0.005 | nothing |
+| 13 | minLes0.5 / minLes1.75 | as 7, sensitivity | 0.5 ml; 1.75 ml (p5 val lesions) | +0.011/+0.004 (lost 2), +0.015/+0.008 (lost 5) | 0.5: mean < 0.01; 1.75: lost 5 (> 5 %) |
+| 14 | pos | pancreas lies just anterior to the spine | spine from bone HU > 200; LOO 2D prior of the other 42 val labels, 10 mm margin, 50 % inside | +0.005/+0.002, 0 lesions lost, FP pieces 17 → 11 / 6 → 4.7 | safe but small |
+| 15a | minLes+tumNear10 | 7 + 4 | | +0.017/-0.005 | f0 only |
+| 15b | **pos+minLes** | 14 + 7 | | +0.015/+0.006 (lost 4 of 86) | **promising** → frozen |
+| 15c | **grow0.1+minLes** | 8 + 7 | | +0.007/+0.018 (lost 2); gland +0.053/+0.047 | **promising** → frozen |
+| 15d | **grow0.1+tumNear10** | 8 + 4 | | +0.014/+0.019 (lost 0); gland +0.053/+0.047 | **promising** (best mean) → frozen |
+| 15e | grow0.05+minLes | 10 + 7 | | +0.004/+0.017 | promising; variant of 15c, not frozen |
+| 15f | grow0.1+growT0.2+minLes | 8 + 12 + 7 | | +0.008/+0.020 | promising; growT adds ~0.001, not frozen |
+| 15g | **grow0.1+pos+minLes** | 8 + 14 + 7 | | +0.009/+0.019 (lost 2) | **promising** → frozen |
+| C | thr0.1 / thr0.05 | control: lower threshold without anatomy | | tumour -0.005/+0.008, -0.006/+0.009; **gland +0.058/+0.049, +0.081/+0.068** | **plain thresholding lifts the gland as much as grow** (grow0.1 +0.053/+0.047): the anatomical limits of grow add nothing on val |
+| C | rand_minLes / rand_pos | random removal matched to minLes / pos | seeded | -0.115/-0.079, -0.007/-0.041 | random removal hurts |
+
+Reading: the tumour gains of the winners are roughly additive parts: removal of small pieces (minLes) / pieces far from
+the gland (tumNear10) / outside the position prior (pos), plus growing the gland, which reconnects tumours (f1).
+The gland gain of grow is a lower threshold, not anatomy (thr0.1 ≥ grow0.1). Frozen set (s6, `notes/AUTOPILOT.md`):
+pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.1+pos+minLes; controls incl. new thr0.1+X twins (A3,
+`nnunet/post_rules_test.py`, `pancreas_{val,test}_frozen/`).

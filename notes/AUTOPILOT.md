@@ -4,6 +4,55 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s6 2026-11-24 20:35, event job_finished (A2b_postrules_val)
+Saw: A2b second val screen exit 0 after 0.21 h (`$PROJ/logs/A2b_postrules_val_20261124_200057.log`, argmax
+agreement 1.0000 over 86). **6 combinations promising**, no single rule: pos+minLes +0.015/+0.006 (lost 4 of 86),
+grow0.1+minLes +0.007/+0.018, grow0.1+tumNear10 +0.014/+0.019 (lost 0), grow0.05+minLes +0.004/+0.017,
+grow0.1+growT0.2+minLes +0.008/+0.020, grow0.1+pos+minLes +0.009/+0.019. pos alone +0.005/+0.002 (0 lost, FP pieces
+17 → 11), minLes1.75 +0.015/+0.008 but lost 5 (> 5 %), growT ±0, d20 = d10. **Control thr0.1 lifts gland Dice
++0.058/+0.049, as much as grow0.1 (+0.053/+0.047)**: the gland gain is a lower threshold, not the anatomical limits.
+Ledger filled (rows 10-15, `pancreas_val/summary_screen2.md`). gpu: G1 thickSlice healthy (epoch 78 at 20:11,
+17.3 s/epoch, EMA pseudo Dice 0.233, no NaN; train ETA ~00:40, then test prediction ~2.2 h).
+
+**FREEZE (A3, before any test run of these rules; nothing below may change after reading test):**
+- Frozen rules, Holm over these 4 (per run and for the per-case mean of the 2 runs), main metric per-case tumour Dice
+  vs the saved prediction, both baseline runs 102:0 / 102:1, checkpoint_final, 238 MSD07 test cases:
+  F1 `pos+minLes`, F2 `grow0.1+minLes`, F3 `grow0.1+tumNear10`, F4 `grow0.1+pos+minLes`.
+- Exact parameters (code `nnunet/post_rules.py` at commit of this entry, wrapper `nnunet/post_rules_test.py`
+  VERSION frozen1): minLes 1.19 ml (smallest real val lesion); tumNear 10 mm; grow t 0.1 on p(pancreas)+p(tumour),
+  10 mm, 26-connected to the predicted organ, -50..300 HU, label argmax(p1, p2); pos: spine centre from bone > 200 HU
+  (40 mm half-width, posterior half of the body, 20 mm z median), prior = union of all 43 real val labels'
+  spine-relative 2D occupancy (2 mm bins, 10 mm margin), pieces < 50 % inside → bg.
+- Controls / components (reported, not in Holm): minLes, pos, grow0.1, tumNear10, thr0.1, thr0.1+minLes,
+  thr0.1+tumNear10, thr0.1+pos+minLes (new: the combos with a plain threshold instead of grow), open1, rand_minLes,
+  rand_pos+minLes (random tumour pieces matched in count).
+- Declared secondary contrasts: grow0.1+X − thr0.1+X (tumour + pancreas Dice; tests the anatomical part of grow);
+  pancreas Dice of every rule. Expectation from val (written before test): grow ≈ thr.
+- Confirmed on test = Holm p < 0.05 for the 2-run mean and mean gain > 0 in both runs and gain >= 0.01 (noise
+  floor). Only confirmed rules go to B.
+Decision: cpu: `A3a_frozen` = post_rules_test.py on val (all frozen + new thr controls; sanity: must reproduce the
+screen) then on test with `--no-probs` (F1 + no-prob controls, now). gpu: after thickSlice ends (~05:30), the next
+session starts `predict_test_probs.sh 102 0 1` (new; ~4.4 h, ~64 GB; disk 2.1 PB free) for F2-F4, then the full
+test run of post_rules_test.py. B-prep (cpu, after A3a): count how many of the 999 synthetic training labels minLes
+and pos would change (if F1 confirms; counting itself selects nothing).
+Reasons: MISSION A3 (<= 4 frozen, controls, one test evaluation). The 4 chosen are the promising ones that are
+distinct: one without probabilities (pos+minLes, has a pre-training twin), the simplest grow combo (minLes), the
+best mean (tumNear10), and the full combination; grow0.05+minLes and +growT0.2 are near-duplicates (growT adds
+~0.001). No gland-only rule frozen: grow0.1 does not beat thr0.1 on val (my s5 condition not met); grow0.1 and
+thr0.1 are still reported as controls with pancreas Dice. The thr0.1+X twins make the grow-vs-threshold question
+testable inside the combinations.
+Assumptions: pos prior on test from all 43 val labels (no test information; on val it stays leave-one-out). Probs
+on test reproduce the saved test_final label maps (asserted > 0.995 argmax agreement per case; the same
+checkpoint and nnU-Net settings). GPU after thickSlice: test probs before any B arm, because B needs a confirmed
+rule and F1 may already confirm from the CPU run tonight; if F1 confirms and changes >= 50 training labels, its B
+arm could go first instead (decided by the session that sees both).
+Alternatives considered: interrupting thickSlice for test probs (no: it is half-way, and G1 is the image-gap
+question); freezing grow0.05+minLes (near-duplicate); minLes1.75 (lost > 5 %); Holm over 8 incl. per-run (the
+2-run mean is the primary, per-run reported).
+Fake test: post_rules_test.py --split val on msd_006 + msd_025: per-case values identical to the screen (e.g.
+msd_006 f0 pos+minLes 0.3823, grow0.1+tumNear10 0.3673).
+Started: cpu `A3a_frozen` (log in the NOTES Log), expected ~20-30 min.
+
 ### s5 2026-11-24 20:00, event job_finished (A2_postrules_val)
 Saw: A2 first screen exit 0 after 0.3 h (`$PROJ/logs/A2_postrules_val_20261124_193604.log`; 86 run/case pairs, prob
 argmax agreement 1.0000). **No rule promising** (gain > 0 in both runs, mean >= 0.01, <= 5 % lesions lost). Val
