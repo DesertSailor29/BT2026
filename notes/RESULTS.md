@@ -90,6 +90,14 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   p 0.11, rep2 −0.012 p 0.08. → No late overfitting of ccReject: its val-best checkpoint is much worse than final
   (−0.049); the cc arms gain from late training, the baseline does not. Only the AUC arms beat the baseline at both
   checkpoints; at best, nothing beats the baseline once both are post-processed.
+- **Autopilot frozen liver rules on the predictions** (A3L, s8 freeze / s9 test, exploratory; 111 test, runs 101:0 /
+  101:1, none 0.301/0.305; `reports/data/post_rules/liver_test_frozen/summary.md`, ledger
+  `reports/data/post_rules/ledger.md`): Holm over 3. **tumTouch** (tumour pieces must touch predicted liver) +0.065 /
+  +0.061, mean +0.063 [+0.046, +0.081] Holm 1e-14 → confirmed; **pos** (spine-relative position prior of the 20 val
+  labels) +0.013 [+0.007, +0.019] Holm 8e-16, liver Dice +0.017 → confirmed (small); tissueVal (1..210 HU) +0.009
+  [+0.002, +0.016] → not confirmed (< 0.01). ccPost+pos = ccPost, ccPost+tissueTxt +0.000 (nothing adds to ccPost);
+  tumTouch − ccPost −0.016; controls open1 +0.011 (≈ pos), rand_tumTouch −0.187, rand_pos −0.035 (matched random
+  piece removal hurts: which pieces, not how many).
 
 ## Pancreas (measured only)
 

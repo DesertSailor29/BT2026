@@ -4,6 +4,39 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s9 2026-11-24 22:30, event job_finished (A3L_liver_test)
+Saw: A3L exit 0 after 1.12 h (`$PROJ/logs/A3L_liver_test_20261124_211829.log`; the 6 "error" lines are table rows
+with "rand_"/"nan"). Val sanity reproduces the s8 screen exactly. **Liver test (111 x 101:0 / 101:1, none 0.301 / 0.305):**
+- **FL1 tumTouch CONFIRMED**: +0.065 / +0.061, mean +0.063 [+0.046, +0.081], Holm 1e-14; liver Dice unchanged; FP
+  tumour pieces 67 → 9 / 46 → 8; lesion recall 0.422 → 0.408 / 0.443 → 0.439.
+- **FL2 pos CONFIRMED**: +0.011 / +0.014, mean +0.013 [+0.007, +0.019], Holm 8e-16; liver Dice +0.017.
+- **FL3 tissueVal NOT confirmed**: mean +0.009 [+0.002, +0.016] (Holm 5e-5, but < the 0.01 floor).
+- References/controls: ccPost +0.078 (0.381, as known), ccTol10 +0.070, ccPost+pos = ccPost exactly,
+  ccPost+tissueTxt +0.000; tumNear10 +0.056; tissueTxt +0.004; **open1 +0.011 [+0.007, +0.016] ≈ pos** (a generic
+  opening does as much as the position prior for tumour Dice; pos also lifts liver Dice, open1 does not);
+  rand_tumTouch −0.187, rand_pos −0.035. Contrast tumTouch − ccPost −0.016 [−0.025, −0.008] (f0 −0.014, f1 −0.018):
+  the tumour-in-organ rule alone gets ~80 % of the one-organ gain; nothing adds to ccPost on test either.
+Meaning for the thesis: on liver, the anatomical rules that help are those against *disconnected false-positive
+pieces* (one organ, tumour in organ); a matched random removal of the same number of pieces is strongly harmful, so it
+is which pieces are removed (anatomy), not how many. The position prior is real but small and ≈ a generic opening.
+gpu: thickSlice healthy (epoch 525 at 22:24, 17.2 s/epoch, EMA pseudo Dice 0.279; train ETA ~00:40, then its test
+prediction in the same runner).
+Decision: cpu: B-prep for the confirmed rules (MISSION B): new `nnunet/label_rule_counts.py` applies tumTouch and pos
+(frozen s8 parameters, test-time prior = union of 20 val labels) + ccPost as reference to the 999 D101 synthetic
+labels and counts changed volumes. Next session: if tumTouch or pos changes >= 50 volumes, build a repair dataset
+(new id >= 113) on the cpu lane and queue its training after the pancreas test probs; else record "generator obeys".
+gpu: unchanged (thickSlice; then `predict_test_probs.sh 102 0 1` for F2-F4).
+Reasons: MISSION B ("only for confirmed rules"; < 50 changed → no arm). tumTouch is a new liver rule distinct from cc
+(a tumour piece outside the liver is always also outside the main structure, so its label twin is a subset of
+ccRepair's changes: expected small-to-moderate count; the count decides).
+Assumptions: the spine-centre finder works on synthetic MAISI images (3/3 found in the fake test); the pos prior from
+real val labels is the right one for synthetic labels too (it is the frozen test-time prior).
+Alternatives considered: a tumTouch pre arm without counting (MISSION requires the count); a liver pre arm for pos
+(≈ open1 control, small gain: low priority even if the count allows); waiting for pancreas F2-F4 before any liver B
+(independent lanes).
+Fake test: liver_0000-0002: runs, 10 s for 3 volumes; tumTouch = ccPost on these 3 (2 changed), pos 0 changed.
+Started: cpu `B0_liver_label_counts` (log path in the NOTES Log, ~15-20 min).
+
 ### s8 2026-11-24 21:25, event job_finished (A2L_liver_val)
 Saw: A2L liver val screen exit 0 after 0.45 h (`$PROJ/logs/A2L_liver_val_20261124_204456.log`; 20 LiTS val x 101:0 /
 101:1, 199 real val lesions; the 4 "error" lines were table rows containing "rand_"/"nan"). none 0.289 / 0.297.

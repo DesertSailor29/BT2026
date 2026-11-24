@@ -79,3 +79,8 @@ Same rule definitions as pancreas ("pancreas" reads "liver"); parameters from th
 
 Frozen set (s8, `notes/AUTOPILOT.md`): tumTouch, pos, tissueVal (Holm over 3); references ccPost, ccTol10, ccPost+pos,
 ccPost+tissueTxt; controls tumNear10, tissueTxt, open1, rand_tumTouch, rand_pos (`nnunet/post_rules_test_liver.py`).
+
+Liver test (A3L, s9, 111 LiTS test, 2-run mean vs saved; `liver_test_frozen/summary.md`): **tumTouch +0.063
+[+0.046, +0.081] confirmed**, **pos +0.013 [+0.007, +0.019] confirmed** (liver Dice +0.017), tissueVal +0.009 not
+confirmed (< 0.01); ccPost +0.078, ccPost+pos = ccPost, open1 +0.011, rand_tumTouch −0.187, rand_pos −0.035;
+tumTouch − ccPost −0.016 [−0.025, −0.008].
