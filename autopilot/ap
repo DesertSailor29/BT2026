@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Helper for autopilot sessions (and the user): start the one watched job, ask for a wake-up, stop the autopilot.
+# State lives in $AP_DIR (default $PROJ/autopilot, persistent, not in git). See autopilot/MISSION.md.
+#
+#   ap start [--lane gpu|cpu] <name> '<command>' [--env nnunet|maisi]
+#                                                      start a detached, logged job; one per lane (default gpu; cpu =
+#                                                      jobs that never touch the GPU); runs in the repo with
+#                                                      nnunet/env.sh (default) or maisi/env.sh sourced
+#   ap wake-at '<date -d spec>'                        e.g. '+3 hours' or '2026-11-26 14:00': a session is started
+#                                                      then even if the job still runs (ETA check / hang check)
+#   ap stop '<reason>'                                 the supervisor ends after the current session
+#   ap status                                          job, alive?, deadline, hours left, wake-up, sessions
+#   ap hours-left                                      hours until the deadline (float)
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$HERE")"
+: "${PROJ:?source maisi/env.sh first}"
+AP_DIR="${AP_DIR:-$PROJ/autopilot}"
+mkdir -p "$AP_DIR/jobs" "$PROJ/logs"
+
+job_alive() {  # job_alive <lane>
+  [ -f "$AP_DIR/job_$1" ] || return 1
+  local JOB_PID=""
+  # shellcheck disable=SC1090
+  source "$AP_DIR/job_$1"
+  [ -n "$JOB_PID" ] && kill -0 "$JOB_PID" 2>/dev/null
+}
+
+hours_left() {
+  [ -f "$AP_DIR/deadline" ] || { echo "nan"; return; }
+  python3 -c "import time; print(round(($(cat "$AP_DIR/deadline")-time.time())/3600, 2))"
+}
+
+cmd="${1:-status}"; shift || true
+case "$cmd" in
+  start)
+    lane=gpu envf=nnunet pos=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --lane) lane="${2:?gpu|cpu}"; shift 2 ;;
+        --env) envf="${2:?nnunet|maisi}"; shift 2 ;;
+        *) pos+=("$1"); shift ;;
+      esac
+    done
+    name="${pos[0]:?name}"; command="${pos[1]:?command}"
+    [[ "$lane" =~ ^(gpu|cpu)$ ]] || { echo "lane: gpu or cpu"; exit 2; }
+    [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "name: letters, digits, _ . - only"; exit 2; }
+    if job_alive "$lane"; then echo "the $lane lane is busy ($(grep JOB_NAME "$AP_DIR/job_$lane")): one job per lane"; exit 1; fi
+    ts="$(date +%Y%m%d_%H%M%S)"
+    log="$PROJ/logs/${name}_$ts.log"
+    pidf="$AP_DIR/jobs/${name}_$ts.pid"
+    exitf="$AP_DIR/jobs/${name}_$ts.exit"
+    printf '%s\n' "$command" > "$AP_DIR/jobs/${name}_$ts.cmd"
+    REPO="$REPO" ENVF="$REPO/$envf/env.sh" CMDF="$AP_DIR/jobs/${name}_$ts.cmd" PIDF="$pidf" EXITF="$exitf" \
+      setsid nohup bash -c 'echo $$ > "$PIDF"; source "$ENVF" && cd "$REPO" && bash "$CMDF"; rc=$?; echo "$rc $(date +%s)" > "$EXITF"' \
+      > "$log" 2>&1 < /dev/null &
+    for _ in $(seq 50); do [ -s "$pidf" ] && break; sleep 0.1; done
+    pid="$(cat "$pidf" 2>/dev/null || true)"
+    [ -n "$pid" ] || { echo "job did not start (no pid file), see $log"; exit 1; }
+    cat > "$AP_DIR/job_$lane" <<EOF
+JOB_NAME='$name'
+JOB_PID='$pid'
+JOB_LOG='$log'
+JOB_START='$(date +%s)'
+JOB_EXIT_FILE='$exitf'
+JOB_CMD_FILE='$AP_DIR/jobs/${name}_$ts.cmd'
+EOF
+    echo "started $name on the $lane lane: pid $pid"
+    echo "log $log"
+    ;;
+  wake-at)
+    t="$(date -d "${1:?date spec}" +%s)" || exit 2
+    echo "$t" > "$AP_DIR/wake_at"
+    echo "wake-up at $(date -d "@$t" '+%a %d %b %H:%M %Z')"
+    ;;
+  stop)
+    echo "${1:-stopped by a session} ($(date '+%F %T'))" > "$AP_DIR/STOP"
+    echo "STOP written: the supervisor ends after this session"
+    ;;
+  hours-left) hours_left ;;
+  status)
+    echo "AP_DIR $AP_DIR"
+    [ -f "$AP_DIR/deadline" ] && echo "deadline $(date -d "@$(cat "$AP_DIR/deadline")" '+%a %d %b %H:%M %Z') ($(hours_left) h left)"
+    for lane in gpu cpu; do
+      if [ -f "$AP_DIR/job_$lane" ]; then
+        # shellcheck disable=SC1090
+        source "$AP_DIR/job_$lane"
+        if job_alive "$lane"; then state=running; else state="ended (exit: $(cat "$JOB_EXIT_FILE" 2>/dev/null || echo 'no exit file'))"; fi
+        echo "$lane lane: $JOB_NAME pid $JOB_PID $state, started $(date -d "@$JOB_START" '+%a %H:%M'), log $JOB_LOG"
+      else echo "$lane lane: no job yet"; fi
+    done
+    [ -f "$AP_DIR/wake_at" ] && echo "wake-up $(date -d "@$(cat "$AP_DIR/wake_at")" '+%a %d %b %H:%M')"
+    [ -f "$AP_DIR/STOP" ] && echo "STOP: $(cat "$AP_DIR/STOP")"
+    echo "sessions $(cat "$AP_DIR/counter" 2>/dev/null || echo 0)"
+    sp="$(cat "$AP_DIR/supervisor.pid" 2>/dev/null || true)"
+    if [ -n "$sp" ] && kill -0 "$sp" 2>/dev/null; then echo "supervisor pid $sp alive"; else echo "supervisor not running"; fi
+    ;;
+  *) sed -n 2,14p "$0"; exit 2 ;;
+esac

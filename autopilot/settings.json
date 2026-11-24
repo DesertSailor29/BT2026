@@ -1,0 +1,27 @@
+{
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git checkout main:*)",
+      "Bash(git switch main:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase -i:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -D:*)",
+      "Bash(sudo:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf *nnunet_data*)",
+      "Bash(rm -rf *maisi_runs*)",
+      "Bash(rm -rf *raw_data*)",
+      "Bash(rm -r *nnunet_data*)",
+      "Bash(rm -r *maisi_runs*)",
+      "Bash(rm -r *raw_data*)"
+    ]
+  }
+}

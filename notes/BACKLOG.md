@@ -12,6 +12,10 @@ New experiments are paused until the findings are presented to the supervisor (D
 - **Pancreas arms:** which of all / ccReject 911 / ccRepair 999 / ccRepairDel 924 / ccAucRepair; `all` + `all_rep2`
   (baseline + noise floor) are ready to run: `nnunet/pancreas_all.sh` (NOTES Next steps). Better pancreas filter options in report 3 (cc + regenerate the 75,
   TotalSegmentator organ agreement).
+- **Pancreas appearance gap beyond slice thickness** (2026-11-24): fat around / inside the gland and lobulation are missing from the synthetic scans. Options: does MAISI's label set / conditioning allow fatty or lobulated glands? intensity edits around the gland (crude, hand-made); real data (against synthetic-only). Design with user + supervisor.
+- **Pancreas ccReject** (dropped from the autopilot 2026-11-24, user: cc flags only 88/999 pancreas volumes).
+- **Explore/confirm split of the 238 pancreas test cases** (more screening power than 43 val; amends 'test never decides').
+- **Pancreas ccAucRepair**: needs a pancreas port of `build_repair_dataset.py` (liver-only); the pancreas cc caches were measured on the uncropped pool labels, D102 labels are cropped (offsets!).
 - aucReject (732) + aucRepair alone (AUC without cc; mostly repeats cc); ccAucReject; random subset of the best reject
   arm's size; train on the rejects; a real-only reference model (would cost test cases).
 

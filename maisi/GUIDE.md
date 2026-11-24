@@ -379,6 +379,34 @@ approve each command. Because the job is detached, it keeps running if the termi
 three install lines above again, then `claude --continue` to resume the previous conversation (it is stored in
 `$PROJ/.claude-config`). Claude finds the run through its log in `$PROJ/logs` and the path in `NOTES.md`.
 
+## Optional: autopilot (unattended Claude sessions that run the next experiments)
+
+For days without you: `autopilot/supervisor.sh` watches one job and, when it ends, starts a *new* headless Claude
+session that reads `autopilot/MISSION.md` (plan, budget, rules) + `notes/AUTOPILOT.md` (journal) + a wake-up report,
+decides the next step, starts it with `autopilot/ap`, pushes the notes to branch `autopilot`, and exits.
+
+1. Start the UCloud job (full B200) with a time limit of at least the hours you give it (e.g. 48 h).
+2. Install + log in Claude Code as in "Optional: Claude Code on UCloud" above (login is kept in `$PROJ/.claude-config`).
+   Check once that `claude -p "say ok"` answers without asking anything.
+3. `git -C "$PROJ/BT2026" pull` (main, clean working tree: the supervisor switches to branch `autopilot`).
+4. Smoke test (~5 min, two tiny sessions, no GPU work):
+   ```bash
+   setsid nohup bash -c 'source "$PROJ/BT2026/nnunet/env.sh" && bash "$PROJ/BT2026/autopilot/supervisor.sh" --smoke' \
+     > "$PROJ/logs/autopilot_smoke_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+   ```
+   Expect in that log two sessions ending `rc 0` and `STOP: smoke-ok`; read `$PROJ/autopilot_smoke/sessions/001_smoke1.out.md`
+   (status ok, job started, push dry-run ok, GPU listed).
+5. Real start; deadline ~1 h before the UCloud job ends (`--until '2026-11-27 07:00'` or `--hours N`):
+   ```bash
+   setsid nohup bash -c 'source "$PROJ/BT2026/nnunet/env.sh" && bash "$PROJ/BT2026/autopilot/supervisor.sh" --until "2026-11-27 07:00"' \
+     > "$PROJ/logs/autopilot_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
+   ```
+Follow from anywhere: branch `autopilot` on GitHub (`notes/AUTOPILOT.md`, `NOTES.md` Log). On UCloud:
+`bash autopilot/ap status`, the supervisor log, `$PROJ/autopilot/sessions/` (prompt + final message of each
+session; `claude --resume <id>` from `*.session_id` reopens one). Stop: `bash autopilot/ap stop 'reason'` (the
+running job keeps going). Options and env (model, permission mode, limits) are in the header of `supervisor.sh`.
+If the smoke test fails on permissions, try `AP_PERMISSION_MODE=auto` (auto mode) in front of the command.
+
 ## Optional: email notifier for long runs
 
 `notify.py` watches a run directory and mails you at milestones, each with progress, failures, the rate and the

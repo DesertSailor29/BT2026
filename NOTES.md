@@ -26,9 +26,15 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   (26 % of real test, 2 % of synthetic; gland Dice 0.15 vs 0.30) and 5 mm slices (0.16 vs 0.30); synthetic glands
   are smooth, unlobulated, in uniform grey tissue → an image-appearance gap a volume filter cannot fix.
   All committed (runner, eval summary + per-case CSVs in `reports/data/test_eval_pancreas/`, figures).
-  GPU idle: UCloud session can be stopped.
-
+- **Autopilot built (2026-11-24, VM, not yet started)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
+  headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
+  `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
+  first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
+  GPU meanwhile val probabilities + `thickSlice` (D112, `nnunet/build_thick_dataset.py`). Runs until Fri 27 Nov.
+  Fake-tested on the VM; autopilot work goes to branch `autopilot`.
 ## Next steps
+0. **Autopilot**: user starts it on UCloud (GUIDE "Optional: autopilot": smoke test, then `--until 'Fri 27 Nov 07:00'`).
+   Friday: review branch `autopilot` (`notes/AUTOPILOT.md` summary on top), then merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -47,6 +53,8 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
 - Analysis: exploratory; per-case tumour Dice, baseline = mean of the two `all` runs, Holm over 4 + 0.01 noise floor;
   checkpoint_final primary, checkpoint_best secondary; ccPost/ccAucPost exploratory (declared after the results).
 - Supervisor meeting (2026-11-17): run + test the pancreas baseline first; next steps decided from its behaviour.
+- Autopilot (2026-11-24): rules on predictions first (val screen, test confirms frozen rules), then pre arms for winners;
+  `autopilot/MISSION.md`, branch `autopilot`.
 
 ## Open questions
 - Report the main results with or without ccPost (main analysis was fixed as 'saved predictions' before results)?
@@ -66,9 +74,6 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Uncommitted.
+- 2026-11-24 17:55 (kali): Per user: autopilot for ~2 days unattended B200 (supervisor + `ap` helper + MISSION plan + journal), E1 builder `build_thick_dataset.py` (D112) + runner `pancreas_arm.sh`; fake-tested (tiny volumes; fake `claude` end to end). Decisions with reasons in `notes/AUTOPILOT.md` s0. Uncommitted.
 - 2026-11-18 15:15 (UCloud): Per user committed + pushed everything: `pancreas_all.sh` (sequential), pancreas eval summary/confusion/per-case CSVs (copied from `$nnUNet_results/test_eval_pancreas`, CSVs force-added like liver), progress + training curves, case diagnostics CSVs. Working tree clean; GPU idle, session can be stopped.
-- 2026-11-18 15:10 (UCloud): Per user, pancreas case figures + miss diagnosis done (`nnunet/pancreas_case_figures.py`, logs `pancreas_case_figures_20261118_150139/150341/150546.log`, last = final): 15 CT figures P00-P14 (synthetic vs real; 4 best, 2 median, 2 per failure type) in `reports/figures/pancreas_cases/` + READING.md; diagnostics/charts in `reports/data/test_eval_pancreas/case_diagnostics/`. Gland → background 0.79/0.82, recall 0.21/0.18, precision 0.55, z coverage 0.65/0.59; types: gland missed 57, under-seg 88, tumour missed 8, pancreas→tumour 2, none 83. Fat around gland (< 0 HU): 26 % real vs 2 % synthetic, Dice 0.15 vs 0.30; 5 mm slices (38) 0.16; pancreas < 40 HU (18) 0.05. Committed + pushed per user.
-- 2026-11-18 15:02 (UCloud): Per user: figures of succeeding/failing pancreas test cases + why they miss. New `nnunet/pancreas_case_figures.py` (CPU): per-case diagnostics (where the reference gland goes, recall by gland third, HU/size/spacing vs synthetic), charts → `reports/data/test_eval_pancreas/case_diagnostics/`, CT figures → `reports/figures/pancreas_cases/`. Log `/work/Research/logs/pancreas_case_figures_20261118_150139.log`, status `PANCREAS_case_figures__*`.
-- 2026-11-18 14:55 (UCloud): Pancreas `all` + `all_rep2` done 13:57 (f0 train done 04:07, f1 09:25; val Dice 0.300/0.294). Test 238: tumour Dice 0.183/0.172 (diff −0.011 [−0.024, +0.002], p 0.84), pancreas Dice 0.209/0.173, lesion recall 0.55/0.52, FP comps/case 17.0/5.3. No errors in log. GPU idle, session can be stopped.
-- 2026-11-17 22:41 (UCloud): Per user: supervisor meeting agreed pancreas baseline → test → decide. Stopped the first run during build (399/999 written; 8 partial `.tmp.nii.gz` removed) and changed `pancreas_all.sh` so nothing shares the GPU (it predicted fold 0 during fold-1 training, which slowed liver training 2.2×): train both folds, then predict both, then eval. Restarted, resumed with 399 skipped. Log `/work/Research/logs/pancreas_all_20261117_224044.log`. ETA ~Wed 10:30-11:00.
-- 2026-11-17 22:38 (UCloud): Per user started pancreas `all` + `all_rep2` (Dataset102, folds 0/1): `setsid nohup … nnunet/pancreas_all.sh`, log `/work/Research/logs/pancreas_all_20261117_223800.log`; alive, step 1 build (999 synth + 43 val, 238 test) running, status `PANCREAS_all__0of2562`. ~12-14 h on the full B200.

@@ -1,0 +1,90 @@
+# Autopilot journal (newest first)
+
+Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MISSION.md`). Each entry: what the
+session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
+summary for the user at the top.
+
+### s0b 2026-11-24 18:30, plan revised with the user (Kali VM)
+Saw: the user rejected pancreas ccReject as E2 and set the direction: the paper's main finding is that for these
+filters it hardly matters whether a rule is applied before training (labels) or after (predictions); what matters is
+whether the rule reflects real anatomy. The UCloud sessions may explore. Time: until Friday 27 Nov (~60 h), when the
+user reviews and builds on the results.
+Decision 1: **drop pancreas ccReject.** Reasons: cc flags only 88/999 pancreas volumes, so it tests a rule against
+an error this generator rarely makes; it spends ~7.5 GPU h on a pre-training test before knowing whether the rule
+matters at all (I chose it for being the planned check and needing no code: wrong criteria here).
+Decision 2: **Phase A first: anatomical rules on the predictions (CPU)**: A1 the fixed pancreas replication of
+ccPost / ccAucPost (val + test), A2 open exploration of anatomical rules on the val predictions with non-anatomical
+controls and a ledger of everything tried, A3 freeze <= 4 rules per organ, one test confirmation.
+Reasons: tests the thesis directly and cheaply; post-hoc results tell which rules are worth a ~8 GPU h pre-training
+arm; the liver already shows pre ≈ post for cc and AUC, so pancreas (labels fine, predictions poor) is the
+informative contrast. Selection on val keeps the decision in force "test never decides"; controls separate anatomy
+from "any removal helps".
+Assumptions: 43 val cases (20 liver) suffice to screen; the val predictions in `fold_X/validation` are
+checkpoint_final (nnU-Net writes them with the final weights).
+Alternatives: splitting the 238 test cases into explore / confirm halves (more power for screening, but it amends a
+decision in force and halves the confirmation set: left for the user); TotalSegmentator organ masks for position
+rules (a real-trained model; later, if image landmarks are not enough).
+Decision 3: **Phase B only for confirmed rules, and only if the rule changes >= 50 of the 999 training labels**;
+pre vs post compared with a ±0.02 equivalence margin declared in advance. Reasons: fewer than 50 changed volumes
+cannot move a 999-volume training set measurably (liver ccRepair vs ccRepairDel differed by 157 volumes and ~0.005);
+"the generator already obeys the rule" is itself the pre-vs-post answer. ±0.02 = twice the noise floor, the size of
+the liver run-to-run gap.
+Decision 4: **keep thickSlice (E1) on the GPU lane during Phase A**, after a 1 h export of val probabilities
+(needed for rules that grow the gland, the only kind that can fix under-segmentation). Reason: Phase A needs no GPU
+for ~10-14 h; the image gap is the other open pancreas question.
+Decision 5: **two lanes (gpu, cpu)** in the supervisor, so analysis and dataset builds run while a training runs;
+either lane's job end wakes a session. Tested with a fake `claude` (both lanes, exit codes 0/7, busy-lane refusal).
+Time estimate: G0 1 h + G1 9 h; A ~10-14 h (parallel); B 1-3 arms x ~8 h; reps 1-2 x 7.5 h → ~35-55 GPU h, fits
+the ~60 h until Friday morning with slack for failures.
+
+### s0 2026-11-24 17:50, planning session (Kali VM, with the user)
+Saw: pancreas baseline done and diagnosed (NOTES.md, `reports/figures/pancreas_cases/README.md`): tumour Dice
+0.183 / 0.172, pancreas 0.209 / 0.173; the model under-segments; real scans show fat around the gland (26 % vs 2 %
+synthetic), thick slices (38 test cases >= 5 mm; synthetic all 1.0 mm) and lobulation the synthetic ones lack.
+The user is away for a few days and gives ~2 days of one full B200; asked for a supervisor that wakes a new Claude
+session whenever a job ends, and for a plan whose decisions all carry reasons and assumptions.
+
+Decision 1: **E1 = `thickSlice` first** (all 999 synthetic pancreas pairs, images re-sliced to the slice
+thicknesses of the 43 MSD07 val cases, labels at the slab centres, plans copied from D102; `nnunet/build_thick_dataset.py`,
+Dataset112).
+Reasons: of the three image gaps found it is the only one we can close cleanly in the data without new generation
+(fat and lobulation would need MAISI changes or hand-made intensity edits); thick slices are measured to matter
+(0.16 vs 0.30 gland Dice); nnU-Net resamples real 2.5 / 5 mm scans with z order 0 (slices repeated), so writing the
+synthetic scans on a thick grid and letting nnU-Net's own preprocessing resample them gives training images that
+went through the same path as the test images. Data-only change: trainer, plans and evaluation are the baseline's.
+Assumptions: thick reconstructions are close to a slab average with spacing = thickness; the val thickness mix is a
+fair stand-in for test (val and test are random halves of the same MSD07 set, test never read); labels at the slab
+centre are what an annotator of a thick scan would draw.
+Alternatives: on-the-fly thickness augmentation in a custom trainer (changes the trainer, so the arm would differ
+from `all` in more than data; more code to get right unattended); thickness mix 50/50 1 mm and thick (arbitrary;
+the val distribution is the principled target).
+
+Decision 2 (*withdrawn in s0b*): **E2 = pancreas `ccReject` (911)**, a D102 fold with the liver cc rules unchanged.
+Reasons: it is the generalisation check the paper planned (and the supervisor meeting deferred until the baseline
+was known); it needs no new code (ids file exists), which matters unattended; on liver ccReject gained +0.079.
+Expected small (only 88 volumes differ), which is itself the result the paper needs: label filters help where the
+generator makes label errors.
+Assumptions: `ids_ccReject.json` for pancreas is on /work (cc_rules ran 2026-11-14); msd_025 keep/exclude does not
+matter here (it only sets the AUC cut).
+Alternatives: pancreas ccAucRepair (the best liver arm) needs a pancreas port of `build_repair_dataset.py`, and the
+pancreas cc caches were measured on the uncropped pool labels while D102 labels are cropped: too risky to write
+unattended; left for the user.
+
+Decision 3 (*replaced in s0b*): **E3 = a second run only of an arm that beats the baseline on val by >= 0.02** (val = 43 real cases;
+test never decides). Reason: liver taught that one run can be 0.02 lucky; repeating a null arm teaches nothing.
+Decision 4 (*replaced in s0b; size test back to the backlog*): **then liver `sizeLarge` + `sizeSmall`** (ids ready since 2026-11-15) if >= 16 h remain, else the other
+rep or CPU work. Reason: keeps the GPU on the next-most-useful open question with no generation cost; the user
+proposed it; it only means something as a pair.
+Decision 5: **mechanics**: one supervisor loop (bash, detached), a new headless session per event (job ended,
+wake-up due, nothing running, final), sessions never wait; all autopilot commits on branch `autopilot` (pushed,
+`main` untouched, deny rules for force-push/main/reset/rm of data); `--permission-mode bypassPermissions` by
+default, because an unattended session that hits a permission prompt just stops and leaves the GPU idle; the blast
+radius is the UCloud container, limited further by the deny list and MISSION's hard rules. Failed sessions retry
+with backoff (10, 20, 40, 80, 120 min), 6 in a row stop the autopilot; heartbeat session at least every 8 h; final
+session 1 h before the deadline writes the summary.
+Assumptions: the UCloud job runs >= 48 h; Claude Code is logged in on UCloud and the subscription's usage limits
+allow ~10-20 short sessions in 2 days (rate-limit failures are absorbed by the backoff); deny rules hold under
+bypassPermissions (the MISSION rules are the second line).
+Started: nothing (VM). Fake-tested here: `build_thick_dataset.py` on tiny volumes (geometry exact to < 0.1 mm, labels
+aligned), the supervisor end to end with a fake `claude` (job end, wake-up, failed-session retry, heartbeat, final,
+smoke mode, branch push to a scratch remote).
