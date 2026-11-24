@@ -51,3 +51,7 @@ the gland (tumNear10) / outside the position prior (pos), plus growing the gland
 The gland gain of grow is a lower threshold, not anatomy (thr0.1 ≥ grow0.1). Frozen set (s6, `notes/AUTOPILOT.md`):
 pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.1+pos+minLes; controls incl. new thr0.1+X twins (A3,
 `nnunet/post_rules_test.py`, `pancreas_{val,test}_frozen/`).
+
+**A3a test (s7, 2026-11-24, no-probability rules only):** F1 pos+minLes 2-run mean +0.007 [+0.002, +0.012] (f0 +0.012,
+f1 +0.002), below the 0.01 floor → **not confirmed**; lesion recall 0.55 → 0.46 / 0.52 → 0.44. minLes alone +0.006,
+tumNear10 +0.011 (f1 +0.003), pos +0.004. `pancreas_test_frozen_noprobs/summary.md`. F2-F4 pending (test probs).

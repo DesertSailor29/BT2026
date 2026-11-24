@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-24 19:10 (UCloud autopilot s1): started gpu G0 val probs (`$PROJ/logs/G0_valprobs_20261124_185954.log`), ported `auc_post.py --target pancreas` (liver output byte-identical), cpu A1 (`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`). Next: D112 build on cpu, then thickSlice on gpu.
 - 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).
 - 2026-11-24 17:55 (kali): Per user: autopilot for ~2 days unattended B200 (supervisor + `ap` helper + MISSION plan + journal), E1 builder `build_thick_dataset.py` (D112) + runner `pancreas_arm.sh`; fake-tested (tiny volumes; fake `claude` end to end). Decisions with reasons in `notes/AUTOPILOT.md` s0. Uncommitted.
 - 2026-11-18 15:15 (UCloud): Per user committed + pushed everything: `pancreas_all.sh` (sequential), pancreas eval summary/confusion/per-case CSVs (copied from `$nnUNet_results/test_eval_pancreas`, CSVs force-added like liver), progress + training curves, case diagnostics CSVs. Working tree clean; GPU idle, session can be stopped.

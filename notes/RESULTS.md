@@ -119,6 +119,15 @@ recall 0.55 → 0.35 / 0.52 → 0.30, FP pieces/case 16.9 → 0.7 / 5.3 → 0.5.
 only) all worse. Cause: fragmented (under-segmented) predicted gland, so real tumours lie outside the largest predicted
 pancreas piece. `reports/data/test_eval_pancreas/auc_post{,_val}/`, `nnunet/auc_post.py --target pancreas`.
 
+**Pancreas frozen post rules, A3a (autopilot s6-s7, 2026-11-24; frozen before test, exploratory)**: val (43) reproduces
+the screen (pos+minLes +0.015/+0.006, grow0.1+tumNear10 +0.014/+0.019). Test (238), the rules that need no
+probabilities: **F1 pos+minLes not confirmed**: tumour Dice 0.183 → 0.195 / 0.172 → 0.174, 2-run mean +0.007
+[+0.002, +0.012] (p 1e-7) < the 0.01 floor; f1 +0.002 [−0.005, +0.007]; lesion recall 0.55 → 0.46 / 0.52 → 0.44, FP
+pieces/case 16.9 → 0.8 / 5.3 → 0.8; pancreas Dice ±0. Controls: minLes alone +0.006 (= F1: pos adds ~0.001), pos
++0.004, tumNear10 +0.011 (f1 +0.003), open1 +0.005 (gland −0.010), random removal matched −0.14. Reading: removing small
+/ far tumour pieces trades lesions for FP pieces; a small, run-dependent gain (large in f0 with 17 FP pieces/case,
+≈0 in f1). F2-F4 (grow) wait for test probabilities. `reports/data/post_rules/pancreas_{val_frozen,test_frozen_noprobs}/`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in

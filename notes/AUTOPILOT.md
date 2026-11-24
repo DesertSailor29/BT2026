@@ -4,6 +4,33 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s7 2026-11-24 20:45, event job_finished (A3a_frozen)
+Saw: A3a exit 0 after 0.29 h (`$PROJ/logs/A3a_frozen_20261124_201746.log`). Val (43) reproduces the s6 screen exactly
+(pos+minLes +0.015/+0.006, grow0.1+tumNear10 +0.014/+0.019; grow0.1+X − thr0.1+X ≈ 0). Test (238, no-prob rules):
+**F1 pos+minLes NOT confirmed**: 2-run mean +0.007 [+0.002, +0.012] (p 1.3e-7, but < the 0.01 floor), f0 +0.012,
+f1 +0.002 [−0.005, +0.007]; lesion recall 0.55 → 0.46 / 0.52 → 0.44; FP pieces 16.9 → 0.8 / 5.3 → 0.8. Controls:
+minLes +0.006 (pos adds ~0.001), pos +0.004, tumNear10 +0.011 (f1 +0.003), open1 +0.005, rand −0.14. (Holm in this run
+was over F1 alone; the full run with F2-F4 recomputes Holm over 4, which does not change F1's verdict: gain < 0.01.)
+gpu: thickSlice healthy (epoch 147 at 20:32, 17.3 s/epoch, EMA pseudo Dice 0.273, no NaN; train ETA ~00:40, then
+test prediction ~2.2 h → ~03:00-05:30).
+Decision: cpu: liver A2 val screen (`post_rules.py --target liver`, new: same rules on the 20 LiTS val cases of
+101:0 / 101:1, no probs, + ccPost+minLes / ccPost+pos / ccPost+tissueTxt). No B arm / B-prep for F1 (not confirmed;
+MISSION B is for confirmed rules only). gpu: nothing new until thickSlice ends; then `predict_test_probs.sh 102 0 1`
+for F2-F4 as planned in s6.
+Reasons: MISSION plan puts liver A2/A3 on the cpu lane; the pancreas val screen is finished and frozen, and after
+reading test any new pancreas rule would be chosen with test knowledge. Liver asks the thesis question directly:
+does anatomy beyond the cc rule add to ccPost (the liver's known winner), and do non-cc anatomical rules (pos,
+tissue, tumTouch) reach the cc rule's gain alone?
+Assumptions: liver val label minLes = 0.0003 ml (LiTS val has 1-voxel lesions) → minLes is a no-op for liver (so
+minLes0.5 is a fixed textbook-free size cut: flagged); spine-centre code works on LiTS (all 20 val labels got bins);
+the 4 fake-test caches (lits_007/008) are reused by the real run (same VERSION, same code).
+Fake test: lits_007 + lits_008: runs; none 0.420/0.412 → ccPost-type rules ~+0.3, pos +0.13, tissueVal +0.11,
+rand controls −0.37 (2 cases only, not a result).
+Alternatives considered: counting F1's training-label changes anyway (cheap but MISSION ties B-prep to a confirmed
+rule; skipped); liver with all 7 runs (the promising criterion is defined on the 2 baseline runs; arms later, for
+frozen rules); more pancreas screening (test seen: no).
+Started: cpu `A2L_liver_val` (`$PROJ/logs/A2L_liver_val_20261124_204456.log`, ~15-30 min).
+
 ### s6 2026-11-24 20:35, event job_finished (A2b_postrules_val)
 Saw: A2b second val screen exit 0 after 0.21 h (`$PROJ/logs/A2b_postrules_val_20261124_200057.log`, argmax
 agreement 1.0000 over 86). **6 combinations promising**, no single rule: pos+minLes +0.015/+0.006 (lost 4 of 86),

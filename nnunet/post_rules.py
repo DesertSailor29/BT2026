@@ -44,6 +44,13 @@ controls (not anatomy, same predictions):
   python nnunet/post_rules.py --workers 12          # cache under $nnUNet_results/test_eval_pancreas/post_rules_val
   python nnunet/post_rules.py --no-probs            # skip the grow rules (val_probs not there yet)
   python nnunet/post_rules.py --tables-only
+liver (s7, MISSION A2 lower priority; --target liver): the same rules on the 20 real LiTS val cases of the liver
+baseline runs (101:0 `all`, 101:1 `all_rep2`), no probabilities (none saved for liver: --no-probs is implied), the
+position prior from the other 19 val liver labels, minLes from the smallest real LiTS val lesion; plus combinations
+with the liver's known winner ccPost (ccPost+minLes, ccPost+pos, ccPost+tissueTxt: does anatomy add to the cc rule?).
+  python nnunet/post_rules.py --target liver --workers 12
+-> reports/data/post_rules/liver_val/ (cache $nnUNet_results/test_eval_liver/post_rules_val). "pancreas" in the rule
+descriptions above reads "liver" for this target.
 -> reports/data/post_rules/pancreas_val/{summary.md, per_case.csv, val_label_params.json}. Exploratory.
 """
 import argparse
@@ -65,6 +72,7 @@ sys.path.insert(0, os.path.join(REPO, "maisi"))
 import predict_test as pt  # noqa: E402
 import fp_location as fl  # noqa: E402
 from cc_rules import main_structure  # noqa: E402
+from build_dataset import real_case  # noqa: E402
 
 VERSION = "postrules2"
 TARGET = "pancreas"
@@ -83,8 +91,18 @@ PROB_RULES = tuple(f"grow{t:g}" for t in GROW_T) + ("grow0.2+ccTol10", "grow0.05
 RULES = ("none", "ccPost", "ccTol5", "ccTol10", "ccTol20", "ccK2", "ccK3", "tumTouch", "tumNear10", "tissueTxt",
          "tissueVal", "minLes", "minLes0.5", "minLes1.75", "minLes+tumNear10", "pos", "pos+minLes") + PROB_RULES + (
          "rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1")
+LIVER_EXTRA = ("ccPost+minLes", "ccPost+pos", "ccPost+tissueTxt")
 CONTROLS = ("rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1", "thr0.1",
             "thr0.05")
+
+
+def set_target(target):
+    """Switch the module to 'liver' (paths, runs); the default 'pancreas' leaves everything as before."""
+    global TARGET, RUNS, OUT, PUB
+    TARGET = target
+    RUNS = {"pancreas": ["102:0", "102:1"], "liver": ["101:0", "101:1"]}[target]
+    OUT = f"{os.environ['nnUNet_results']}/test_eval_{target}/post_rules_val"
+    PUB = f"{REPO}/reports/data/post_rules/{target}_val"
 
 
 def spacing_of(aff):
@@ -318,10 +336,13 @@ def apply_rules(p, img, prob, spacing, params, seed, aff=None, support=None):
     v["minLes0.5"] = min_les(p, spacing, 0.5)
     v["minLes1.75"] = min_les(p, spacing, params["lesion_ml_p5"])
     v["minLes+tumNear10"] = tum_near(v["minLes"], spacing, 10.0)[0]
+    v["ccPost+minLes"] = min_les(v["ccPost"], spacing, params["min_lesion_ml"])
+    v["ccPost+tissueTxt"] = tissue(v["ccPost"], img, *TXT_HU)
     centre = spine_centre(img, spacing, aff) if support is not None else None
     if support is not None:
         v["pos"] = position(p, centre, spacing, aff, support)
         v["pos+minLes"] = min_les(v["pos"], spacing, params["min_lesion_ml"])
+        v["ccPost+pos"] = position(v["ccPost"], centre, spacing, aff, support)
     if prob is not None:
         for t in GROW_T + (0.05, 0.02):
             v[f"grow{t:g}"] = grow(p, img, prob, spacing, t)
@@ -456,8 +477,8 @@ def tables(runs, cases, rules):
             for r in rules:
                 w.writerow([run, c, r] + [d["metrics"][r][k] for k in keys])
     names = {r: f"D{r.split(':')[0]} f{r.split(':')[1]} {pt.arm_name(*map(int, r.split(':')))}" for r in runs}
-    lines = ["# A2: anatomical rules on the val predictions (pancreas)", "",
-             f"{len(cases)} real MSD07 val cases, checkpoint_final predictions, runs {', '.join(names.values())}. "
+    lines = [f"# A2: anatomical rules on the val predictions ({TARGET})", "",
+             f"{len(cases)} real {pt.REAL_NAME} val cases, checkpoint_final predictions, runs {', '.join(names.values())}. "
              "Each rule vs the saved prediction (`none`), paired per case (bootstrap 95 % CI, Wilcoxon p). "
              "Rule definitions: `nnunet/post_rules.py` docstring; ledger `reports/data/post_rules/ledger.md`. "
              "**Promising** (MISSION A2) = tumour Dice gain > 0 in both runs, mean gain >= 0.01, <= 5 % of the "
@@ -501,20 +522,26 @@ def tables(runs, cases, rules):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--runs", nargs="+", default=RUNS)
+    ap.add_argument("--target", choices=("pancreas", "liver"), default="pancreas")
+    ap.add_argument("--runs", nargs="+", help="dataset:fold (default: the target's two baseline runs)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--cases", nargs="+", help="subset (fake test); default all val cases")
     ap.add_argument("--no-probs", action="store_true", help="skip the grow rules")
     ap.add_argument("--tables-only", action="store_true")
     a = ap.parse_args()
+    set_target(a.target)
+    a.runs = a.runs or RUNS
+    a.no_probs = a.no_probs or TARGET == "liver"
     pt.set_target(TARGET)
     fl.ORG = TARGET
-    cases = a.cases or [f"msd_{i:03d}" for i in pt.split()["val"]]
-    rules = [r for r in RULES if not (a.no_probs and r in PROB_RULES)]
+    val = [real_case(TARGET, i) for i in pt.split()["val"]]
+    cases = a.cases or val
+    rules = [r for r in RULES if not (a.no_probs and r in PROB_RULES)] + (list(LIVER_EXTRA) if TARGET == "liver" else [])
     if not a.tables_only:
-        params = label_params([f"msd_{i:03d}" for i in pt.split()["val"]], a.workers)
+        os.makedirs(OUT, exist_ok=True)
+        params = label_params(val, a.workers)
         print("val label params", params, flush=True)
-        bin_sets = label_bins([f"msd_{i:03d}" for i in pt.split()["val"]], a.workers)
+        bin_sets = label_bins(val, a.workers)
         print("position bins per val label:", {c: len(b) for c, b in bin_sets.items()}, flush=True)
         jobs = []
         for run in a.runs:
