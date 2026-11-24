@@ -4,6 +4,48 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s8 2026-11-24 21:25, event job_finished (A2L_liver_val)
+Saw: A2L liver val screen exit 0 after 0.45 h (`$PROJ/logs/A2L_liver_val_20261124_204456.log`; 20 LiTS val x 101:0 /
+101:1, 199 real val lesions; the 4 "error" lines were table rows containing "rand_"/"nan"). none 0.289 / 0.297.
+Promising (gain > 0 both runs, mean >= 0.01, <= 5 % of 398 lesion-runs lost): ccPost +0.097/+0.113 (lost 4),
+ccTol5/10/20 (+0.092-0.107, lost 2/1/0), ccK2/K3 (~ccPost), **tumTouch +0.084/+0.097 (lost 2)**, tumNear10
++0.083/+0.076 (lost 0), **pos +0.027/+0.024 (liver Dice +0.019/+0.025, lost 0)**, **tissueVal (1..210 HU)
++0.018/+0.020 (lost 0)**. Not promising: tissueTxt +0.007/+0.009, minLes no-op (smallest real val lesion 0.0003 ml),
+minLes0.5 lost 22, open1 +0.009/+0.006, dilate1 −0.04, random controls −0.06 to −0.25. **ccPost+minLes / +pos /
++tissueTxt = ccPost exactly**: nothing tried adds to the one-organ rule on liver val. (Table header says "pancreas
+Dice": it is liver Dice for this target; cosmetic, the data key is liver_dice.)
+gpu: thickSlice healthy (epoch 265 at 21:07, 17.2 s/epoch, EMA pseudo Dice 0.279, no NaN; train ETA ~00:40).
+
+**FREEZE liver (A3, before any test run of these rules; nothing below may change after reading test):**
+- Frozen rules, Holm over these 3 (per run and for the per-case mean of the 2 runs), main metric per-case tumour Dice
+  vs the saved prediction, liver baseline runs 101:0 / 101:1, checkpoint_final, 111 LiTS test cases:
+  FL1 `tumTouch` (liver tumours lie in the liver: drop tumour pieces without a 26-neighbour predicted liver voxel),
+  FL2 `pos` (spine-relative 2D position prior, union of all 20 real val liver labels, 2 mm bins, 10 mm margin;
+  pieces < 50 % inside -> bg), FL3 `tissueVal` (predicted liver/tumour voxels outside 1..210 HU, the p0.5-p99.5 of the
+  real val labels -> bg). Code `nnunet/post_rules.py` functions unchanged, wrapper `nnunet/post_rules_test_liver.py`
+  VERSION liverfrozen1.
+- Reference / controls (reported, not in Holm): ccPost and ccTol10 (one-organ rule; ccPost's test effect is already
+  known from the liver study, so they are references, not confirmations), ccPost+pos, ccPost+tissueTxt (does anatomy
+  add to ccPost?), tumNear10, tissueTxt, open1, rand_tumTouch, rand_pos (random tumour pieces matched in count).
+- Declared secondary contrasts: tumTouch − ccPost (does the tumour-in-organ rule alone reach the one-organ gain?),
+  ccPost+pos − ccPost, ccPost+tissueTxt − ccPost (expectation from val: ≈ 0).
+- Confirmed on test = Holm p < 0.05 for the 2-run mean, gain > 0 in both runs and mean gain >= 0.01 (as pancreas).
+Decision: cpu: `A3L_liver_test` = post_rules_test_liver.py on val (sanity: reproduces the screen) then test (111 x 2).
+gpu: nothing new until thickSlice ends (~00:40 train, then its own test prediction); then `predict_test_probs.sh 102 0
+1` (s6 plan) for F2-F4. B-prep for liver: if FL1/FL2/FL3 confirm, count how many of the 999 synthetic liver labels the
+rule would change (MISSION B: < 50 → no arm).
+Reasons: MISSION A3 (<= 4 frozen per organ + controls, one test run). Three distinct anatomical facts not yet tested on
+liver test: tumour-in-organ, position, tissue HU. ccTol10 not in the family: a variant of ccPost whose test result is
+known (0.381), so it cannot be a clean confirmation; tumNear10 is a near-duplicate of tumTouch.
+Assumptions: pos prior on test = union of all 20 val label bin sets (cached `pos_bins.npz`); liver HU window 1..210 from
+`liver_val/val_label_params.json`; the test reference is read only after the rules are applied (as pancreas).
+Alternatives considered: freezing ccTol10 as FL4 (rejected: known result, near-duplicate); tumNear10 instead of
+tumTouch (tumTouch has the larger val gain and the stricter anatomical statement); waiting for the pancreas test
+probabilities before any liver test (no reason: independent lane, CPU only).
+Fake test: --split val --cases lits_007 reproduces the screen exactly (f0 tumTouch 0.684, pos 0.590, tissueVal 0.607;
+f1 0.520 / 0.585 / 0.614).
+Started: cpu `A3L_liver_test` (`$PROJ/logs/A3L_liver_test_20261124_211829.log`; val sanity then test, ~0.5-1 h).
+
 ### s7 2026-11-24 20:45, event job_finished (A3a_frozen)
 Saw: A3a exit 0 after 0.29 h (`$PROJ/logs/A3a_frozen_20261124_201746.log`). Val (43) reproduces the s6 screen exactly
 (pos+minLes +0.015/+0.006, grow0.1+tumNear10 +0.014/+0.019; grow0.1+X − thr0.1+X ≈ 0). Test (238, no-prob rules):

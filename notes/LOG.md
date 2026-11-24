@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-24 19:15 (UCloud autopilot s2): A1 done (exit 0): pancreas ccPost hurts (test tumour −0.020 / −0.033, lesion recall 0.55 → 0.35), ccAucPost ±0; cpu `D112_build` started (`$PROJ/logs/D112_build_20261124_190840.log`). Next: G1 thickSlice when G0 + build end; A2 rules with tolerance / grow.
 - 2026-11-24 19:10 (UCloud autopilot s1): started gpu G0 val probs (`$PROJ/logs/G0_valprobs_20261124_185954.log`), ported `auc_post.py --target pancreas` (liver output byte-identical), cpu A1 (`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`). Next: D112 build on cpu, then thickSlice on gpu.
 - 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).
 - 2026-11-24 17:55 (kali): Per user: autopilot for ~2 days unattended B200 (supervisor + `ap` helper + MISSION plan + journal), E1 builder `build_thick_dataset.py` (D112) + runner `pancreas_arm.sh`; fake-tested (tiny volumes; fake `claude` end to end). Decisions with reasons in `notes/AUTOPILOT.md` s0. Uncommitted.

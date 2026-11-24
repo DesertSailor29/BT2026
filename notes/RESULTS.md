@@ -128,6 +128,13 @@ pieces/case 16.9 → 0.8 / 5.3 → 0.8; pancreas Dice ±0. Controls: minLes alon
 / far tumour pieces trades lesions for FP pieces; a small, run-dependent gain (large in f0 with 17 FP pieces/case,
 ≈0 in f1). F2-F4 (grow) wait for test probabilities. `reports/data/post_rules/pancreas_{val_frozen,test_frozen_noprobs}/`.
 
+**Liver post rules, A2L val screen (autopilot s7-s8, 2026-11-24; val only, exploratory)**: 20 LiTS val, 101:0 / 101:1,
+none 0.289 / 0.297. One-organ rules ccPost +0.097/+0.113, ccTol5-20 / ccK2-3 alike; **tumTouch +0.084/+0.097**,
+tumNear10 +0.083/+0.076; **pos +0.027/+0.024** (liver Dice +0.02); **tissueVal (1..210 HU) +0.018/+0.020**; tissueTxt
++0.007/+0.009; minLes no-op (real val lesions down to 0.0003 ml); open1 +0.009/+0.006; random matched removal −0.06 to
+−0.25. **ccPost+minLes / +pos / +tissueTxt = ccPost exactly** (nothing adds to the one-organ rule). Frozen for test (s8):
+tumTouch, pos, tissueVal. `reports/data/post_rules/liver_val/summary.md`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in

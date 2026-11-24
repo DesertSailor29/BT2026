@@ -55,3 +55,27 @@ pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.1+pos+minLes; controls incl
 **A3a test (s7, 2026-11-24, no-probability rules only):** F1 pos+minLes 2-run mean +0.007 [+0.002, +0.012] (f0 +0.012,
 f1 +0.002), below the 0.01 floor → **not confirmed**; lesion recall 0.55 → 0.46 / 0.52 → 0.44. minLes alone +0.006,
 tumNear10 +0.011 (f1 +0.003), pos +0.004. `pancreas_test_frozen_noprobs/summary.md`. F2-F4 pending (test probs).
+
+## Liver (A2L, s7-s8, 20 LiTS val, runs 101:0 / 101:1, no probabilities; `liver_val/summary.md`)
+
+Same rule definitions as pancreas ("pancreas" reads "liver"); parameters from the 20 real val liver labels (HU window
+1..210, min lesion 0.0003 ml, leave-one-out position prior). Val tumour Dice gain f0/f1 (lesion-runs lost of 398):
+
+| rule | val gain f0/f1 | verdict |
+|---|---|---|
+| ccPost | +0.097/+0.113 (4) | promising; known from the liver study (reference) |
+| ccTol5 / 10 / 20 | +0.097/+0.107 (2), +0.096/+0.106 (1), +0.092/+0.092 (0) | promising; ccPost variants, not frozen |
+| ccK2 / ccK3 | +0.096/+0.109 (4), +0.091/+0.109 (3) | promising; ccPost variants |
+| **tumTouch** | +0.084/+0.097 (2) | **promising → frozen FL1** |
+| tumNear10, minLes+tumNear10 | +0.083/+0.076 (0) | promising; near-duplicate of tumTouch |
+| **pos** (= pos+minLes) | +0.027/+0.024 (0), liver Dice +0.019/+0.025 | **promising → frozen FL2** |
+| **tissueVal** | +0.018/+0.020 (0) | **promising → frozen FL3** |
+| tissueTxt | +0.007/+0.009 (0) | < 0.01 |
+| minLes / minLes1.75 | 0 / 0 | no-op (real lesions down to 1 voxel) |
+| minLes0.5 | +0.019/+0.009 (22) | loses > 5 % of lesions |
+| ccPost+minLes / +pos / +tissueTxt | = ccPost | nothing adds to the one-organ rule |
+| C open1 / dilate1 | +0.009/+0.006 / −0.044/−0.041 | generic morphology: small or harmful |
+| C rand_ccPost / ccTol10 / tumTouch / pos | −0.23/−0.19, −0.24/−0.22, −0.25/−0.18, −0.06/−0.06 | random matched removal hurts |
+
+Frozen set (s8, `notes/AUTOPILOT.md`): tumTouch, pos, tissueVal (Holm over 3); references ccPost, ccTol10, ccPost+pos,
+ccPost+tissueTxt; controls tumNear10, tissueTxt, open1, rand_tumTouch, rand_pos (`nnunet/post_rules_test_liver.py`).
