@@ -28,7 +28,10 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   All committed (runner, eval summary + per-case CSVs in `reports/data/test_eval_pancreas/`, figures).
 - **Pancreas ccPost hurts** (A1, test 238): tumour Dice 0.183 → 0.163 / 0.172 → 0.139, lesion recall 0.55 → 0.35
   (fragmented predicted gland); ccAucPost adds nothing. Numbers `notes/RESULTS.md`.
-- **Autopilot running since 2026-11-24 19:00 (UCloud; s5: A2 first val screen: no rule promising; gpu G1 thickSlice training (D112 fold 0, ~05:30 Wed); cpu A2b second val screen)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
+- **Autopilot running since 2026-11-24 19:00 (UCloud; s6: A2 val screens done, 6 combos promising; A3 frozen
+  2026-11-24 20:35: pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.1+pos+minLes + controls (thr0.1 twins:
+  on val the gland gain of grow = a plain lower threshold); cpu A3a val + test (no-prob rules); gpu G1 thickSlice
+  (D112 f0, ~05:30 Wed), then test probabilities for the grow rules)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
   headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
   `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
   first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
@@ -76,9 +79,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-24 20:35 (UCloud autopilot s6): A2b done (exit 0): 6 combos promising (pos+minLes +0.015/+0.006, grow0.1+tumNear10 +0.014/+0.019, ...); thr0.1 control = grow for the gland. A3 frozen (journal s6, e6b5945): 4 rules + controls; new `nnunet/post_rules_test.py`, `predict_test_probs.sh`; cpu `A3a_frozen` (`$PROJ/logs/A3a_frozen_20261124_201746.log`). Next: A3a result; after thickSlice: test probs on gpu.
 - 2026-11-24 20:00 (UCloud autopilot s5): A2 screen 1 done (exit 0): no rule promising on val (FP removal helps f0 +0.016-0.018, hurts f1; minLes +0.013/+0.005 near miss; grow0.1 gland Dice +0.053/+0.047, dilate control similar); second screen (lower grow t, growT, pos prior, combos, thr controls) cpu `A2b_postrules_val` (`$PROJ/logs/A2b_postrules_val_20261124_200057.log`). Next: A3 freeze + test.
 - 2026-11-24 19:50 (UCloud autopilot s4): G0 done (exit 0, 43/43 val probs per run); gpu G1 `pancreas_thickSlice` started (`$PROJ/logs/pancreas_thickSlice_20261124_194809.log`, train D112 fold 0 + test, ~05:30 Wed); A2 screen running. Next: A2 end → ledger + second screen.
 - 2026-11-24 19:40 (UCloud autopilot s3): D112 built + preprocessed (1042 cases, exit 0); new `nnunet/post_rules.py` (A2: 17 rules + 5 controls, val only), cpu `A2_postrules_val` (`$PROJ/logs/A2_postrules_val_20261124_193604.log`, waits for G0 fold-1 probs). Next: G1 thickSlice when G0 ends.
 - 2026-11-24 19:15 (UCloud autopilot s2): A1 done (exit 0): pancreas ccPost hurts (test tumour −0.020 / −0.033, lesion recall 0.55 → 0.35), ccAucPost ±0; cpu `D112_build` started (`$PROJ/logs/D112_build_20261124_190840.log`). Next: G1 thickSlice when G0 + build end; A2 rules with tolerance / grow.
 - 2026-11-24 19:10 (UCloud autopilot s1): started gpu G0 val probs (`$PROJ/logs/G0_valprobs_20261124_185954.log`), ported `auc_post.py --target pancreas` (liver output byte-identical), cpu A1 (`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`). Next: D112 build on cpu, then thickSlice on gpu.
-- 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).
