@@ -20,10 +20,26 @@ Rules (anatomical fact -> parameter source; ledger: reports/data/post_rules/ledg
   grow<t>        under-segmentation: voxels within 10 mm of the predicted organ, 26-connected to it, in the
                  tissueTxt window, with p(pancreas) + p(tumour) >= t -> argmax(pancreas, tumour) (t 0.3 / 0.2 / 0.1)
   grow0.2+ccTol10  growing first, then the tolerant one-organ rule
+second screen (s5, after the first: no rule promising; grow lifts gland Dice, minLes / tumNear help f0 only):
+  grow<t>d<mm>   grow with t 0.05 / 0.02 and the distance window 10 / 20 mm (d10 is the default above)
+  growT<t>       the tumour continues where the model was nearly sure: voxels within 10 mm of, 26-connected to a
+                 predicted tumour piece, in the tissueTxt window, with p(tumour) >= t -> tumour (t 0.2 / 0.1)
+  minLes<ml>     minLes sensitivity: 0.5 ml and 1.75 ml (p5 of the real val lesions)
+  pos            position: pancreas lies retroperitoneally just anterior to the spine. Per axial slice the spine
+                 centre is found from the image alone (bone > 200 HU inside the body, within 40 mm of the body's
+                 L-R centre, posterior half); the prior is the 2D (L-R, A-P) occupancy, relative to that centre, of
+                 the *other* 42 val labels (leave-one-out, 2 mm bins, + 10 mm margin); pieces of pancreas ∪ tumour
+                 with < 50 % of their voxels in the prior -> background
+  A+B            rules applied in sequence (grow0.1+minLes, grow0.1+tumNear10, grow0.05+minLes,
+                 grow0.1+growT0.2+minLes, minLes+tumNear10, pos+minLes, grow0.1+pos+minLes)
 controls (not anatomy, same predictions):
   rand_<rule>    remove as many random tumour pieces per case as <rule> removed (ccPost, ccTol10, tumTouch; seeded)
   open1          binary opening (3x3x3) of pancreas ∪ tumour, labels kept where the opened mask survives
   dilate1        one 26-neighbour dilation of pancreas ∪ tumour (nearest label): growth without probabilities
+  thr<t>         the grow threshold without anatomy: every voxel with p(pancreas) + p(tumour) >= t is foreground
+                 (argmax of the two), no distance, connectivity or HU limit (t 0.1 / 0.05): is grow just a lower
+                 threshold?
+  rand_minLes / rand_pos  random tumour-piece removal matched to minLes / pos
 
   python nnunet/post_rules.py --workers 12          # cache under $nnUNet_results/test_eval_pancreas/post_rules_val
   python nnunet/post_rules.py --no-probs            # skip the grow rules (val_probs not there yet)
@@ -50,7 +66,7 @@ import predict_test as pt  # noqa: E402
 import fp_location as fl  # noqa: E402
 from cc_rules import main_structure  # noqa: E402
 
-VERSION = "postrules1"
+VERSION = "postrules2"
 TARGET = "pancreas"
 RUNS = ["102:0", "102:1"]
 S26 = np.ones((3, 3, 3), bool)
@@ -59,10 +75,16 @@ GROW_T = (0.3, 0.2, 0.1)
 GROW_MM = 10.0
 OUT = f"{os.environ['nnUNet_results']}/test_eval_pancreas/post_rules_val"
 PUB = f"{REPO}/reports/data/post_rules/pancreas_val"
-PROB_RULES = tuple(f"grow{t:g}" for t in GROW_T) + ("grow0.2+ccTol10",)
+BONE_HU, SPINE_HALF_MM, POS_BIN, POS_MARGIN, POS_MIN_IN = 200.0, 40.0, 2.0, 10.0, 0.5
+PROB_RULES = tuple(f"grow{t:g}" for t in GROW_T) + ("grow0.2+ccTol10", "grow0.05", "grow0.02", "grow0.1d20",
+                                                   "grow0.05d20", "growT0.2", "growT0.1", "grow0.1+minLes",
+                                                   "grow0.1+tumNear10", "grow0.05+minLes", "grow0.1+growT0.2+minLes",
+                                                   "grow0.1+pos+minLes", "thr0.1", "thr0.05")
 RULES = ("none", "ccPost", "ccTol5", "ccTol10", "ccTol20", "ccK2", "ccK3", "tumTouch", "tumNear10", "tissueTxt",
-         "tissueVal", "minLes") + PROB_RULES + ("rand_ccPost", "rand_ccTol10", "rand_tumTouch", "open1", "dilate1")
-CONTROLS = ("rand_ccPost", "rand_ccTol10", "rand_tumTouch", "open1", "dilate1")
+         "tissueVal", "minLes", "minLes0.5", "minLes1.75", "minLes+tumNear10", "pos", "pos+minLes") + PROB_RULES + (
+         "rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1")
+CONTROLS = ("rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1", "thr0.1",
+            "thr0.05")
 
 
 def spacing_of(aff):
@@ -143,19 +165,116 @@ def tissue(p, img, lo, hi):
     return np.where(bad, 0, p).astype(np.uint8)
 
 
-def grow(p, img, prob, spacing, t):
+def grow(p, img, prob, spacing, t, mm=GROW_MM):
     """Accept voxels near and connected to the predicted organ where the model was almost sure (see the docstring)."""
     org = p > 0
     if not org.any():
         return p.copy()
     fg = prob[1] + prob[2]
-    cand = (dist_mm(org, spacing) <= GROW_MM) & (img >= TXT_HU[0]) & (img <= TXT_HU[1]) & (fg >= t)
+    cand = (dist_mm(org, spacing) <= mm) & (img >= TXT_HU[0]) & (img <= TXT_HU[1]) & (fg >= t)
     lab, _ = ndimage.label(cand | org, S26)
     ids = np.unique(lab[org])
     new = cand & ~org & np.isin(lab, ids[ids > 0])
     out = p.copy()
     out[new] = np.where(prob[2][new] > prob[1][new], 2, 1).astype(np.uint8)
     return out
+
+
+def grow_tumour(p, img, prob, spacing, t):
+    """growT<t>: extend predicted tumour pieces into nearby soft tissue where p(tumour) >= t (docstring)."""
+    tum = p == 2
+    if not tum.any():
+        return p.copy()
+    cand = (dist_mm(tum, spacing) <= GROW_MM) & (img >= TXT_HU[0]) & (img <= TXT_HU[1]) & (prob[2] >= t)
+    lab, _ = ndimage.label(cand | tum, S26)
+    ids = np.unique(lab[tum])
+    new = cand & ~tum & np.isin(lab, ids[ids > 0])
+    out = p.copy()
+    out[new] = 2
+    return out
+
+
+def threshold(prob, t):
+    """thr<t> control: foreground wherever p(pancreas) + p(tumour) >= t, label = argmax of the two."""
+    fg = (prob[1] + prob[2]) >= t
+    return np.where(fg, np.where(prob[2] > prob[1], 2, 1), 0).astype(np.uint8)
+
+
+def spine_centre(img, spacing, aff):
+    """Per axial slice (x, y) voxel coordinates of the spine centre, from the image alone (docstring `pos`)."""
+    body = img > -300
+    lab, n = ndimage.label(body[::4, ::4, :])  # coarse: the body is the largest air-separated piece
+    if n:
+        sizes = np.bincount(lab.ravel())
+        sizes[0] = 0
+        coarse = lab == np.argmax(sizes)
+        body &= np.repeat(np.repeat(coarse, 4, 0), 4, 1)[:img.shape[0], :img.shape[1]]
+    nz = img.shape[2]
+    cx, cy = np.full(nz, np.nan), np.full(nz, np.nan)
+    post_low = aff[1, 1] > 0  # RAS: index along axis 1 grows anterior -> posterior = low index
+    for z in range(nz):
+        b = body[:, :, z]
+        if b.sum() < 1000:
+            continue
+        xs, ys = np.nonzero(b)
+        bx, ymid = xs.mean(), (ys.min() + ys.max()) / 2
+        xi = np.arange(img.shape[0])[:, None]
+        yi = np.arange(img.shape[1])[None, :]
+        win = b & (np.abs(xi - bx) * spacing[0] <= SPINE_HALF_MM) & ((yi < ymid) if post_low else (yi > ymid))
+        bone = win & (img[:, :, z] > BONE_HU)
+        if bone.sum() < 20:
+            continue
+        bxs, bys = np.nonzero(bone)
+        cx[z], cy[z] = bxs.mean(), bys.mean()
+    ok = ~np.isnan(cx)
+    if not ok.any():
+        return None
+    zz = np.arange(nz)
+    cx, cy = np.interp(zz, zz[ok], cx[ok]), np.interp(zz, zz[ok], cy[ok])
+    k = max(1, int(round(10.0 / spacing[2]))) * 2 + 1  # median over ~20 mm along z
+    return ndimage.median_filter(cx, k, mode="nearest"), ndimage.median_filter(cy, k, mode="nearest")
+
+
+def offsets_mm(mask, centre, spacing, aff):
+    """World-oriented (R+, A+) mm offsets of the mask voxels from the slice's spine centre."""
+    xs, ys, zs = np.nonzero(mask)
+    sx, sy = np.sign(aff[0, 0]) or 1.0, np.sign(aff[1, 1]) or 1.0
+    return (xs - centre[0][zs]) * spacing[0] * sx, (ys - centre[1][zs]) * spacing[1] * sy
+
+
+def bins_of(dx, dy):
+    return np.unique(np.round(dx / POS_BIN).astype(np.int32) * 100000 + np.round(dy / POS_BIN).astype(np.int32))
+
+
+def prior_support(bin_sets):
+    """2D boolean grid (+ origin) of the union of bin sets, dilated by POS_MARGIN."""
+    allb = np.unique(np.concatenate(bin_sets))
+    bx, by = np.round(allb / 100000).astype(int), allb - np.round(allb / 100000).astype(int) * 100000
+    m = int(POS_MARGIN / POS_BIN) + 1
+    ox, oy = bx.min() - m, by.min() - m
+    g = np.zeros((bx.max() - ox + m + 1, by.max() - oy + m + 1), bool)
+    g[bx - ox, by - oy] = True
+    r = int(round(POS_MARGIN / POS_BIN))
+    disk = np.hypot(*np.mgrid[-r:r + 1, -r:r + 1]) <= r
+    return ndimage.binary_dilation(g, disk), ox, oy
+
+
+def position(p, centre, spacing, aff, support):
+    if centre is None or not (p > 0).any():
+        return p.copy()
+    g, ox, oy = support
+    dx, dy = offsets_mm(p > 0, centre, spacing, aff)
+    ix, iy = np.round(dx / POS_BIN).astype(int) - ox, np.round(dy / POS_BIN).astype(int) - oy
+    inside = (ix >= 0) & (iy >= 0) & (ix < g.shape[0]) & (iy < g.shape[1])
+    inside[inside] = g[ix[inside], iy[inside]]
+    inmask = np.zeros(p.shape, bool)
+    inmask[p > 0] = inside
+    lab, n = ndimage.label(p > 0, S26)
+    tot = np.bincount(lab.ravel(), minlength=n + 1)
+    ins = np.bincount(lab.ravel(), weights=inmask.ravel(), minlength=n + 1)
+    drop = ins < POS_MIN_IN * tot
+    drop[0] = False
+    return np.where(drop[lab], 0, p).astype(np.uint8)
 
 
 def rand_remove(p, n_remove, seed):
@@ -185,7 +304,7 @@ def n_tumour_pieces(p):
     return ndimage.label(p == 2, S26)[1]
 
 
-def apply_rules(p, img, prob, spacing, params, seed):
+def apply_rules(p, img, prob, spacing, params, seed, aff=None, support=None):
     v = {"none": p, "ccPost": np.where(main_structure(p), p, 0).astype(np.uint8)}
     for d in (5, 10, 20):
         v[f"ccTol{d}"] = cc_tol(p, spacing, d)
@@ -196,12 +315,32 @@ def apply_rules(p, img, prob, spacing, params, seed):
     v["tissueTxt"] = tissue(p, img, *TXT_HU)
     v["tissueVal"] = tissue(p, img, params["hu_lo"], params["hu_hi"])
     v["minLes"] = min_les(p, spacing, params["min_lesion_ml"])
+    v["minLes0.5"] = min_les(p, spacing, 0.5)
+    v["minLes1.75"] = min_les(p, spacing, params["lesion_ml_p5"])
+    v["minLes+tumNear10"] = tum_near(v["minLes"], spacing, 10.0)[0]
+    centre = spine_centre(img, spacing, aff) if support is not None else None
+    if support is not None:
+        v["pos"] = position(p, centre, spacing, aff, support)
+        v["pos+minLes"] = min_les(v["pos"], spacing, params["min_lesion_ml"])
     if prob is not None:
-        for t in GROW_T:
+        for t in GROW_T + (0.05, 0.02):
             v[f"grow{t:g}"] = grow(p, img, prob, spacing, t)
         v["grow0.2+ccTol10"] = cc_tol(v["grow0.2"], spacing, 10.0)
+        for t in (0.1, 0.05):
+            v[f"grow{t:g}d20"] = grow(p, img, prob, spacing, t, 20.0)
+            v[f"thr{t:g}"] = threshold(prob, t)
+        for t in (0.2, 0.1):
+            v[f"growT{t:g}"] = grow_tumour(p, img, prob, spacing, t)
+        v["grow0.1+minLes"] = min_les(v["grow0.1"], spacing, params["min_lesion_ml"])
+        v["grow0.1+tumNear10"] = tum_near(v["grow0.1"], spacing, 10.0)[0]
+        v["grow0.05+minLes"] = min_les(v["grow0.05"], spacing, params["min_lesion_ml"])
+        v["grow0.1+growT0.2+minLes"] = min_les(grow_tumour(v["grow0.1"], img, prob, spacing, 0.2), spacing,
+                                               params["min_lesion_ml"])
+        if support is not None:
+            v["grow0.1+pos+minLes"] = min_les(position(v["grow0.1"], centre, spacing, aff, support), spacing,
+                                              params["min_lesion_ml"])
     n0 = n_tumour_pieces(p)
-    for r in ("ccPost", "ccTol10", "tumTouch"):
+    for r in ("ccPost", "ccTol10", "tumTouch", "minLes") + (("pos",) if "pos" in v else ()):
         v[f"rand_{r}"] = rand_remove(p, n0 - n_tumour_pieces(v[r]), seed)
     v["open1"] = opening(p)
     v["dilate1"] = dilate(p)
@@ -216,7 +355,7 @@ def load_probs(f, shape):
 
 
 def measure(args):
-    run, case, img_f, ref_f, pred_f, prob_f, cache_f, params = args
+    run, case, img_f, ref_f, pred_f, prob_f, cache_f, params, bin_sets = args
     pnii = nib.load(pred_f)
     p = np.asarray(pnii.dataobj).astype(np.uint8)
     spacing = spacing_of(pnii.affine)
@@ -229,7 +368,8 @@ def measure(args):
         agree = float((prob.argmax(0) == p).mean())
         assert agree > 0.995, (prob_f, "probabilities do not match the saved prediction", agree)
     seed = zlib.crc32(f"{run}/{case}".encode())
-    variants = apply_rules(p, img, prob, spacing, params, seed)
+    support = prior_support([b for c, b in bin_sets.items() if c != case]) if bin_sets else None  # leave-one-out
+    variants = apply_rules(p, img, prob, spacing, params, seed, pnii.affine, support)
     del img, prob
     ref = nib.load(ref_f)
     r = np.asarray(ref.dataobj).astype(np.uint8)
@@ -272,6 +412,31 @@ def _label_stats(case):
     comp, n = ndimage.label(r == 2, S26)
     ml = (np.bincount(comp.ravel(), minlength=n + 1)[1:] * vml).tolist()
     return hu, ml
+
+
+def label_bins(cases, workers):
+    """Spine-relative occupancy bins of every real val label (for the leave-one-out position prior)."""
+    f = f"{OUT}/pos_bins.npz"
+    if os.path.exists(f):
+        d = np.load(f)
+        return {c: d[c] for c in d.files}
+    with Pool(workers) as pool:
+        res = dict(zip(cases, pool.map(_label_bins, cases)))
+    tmp = f + ".tmp.npz"
+    np.savez(tmp, **res)
+    os.replace(tmp, f)
+    return res
+
+
+def _label_bins(case):
+    ref = nib.load(f"{pt.RAW}/labelsTr/{case}.nii.gz")
+    r = np.asarray(ref.dataobj).astype(np.uint8)
+    img = nib.load(f"{pt.RAW}/imagesTr/{case}_0000.nii.gz").get_fdata(dtype=np.float32)
+    sp = spacing_of(ref.affine)
+    centre = spine_centre(img, sp, ref.affine)
+    if centre is None:
+        return np.zeros(0, np.int32)
+    return bins_of(*offsets_mm(r > 0, centre, sp, ref.affine))
 
 
 def tables(runs, cases, rules):
@@ -349,6 +514,8 @@ def main():
     if not a.tables_only:
         params = label_params([f"msd_{i:03d}" for i in pt.split()["val"]], a.workers)
         print("val label params", params, flush=True)
+        bin_sets = label_bins([f"msd_{i:03d}" for i in pt.split()["val"]], a.workers)
+        print("position bins per val label:", {c: len(b) for c, b in bin_sets.items()}, flush=True)
         jobs = []
         for run in a.runs:
             did, fold = map(int, run.split(":"))
@@ -365,7 +532,7 @@ def main():
                     if d.get("version") == VERSION and all(r in d["metrics"] for r in rules):
                         continue
                 jobs.append((run, c, f"{pt.RAW}/imagesTr/{c}_0000.nii.gz", f"{pt.RAW}/labelsTr/{c}.nii.gz", pred,
-                             prob, cache, params))
+                             prob, cache, params, bin_sets))
         print(f"{len(jobs)} (run, case) pairs to measure, {a.workers} workers", flush=True)
         with Pool(a.workers) as pool:
             for k, (run, c) in enumerate(pool.imap_unordered(measure, jobs, chunksize=1), 1):

@@ -4,6 +4,37 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s5 2026-11-24 20:00, event job_finished (A2_postrules_val)
+Saw: A2 first screen exit 0 after 0.3 h (`$PROJ/logs/A2_postrules_val_20261124_193604.log`; 86 run/case pairs, prob
+argmax agreement 1.0000). **No rule promising** (gain > 0 in both runs, mean >= 0.01, <= 5 % lesions lost). Val
+tumour Dice none 0.141 / 0.133 (pancreas 0.162 / 0.118). FP-removal rules help f0 (17 FP pieces/case) and hurt f1
+(6/case): ccK2 +0.018/−0.020, tumTouch +0.017/−0.006, tumNear10 +0.016/−0.007 (lost 3); minLes +0.013/+0.005
+(lost 4 of 86: near miss, but the open1 control does +0.009/+0.001); tissue rules ±0.001; ccTol* hurt f1 like ccPost.
+Grow: gland Dice +0.021/+0.018 (t 0.3) → +0.053/+0.047 (t 0.1), tumour ±0.01; but dilate1 (no probabilities) gives
+the gland +0.047/+0.040 too (and tumour −0.035/−0.018). Random removal controls −0.08 to −0.14 (in few-piece cases
+the pieces removed are the hits). Numbers `reports/data/post_rules/pancreas_val/summary_screen1.md`, ledger updated.
+gpu: G1 thickSlice healthy (epoch ~16 at 19:53, 17.3 s/epoch, EMA pseudo Dice rising; ETA train ~00:40 Wed).
+Decision: cpu: second val screen (`post_rules.py` VERSION postrules2, all first-screen rules recomputed + new):
+lower grow thresholds (0.05 / 0.02) and a 20 mm window; growT (tumour growth on p(tumour) 0.2 / 0.1); minLes
+sensitivity (0.5 ml, 1.75 ml = p5 of val lesions); `pos` (spine-relative 2D position prior from the other 42 val
+labels, leave-one-out; spine centre per slice from bone HU only); combinations (grow + minLes / tumNear10 / growT /
+pos); controls thr0.1 / thr0.05 (the same threshold without anatomy: tests whether grow is just a lower threshold),
+rand_minLes / rand_pos. gpu: nothing new (G1 running; s4's wake-up at 21:18 checks it).
+Reasons: the first screen says the two failure modes need different rules: under-segmentation (grow; the question is
+whether the anatomical limits beat plain thresholding / dilation, hence thr controls) and FP pieces in f0 vs lost
+lesions in f1 (combine growth, which reconnects lesions to the gland, with tolerant tumour rules; a position prior
+that removes FPs by location rather than by connectivity). Fake test on msd_006 + msd_025: runs, ~1 min per case;
+pos centre sane (msd_006 gland 52-109 mm anterior of the spine centre, tail to the left; HU 106 at the centre).
+Assumptions: the LOO prior keeps the val-label parameter out of the case it scores (the 42 others still overlap the
+scored set across cases: in-sample at the set level, flagged; test confirms). The promising criterion stays as
+written (tumour Dice); a rule that helps only the gland (grow) is recorded as a gland finding, not promoted on
+tumour Dice: for A3 I will also freeze the best gland rule if it beats its thr/dilate controls, because the MISSION
+says pancreas Dice must be reported and under-segmentation is the main failure.
+Alternatives considered: z-position (vertebral level) prior: needs vertebra labelling, postponed; liver A2: lower
+priority, after pancreas; freezing now (first screen has no winner, nothing to freeze).
+Started: cpu `A2b_postrules_val` (log in the NOTES Log), expected ~25-30 min. Its end wakes the next session: fill
+the ledger, then A3 freeze (<= 4 rules + controls) and the test run.
+
 ### s4 2026-11-24 19:50, event job_finished (G0_valprobs)
 Saw: G0 exit 0 after 0.8 h (`$PROJ/logs/G0_valprobs_20261124_185954.log`): fold 0 and fold 1 each 43/43 val
 probability files. A2_postrules_val (cpu) started its real run right after (it polled for "fold 1: 43 / 43"),

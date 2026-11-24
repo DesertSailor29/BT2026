@@ -1,0 +1,128 @@
+{
+ "none": {
+  "gain_f0": 0.0,
+  "gain_f1": 0.0,
+  "lost": 0,
+  "promising": false
+ },
+ "ccPost": {
+  "gain_f0": 0.004528935577307441,
+  "gain_f1": -0.046303974956420954,
+  "lost": 15,
+  "promising": false
+ },
+ "ccTol5": {
+  "gain_f0": 0.004514053592875036,
+  "gain_f1": -0.04364753109169281,
+  "lost": 14,
+  "promising": false
+ },
+ "ccTol10": {
+  "gain_f0": 0.003872067888019158,
+  "gain_f1": -0.04364753109169281,
+  "lost": 14,
+  "promising": false
+ },
+ "ccTol20": {
+  "gain_f0": 0.001965556391641933,
+  "gain_f1": -0.029696143643614555,
+  "lost": 11,
+  "promising": false
+ },
+ "ccK2": {
+  "gain_f0": 0.018406619786250522,
+  "gain_f1": -0.01968871597168876,
+  "lost": 7,
+  "promising": false
+ },
+ "ccK3": {
+  "gain_f0": 0.017252623768670258,
+  "gain_f1": -0.017754083346833233,
+  "lost": 6,
+  "promising": false
+ },
+ "tumTouch": {
+  "gain_f0": 0.01699946529246624,
+  "gain_f1": -0.005992336576999123,
+  "lost": 5,
+  "promising": false
+ },
+ "tumNear10": {
+  "gain_f0": 0.015519912200253977,
+  "gain_f1": -0.006834762550741455,
+  "lost": 3,
+  "promising": false
+ },
+ "tissueTxt": {
+  "gain_f0": 0.0008759985748632294,
+  "gain_f1": 0.0009047516171581417,
+  "lost": 0,
+  "promising": false
+ },
+ "tissueVal": {
+  "gain_f0": 0.0009955633056713687,
+  "gain_f1": 0.0011863157432934627,
+  "lost": 0,
+  "promising": false
+ },
+ "minLes": {
+  "gain_f0": 0.01289825669033757,
+  "gain_f1": 0.005188163504687072,
+  "lost": 4,
+  "promising": false
+ },
+ "grow0.3": {
+  "gain_f0": -0.002688918789686775,
+  "gain_f1": 0.003193913792117412,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.2": {
+  "gain_f0": -0.0030170236777776857,
+  "gain_f1": 0.005917138772042468,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.1": {
+  "gain_f0": -0.004157802242256989,
+  "gain_f1": 0.008921720317961308,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.2+ccTol10": {
+  "gain_f0": -0.007327167131924791,
+  "gain_f1": -0.0052888596002286,
+  "lost": 10,
+  "promising": false
+ },
+ "rand_ccPost": {
+  "gain_f0": -0.13819772325035756,
+  "gain_f1": -0.09287243473216154,
+  "lost": 34,
+  "promising": false
+ },
+ "rand_ccTol10": {
+  "gain_f0": -0.13819772325035756,
+  "gain_f1": -0.0902159908674334,
+  "lost": 33,
+  "promising": false
+ },
+ "rand_tumTouch": {
+  "gain_f0": -0.12245842641098816,
+  "gain_f1": -0.08193265594546566,
+  "lost": 28,
+  "promising": false
+ },
+ "open1": {
+  "gain_f0": 0.009222844106832708,
+  "gain_f1": 0.0012747291393514818,
+  "lost": 1,
+  "promising": false
+ },
+ "dilate1": {
+  "gain_f0": -0.03547517639347206,
+  "gain_f1": -0.01803446587433298,
+  "lost": 0,
+  "promising": false
+ }
+}

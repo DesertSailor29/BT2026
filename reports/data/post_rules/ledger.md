@@ -9,15 +9,32 @@ Val-label parameters (`pancreas_val/val_label_params.json`): pancreas ∪ tumour
 |---|---|---|---|---|---|
 | 0 | ccPost (A1, fixed) | one organ | none (training cc rule) | +0.004 / -0.046 (A1) | hurts: fragmented gland |
 | 0 | ccAucPost 0.509-0.70 (A1) | tumour visible | cut 0.509 (rules.json); sweep val | 0 / 0 at 0.509, worse stricter | nothing |
-| 1 | ccTol5/10/20 | one organ, split by thick slices | d 5/10/20 mm (1-4 thick slices) | pending (s3 job) | |
-| 2 | ccK2/3 | one organ in <= k pieces | k 2/3 | pending | |
-| 3 | tumTouch | MSD07 tumours are pancreatic | adjacency | pending | |
-| 4 | tumNear10 | same, tolerant | 10 mm | pending | |
-| 5 | tissueTxt | soft tissue, not fat/bone | -50 / 300 HU (textbook) | pending | |
-| 6 | tissueVal | same | -95 / 213 HU (val labels p0.5/p99.5) | pending | |
-| 7 | minLes | no lesion smaller than real ones | 1.19 ml (smallest val lesion) | pending | |
-| 8 | grow0.3/0.2/0.1 | gland continues where the model was nearly sure | t; 10 mm, -50/300 HU | pending | |
-| 9 | grow0.2+ccTol10 | 8 then 1 | | pending | |
-| C | rand_ccPost / rand_ccTol10 / rand_tumTouch | control: random piece removal, matched count | seeded per case | pending | |
-| C | open1 | control: generic opening 3x3x3 | | pending | |
-| C | dilate1 | control: growth without probabilities | 1 voxel | pending | |
+| 1 | ccTol5/10/20 | one organ, split by thick slices | d 5/10/20 mm (1-4 thick slices) | +0.005/-0.044, +0.004/-0.044, +0.002/-0.030 | hurts f1 (lesions lost 14-11) |
+| 2 | ccK2/3 | one organ in <= k pieces | k 2/3 | +0.018/-0.020, +0.017/-0.018 | f0 only (lost 7/6) |
+| 3 | tumTouch | MSD07 tumours are pancreatic | adjacency | +0.017/-0.006 | f0 only (lost 5) |
+| 4 | tumNear10 | same, tolerant | 10 mm | +0.016/-0.007 | f0 only (lost 3) |
+| 5 | tissueTxt | soft tissue, not fat/bone | -50 / 300 HU (textbook) | +0.001/+0.001 | nothing (few voxels) |
+| 6 | tissueVal | same | -95 / 213 HU (val labels p0.5/p99.5) | +0.001/+0.001 | nothing |
+| 7 | minLes | no lesion smaller than real ones | 1.19 ml (smallest val lesion) | +0.013/+0.005 (lost 4 of 86) | near miss (mean 0.009); open1 control +0.009/+0.001 |
+| 8 | grow0.3/0.2/0.1 | gland continues where the model was nearly sure | t; 10 mm, -50/300 HU | tumour -0.003/+0.003, -0.003/+0.006, -0.004/+0.009; **gland +0.021/+0.018, +0.034/+0.029, +0.053/+0.047** | gland gain, tumour ±0 |
+| 9 | grow0.2+ccTol10 | 8 then 1 | | -0.007/-0.005 | hurts (lost 10) |
+| C | rand_ccPost / rand_ccTol10 / rand_tumTouch | control: random piece removal, matched count | seeded per case | -0.14/-0.09, -0.14/-0.09, -0.12/-0.08 | random removal destroys lesions (most tumour pieces are the hits in few-piece cases) |
+| C | open1 | control: generic opening 3x3x3 | | +0.009/+0.001, gland -0.009/-0.007 | as good as minLes on tumour |
+| C | dilate1 | control: growth without probabilities | 1 voxel | tumour -0.035/-0.018, gland +0.047/+0.040 | gland gain ≈ grow0.1, but tumour hurt |
+
+First screen (s3 code, run s4-s5, `pancreas_val/summary_screen1.md`): **no rule promising**. f0 (17 FP pieces/case)
+gains from any FP removal, f1 (6/case) loses real lesions from it; grow rules lift gland Dice (+0.05 at t 0.1) but
+dilation does about as much for the gland (under-segmentation: any growth helps), while hurting tumour.
+
+Second screen (s5, `postrules2`; rows added when the run ends):
+
+| # | rule | anatomical fact | parameter (source) | val effect f0 / f1 | verdict |
+|---|---|---|---|---|---|
+| 10 | grow0.05 / grow0.02 | as 8, lower t | t (sweep) | pending | |
+| 11 | grow0.1d20 / grow0.05d20 | as 8, wider window | 20 mm | pending | |
+| 12 | growT0.2 / growT0.1 | the tumour continues where the model was nearly sure | t; 10 mm, -50/300 HU | pending | |
+| 13 | minLes0.5 / minLes1.75 | as 7, sensitivity | 0.5 ml; 1.75 ml (p5 val lesions) | pending | |
+| 14 | pos | pancreas lies just anterior to the spine | spine from bone HU > 200 (image); 2D prior from the other 42 val labels (LOO), 10 mm margin, 50 % inside | pending | |
+| 15 | combos: minLes+tumNear10, pos+minLes, grow0.1+minLes, grow0.1+tumNear10, grow0.05+minLes, grow0.1+growT0.2+minLes, grow0.1+pos+minLes | | | pending | |
+| C | thr0.1 / thr0.05 | control: lower threshold without anatomy (no distance / connectivity / HU) | | pending | |
+| C | rand_minLes / rand_pos | control: random removal matched to minLes / pos | seeded | pending | |
