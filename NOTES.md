@@ -28,7 +28,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   All committed (runner, eval summary + per-case CSVs in `reports/data/test_eval_pancreas/`, figures).
 - **Pancreas ccPost hurts** (A1, test 238): tumour Dice 0.183 → 0.163 / 0.172 → 0.139, lesion recall 0.55 → 0.35
   (fragmented predicted gland); ccAucPost adds nothing. Numbers `notes/RESULTS.md`.
-- **Autopilot running since 2026-11-24 19:00 (UCloud; s2: G0 val probs on gpu, D112 build on cpu)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
+- **Autopilot running since 2026-11-24 19:00 (UCloud; s3: G0 val probs on gpu, A2 val rule screen on cpu; D112 built)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
   headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
   `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
   first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
@@ -76,6 +76,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-24 19:40 (UCloud autopilot s3): D112 built + preprocessed (1042 cases, exit 0); new `nnunet/post_rules.py` (A2: 17 rules + 5 controls, val only), cpu `A2_postrules_val` (`$PROJ/logs/A2_postrules_val_20261124_193604.log`, waits for G0 fold-1 probs). Next: G1 thickSlice when G0 ends.
 - 2026-11-24 19:15 (UCloud autopilot s2): A1 done (exit 0): pancreas ccPost hurts (test tumour −0.020 / −0.033, lesion recall 0.55 → 0.35), ccAucPost ±0; cpu `D112_build` started (`$PROJ/logs/D112_build_20261124_190840.log`). Next: G1 thickSlice when G0 + build end; A2 rules with tolerance / grow.
 - 2026-11-24 19:10 (UCloud autopilot s1): started gpu G0 val probs (`$PROJ/logs/G0_valprobs_20261124_185954.log`), ported `auc_post.py --target pancreas` (liver output byte-identical), cpu A1 (`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`). Next: D112 build on cpu, then thickSlice on gpu.
 - 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).

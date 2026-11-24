@@ -4,6 +4,31 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s3 2026-11-24 19:40, event job_finished (D112_build)
+Saw: D112_build exit 0 (`$PROJ/logs/D112_build_20261124_190840.log`): 999 thick volumes (1.25 mm 29, 2.5 mm 823,
+3 mm 19, 5 mm 101, 7.5 mm 27) + 43 real val linked; preprocessing 1042/1042 (3126 files, same count as D102).
+G0 fold 0 probabilities 43/43 done (19:26), fold 1 at ~20/43 at 19:36 (ends ~19:50).
+Decision: gpu: nothing new (G0 still running; one GPU process at a time); the session woken by G0's end starts G1
+`pancreas_arm.sh thickSlice` (build + preprocess are done, the runner should skip them). cpu: A2 first screen,
+`nnunet/post_rules.py` (new): 17 rules + 5 controls on the 43 val predictions of both runs (definitions in its
+docstring, ledger `reports/data/post_rules/ledger.md`); the job waits for G0's fold-1 probabilities (polls the G0
+log, max 1 h, then falls back to `--no-probs`).
+Reasons: MISSION A2; A1 showed the plain one-organ rule removes real lesions in fragmented glands, so the first
+screen covers tolerant one-organ variants (distance, k pieces), tumour-belongs-to-gland, tissue HU, size, and grow
+rules (the only kind that can fix under-segmentation), each with a non-anatomical control (random removal matched to
+ccPost / ccTol10 / tumTouch, opening, plain dilation as growth without probabilities).
+Assumptions: val-label parameters (HU window [-95, 213] = p0.5/p99.5 of val pancreas ∪ tumour; smallest val lesion
+1.19 ml) are allowed by MISSION ("real val labels") although the same cases score the rule: in-sample, flagged in
+the ledger; test confirms. Probabilities: npz (C, z, y, x) transposed to the NIfTI order; argmax agrees with the
+saved label map (1.0000 on msd_006; the script asserts > 0.995 per case).
+Fake test: msd_006 f0: ccPost 0.341 → 0.382 (as s1); grow0.1 pancreas Dice 0.076 → 0.124; dilate1 0.165 (!: plain
+dilation lifts gland Dice too: under-segmentation; the control matters); ~1 min per case.
+Alternatives considered: position prior (spine landmark) postponed to the second screen (more code; first see whether
+the simple rules help at all); liver A2 later (lower priority).
+Started: cpu `A2_postrules_val`, log `$PROJ/logs/A2_postrules_val_20261124_193604.log`, expected end ~20:05.
+Next: G0 end → start G1 thickSlice (gpu) + `ap wake-at '+90 minutes'`; A2 end → fill the ledger, choose the second
+screen (combinations of the promising ones, position prior, grow thresholds); pancreas Dice counts too.
+
 ### s2 2026-11-24 19:15, event job_finished (A1)
 Saw: A1 exit 0 (log `$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`; the 3 "error-looking" lines are table
 text, no traceback). Outputs `reports/data/test_eval_pancreas/auc_post{,_val}/` (summary, per_case, components).

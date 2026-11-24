@@ -1,0 +1,11 @@
+{
+ "cases": 43,
+ "voxels": 337902,
+ "hu_lo": -95.0,
+ "hu_hi": 213.0,
+ "hu_share_below_-50": 0.029,
+ "hu_share_above_300": 0.0023,
+ "lesions": 43,
+ "min_lesion_ml": 1.1866,
+ "lesion_ml_p5": 1.751
+}
