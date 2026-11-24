@@ -28,6 +28,14 @@ and copies summary.md + the CSVs to reports/data/test_eval_liver/auc_post/ (not 
   python nnunet/auc_post.py --checkpoint best         # checkpoint_best test predictions (fold_X/test_best)
                                                       # -> $nnUNet_results/test_eval_liver_best/auc_post/
 (--split val exists for checkpoint_final only: nnU-Net writes fold_X/validation with the final weights.)
+
+--target pancreas (autopilot A1, autopilot/MISSION.md): the same rules on the pancreas baseline runs 102:0 102:1
+(organ = predicted pancreas, label 1), MSD07 val (43) or test (238), main cut = the pancreas training cut
+(filter_metrics/pancreas/rules.json auc_cut = 0.509, set by msd_025 before any result). The stricter-cut sweep
+(0.55, 0.60, 0.637, 0.70) runs on val only: test gets the fixed cut alone, so no cut can be picked from test.
+-> $nnUNet_results/test_eval_pancreas/auc_post[_val]/, reports/data/test_eval_pancreas/auc_post[_val]/.
+  python nnunet/auc_post.py --target pancreas --split val --workers 8
+  python nnunet/auc_post.py --target pancreas --split test --workers 8
 Memory: up to ~4 GB per worker (image float32 + label + crops).
 """
 import argparse
@@ -57,6 +65,29 @@ MAIN_CUT = CUTS[0]
 VERSION = f"aucpost1 {fm.VERSION} cuts={','.join(map(str, CUTS))}"
 VARIANTS = ("none", "ccPost") + tuple(f"ccAucPost{c:g}" for c in CUTS)
 MAIN = f"ccAucPost{MAIN_CUT:g}"
+SWEEP_TXT = "0.60 / 0.637 / 0.70"
+TARGET, ORG, REAL, PREFIX = "liver", "liver", "LiTS", "lits"
+RUNS, BASELINE = fl.RUNS, fl.BASELINE
+
+
+def set_target(target, split):
+    """Switch paths, runs, cuts and names to the pancreas baseline (liver stays exactly as before)."""
+    global CUTS, MAIN_CUT, VERSION, VARIANTS, MAIN, SWEEP_TXT, TARGET, ORG, REAL, PREFIX, RUNS, BASELINE, OUT, PUB, RULES
+    if target == "liver":
+        return
+    pt.set_target(target)
+    fl.ORG = target
+    TARGET, ORG, REAL, PREFIX = target, target, "MSD07", "msd"
+    RUNS = BASELINE = pt.BASELINE[target]
+    CUTS = (0.509, 0.55, 0.60, 0.637, 0.70) if split == "val" else (0.509,)
+    MAIN_CUT = CUTS[0]
+    VERSION = f"aucpost1 {fm.VERSION} cuts={','.join(map(str, CUTS))}"
+    VARIANTS = ("none", "ccPost") + tuple(f"ccAucPost{c:g}" for c in CUTS)
+    MAIN = f"ccAucPost{MAIN_CUT:g}"
+    SWEEP_TXT = " / ".join(f"{c:g}" for c in CUTS[1:]) or "none (test: fixed cut only)"
+    OUT = OUT.replace("/test_eval_liver/", f"/test_eval_{target}/")
+    PUB = PUB.replace("/test_eval_liver/", f"/test_eval_{target}/")
+    RULES = RULES.replace("/filter_metrics/liver/", f"/filter_metrics/{target}/")
 CKPT = "final"  # set by --checkpoint
 OUT = f"{os.environ['nnUNet_results']}/test_eval_liver/auc_post"
 PUB = f"{REPO}/reports/data/test_eval_liver/auc_post"
@@ -174,7 +205,7 @@ def tables(runs, cases, names):
     def tot(run, v, key):
         return col(run, v, key).sum()
 
-    base = [b for b in fl.BASELINE if b in runs]
+    base = [b for b in BASELINE if b in runs]
     arms = [r for r in runs if r not in base]
 
     def base_col(v, key="tumour_dice"):
@@ -183,11 +214,11 @@ def tables(runs, cases, names):
         return np.where(nb > 0, np.nansum(b, axis=0) / np.maximum(nb, 1), np.nan)
 
     L = ["# The AUC rule applied to the predictions (ccAucPost) + a sweep of stricter cuts", "",
-         f"{nc} real LiTS {'val' if OUT.endswith('_val') else 'test'} cases, checkpoint_{CKPT} predictions. ccPost = training cc rule on the prediction; "
+         f"{nc} real {REAL} {'val' if OUT.endswith('_val') else 'test'} cases, checkpoint_{CKPT} predictions. ccPost = training cc rule on the prediction; "
          f"ccAucPost<cut> = ccPost, then predicted tumour pieces inside the predicted main structure with sep < cut -> "
-         "their surroundings' label (filter_metrics' separability with the predicted liver as organ). Decisions use "
-         f"image + prediction only. **Main cut {MAIN_CUT}** (= the training cut, fixed before results); 0.60 / 0.637 / "
-         "0.70 = exploratory sweep. Written by `nnunet/auc_post.py`; exploratory, the main analysis stays predict_test.py.",
+         f"their surroundings' label (filter_metrics' separability with the predicted {ORG} as organ). Decisions use "
+         f"image + prediction only. **Main cut {MAIN_CUT}** (= the training cut, fixed before results); {SWEEP_TXT} "
+         "= exploratory sweep. Written by `nnunet/auc_post.py`; exploratory, the main analysis stays predict_test.py.",
          "", "## 1. Does sep tell false-positive pieces from hits? (pieces inside the predicted main structure)", "",
          "| run | pieces / case (hit, FP) | unscored | sep median hit / FP | AUROC sep (FP lower) | "
          + " | ".join(f"< {c:g}: FP / hit pieces (hit ml)" for c in CUTS) + " |",
@@ -210,7 +241,7 @@ def tables(runs, cases, names):
     L += ["", "## 2. Each variant vs ccPost, per run", "",
           "Tumour Dice mean (NaN = both empty, left out) and the paired difference to ccPost; lesion recall, FP pieces "
           "and reference lesions lost are totals over the cases.", "",
-          "| run | variant | tumour Dice | vs ccPost [95% CI] | p | liver Dice | lesion recall | FP pieces / case | "
+          f"| run | variant | tumour Dice | vs ccPost [95% CI] | p | {ORG} Dice | lesion recall | FP pieces / case | "
           "lesions lost vs ccPost | pieces relabelled |", "|---|---|---|---|---|---|---|---|---|---|"]
     for run in runs:
         for v in VARIANTS:
@@ -222,7 +253,7 @@ def tables(runs, cases, names):
             rel = sum(data[(run, c)]["relabelled"].get(v[len("ccAucPost"):], 0) for c in cases) \
                 if v.startswith("ccAucPost") else "–"
             L.append(f"| {names[run]} | {v} | {np.nanmean(col(run, v, 'tumour_dice')):.3f} | {vs} | "
-                     f"{np.nanmean(col(run, v, 'liver_dice')):.3f} | {tot(run, v, 'les_det') / tot(run, v, 'les_ref'):.3f} | "
+                     f"{np.nanmean(col(run, v, f'{ORG}_dice')):.3f} | {tot(run, v, 'les_det') / tot(run, v, 'les_ref'):.3f} | "
                      f"{tot(run, v, 'les_fp') / nc:.1f} | {lost if v != 'none' else '–'} | {rel} |")
 
     if base:
@@ -266,18 +297,25 @@ def tables(runs, cases, names):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--runs", nargs="+", default=fl.RUNS, help="dataset:fold (default: the 6 liver runs)")
+    ap.add_argument("--target", choices=("liver", "pancreas"), default="liver")
+    ap.add_argument("--runs", nargs="+", help="dataset:fold (default: the 6 liver runs / the 2 pancreas baseline runs)")
     ap.add_argument("--workers", type=int, default=8)
-    ap.add_argument("--rules", default=RULES, help="filter_metrics rules.json (cut + version check)")
+    ap.add_argument("--rules", default=None, help="filter_metrics rules.json (cut + version check)")
     ap.add_argument("--split", choices=("test", "val"), default="test")
     ap.add_argument("--checkpoint", choices=("final", "best"), default="final",
                     help="which test predictions: fold_X/test_final (default) or fold_X/test_best")
     ap.add_argument("--tables-only", action="store_true")
     a = ap.parse_args()
-    check_rules(a.rules)
     global OUT, PUB, CKPT
+    set_target(a.target, a.split)
+    a.runs = a.runs or RUNS
+    if a.rules is None:
+        a.rules = RULES
+    check_rules(a.rules)
     CKPT = a.checkpoint
     if CKPT == "best":
+        if a.target != "liver":
+            sys.exit("--checkpoint best: liver only")
         if a.split == "val":
             sys.exit("--split val needs --checkpoint final (fold_X/validation holds checkpoint_final predictions)")
         OUT = OUT.replace("/test_eval_liver/", "/test_eval_liver_best/")
@@ -286,7 +324,7 @@ def main():
         OUT, PUB = OUT + "_val", PUB + "_val"
     sub, img_dir, lab_dir = ((f"test_{CKPT}", pt.IMG, pt.LAB) if a.split == "test"
                              else ("validation", f"{pt.RAW}/imagesTr", f"{pt.RAW}/labelsTr"))
-    cases = [f"lits_{i:03d}" for i in pt.split()[a.split]]
+    cases = [f"{PREFIX}_{i:03d}" for i in pt.split()[a.split]]
     names = {r: f"D{r.split(':')[0]} f{r.split(':')[1]} {pt.arm_name(*map(int, r.split(':')))}" for r in a.runs}
     if not a.tables_only:
         jobs = []

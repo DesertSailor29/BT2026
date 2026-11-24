@@ -4,6 +4,27 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s1 2026-11-24 19:00, event idle
+Saw: first session; no job yet; B200 idle (0 MiB), /work 2.1 PB free. D102 has 43 msd_* val images, fold_0/1
+`validation/` (43 cases) and `test_final/` present.
+Decision: gpu lane G0 `predict_val_probs.sh 102 0 1` (as planned). cpu lane: A1 (port ccPost / ccAucPost to
+pancreas, `--target pancreas`), written and fake-tested in this session, then run on the cpu lane.
+Reasons: MISSION plan, fixed; G0 is short and needed for grow rules; A1 has no free choices.
+Assumptions: nnU-Net's `validation/` is checkpoint_final (it is written at the end of training).
+Alternatives considered: starting thickSlice first (G0 is 1 h and unblocks A2's grow rules; order as planned).
+Started: gpu `G0_valprobs`, log `$PROJ/logs/G0_valprobs_20261124_185954.log`, expected end ~20:00 (at 19:07 still
+loading: process in disk sleep, GPU 0 %, no output since "building the font cache"; check at the wake-up).
+A1 code: `nnunet/auc_post.py --target pancreas` (runs 102:0/1, MSD07 val/test, main cut 0.509 from pancreas
+rules.json; stricter-cut sweep 0.55/0.60/0.637/0.70 on **val only**, test gets the fixed cut alone so no cut can be
+picked from test); `fp_location.metrics` takes the organ name from `fl.ORG`. Liver unchanged: tables from a copy of
+the liver val cache with old (HEAD) and new code are byte-identical (summary, per_case, components; scratch
+`/work/Research/scratch_ap/s1_verify`). Smoke test msd_006 fold 0: ccPost tumour Dice 0.341 → 0.382, FP pieces 18 → 0.
+Started: cpu `A1_pancreas_aucpost` (val then test, 12 workers, nice), log
+`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`, ~15 min. Wake-up set 19:23.
+Next (planned): when A1 ends, cpu lane builds + preprocesses D112 (`build_thick_dataset.py --plans` +
+`nnUNetv2_preprocess`, the same commands as step 1 of `pancreas_arm.sh`, which then skips them) so the GPU can start
+thickSlice training right after G0; do not start `pancreas_arm.sh thickSlice` while that build runs.
+
 ### s0b 2026-11-24 18:30, plan revised with the user (Kali VM)
 Saw: the user rejected pancreas ccReject as E2 and set the direction: the paper's main finding is that for these
 filters it hardly matters whether a rule is applied before training (labels) or after (predictions); what matters is

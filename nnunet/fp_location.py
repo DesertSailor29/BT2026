@@ -52,6 +52,7 @@ SIZE_BINS = [(0, 0.01), (0.01, 0.1), (0.1, 1.0), (1.0, 10.0), (10.0, float("inf"
 OUT = f"{os.environ['nnUNet_results']}/test_eval_liver/fp_location"
 PUB = f"{REPO}/reports/data/test_eval_liver/fp_location"
 CKPT = "final"  # set by --checkpoint
+ORG = "liver"  # organ name in the metric keys (auc_post.py --target pancreas sets "pancreas")
 
 
 def use_checkpoint(ckpt):
@@ -65,7 +66,7 @@ def use_checkpoint(ckpt):
 
 def metrics(r, p, voxel_ml):
     row = {}
-    for name, rm, pm in (("liver", r == 1, p == 1), ("liver_tumour", r > 0, p > 0), ("tumour", r == 2, p == 2)):
+    for name, rm, pm in ((ORG, r == 1, p == 1), (f"{ORG}_tumour", r > 0, p > 0), ("tumour", r == 2, p == 2)):
         d, tp, a, b = pt.dice(rm, pm)
         row.update({f"{name}_dice": d, f"{name}_tp": tp, f"{name}_ref": a, f"{name}_pred": b})
     row.update(pt.lesions(r == 2, p == 2, voxel_ml))

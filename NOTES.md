@@ -26,15 +26,15 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   (26 % of real test, 2 % of synthetic; gland Dice 0.15 vs 0.30) and 5 mm slices (0.16 vs 0.30); synthetic glands
   are smooth, unlobulated, in uniform grey tissue → an image-appearance gap a volume filter cannot fix.
   All committed (runner, eval summary + per-case CSVs in `reports/data/test_eval_pancreas/`, figures).
-- **Autopilot built (2026-11-24, VM, not yet started)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
+- **Autopilot running since 2026-11-24 19:00 (UCloud; s1: G0 val probs + A1 pancreas ccPost/ccAucPost)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
   headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
   `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
   first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
   GPU meanwhile val probabilities + `thickSlice` (D112, `nnunet/build_thick_dataset.py`). Runs until Fri 27 Nov.
   Fake-tested on the VM; autopilot work goes to branch `autopilot`.
 ## Next steps
-0. **Autopilot**: user starts it on UCloud (GUIDE "Optional: autopilot": smoke test, then `--until 'Fri 27 Nov 07:00'`).
-   Friday: review branch `autopilot` (`notes/AUTOPILOT.md` summary on top), then merge into main.
+0. **Autopilot running** (since 2026-11-24 19:00, until Fri 27 Nov 05:20): journal `notes/AUTOPILOT.md`, branch
+   `autopilot`. Friday: review the branch (summary on top of the journal), then merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -74,6 +74,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-24 19:10 (UCloud autopilot s1): started gpu G0 val probs (`$PROJ/logs/G0_valprobs_20261124_185954.log`), ported `auc_post.py --target pancreas` (liver output byte-identical), cpu A1 (`$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`). Next: D112 build on cpu, then thickSlice on gpu.
 - 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).
 - 2026-11-24 17:55 (kali): Per user: autopilot for ~2 days unattended B200 (supervisor + `ap` helper + MISSION plan + journal), E1 builder `build_thick_dataset.py` (D112) + runner `pancreas_arm.sh`; fake-tested (tiny volumes; fake `claude` end to end). Decisions with reasons in `notes/AUTOPILOT.md` s0. Uncommitted.
 - 2026-11-18 15:15 (UCloud): Per user committed + pushed everything: `pancreas_all.sh` (sequential), pancreas eval summary/confusion/per-case CSVs (copied from `$nnUNet_results/test_eval_pancreas`, CSVs force-added like liver), progress + training curves, case diagnostics CSVs. Working tree clean; GPU idle, session can be stopped.
