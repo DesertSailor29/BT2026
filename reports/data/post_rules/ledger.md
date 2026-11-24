@@ -84,3 +84,7 @@ Liver test (A3L, s9, 111 LiTS test, 2-run mean vs saved; `liver_test_frozen/summ
 [+0.046, +0.081] confirmed**, **pos +0.013 [+0.007, +0.019] confirmed** (liver Dice +0.017), tissueVal +0.009 not
 confirmed (< 0.01); ccPost +0.078, ccPost+pos = ccPost, open1 +0.011, rand_tumTouch −0.187, rand_pos −0.035;
 tumTouch − ccPost −0.016 [−0.025, −0.008].
+
+Liver B-prep (B0, s10, 999 synthetic D101 labels, `liver_label_counts/summary.md`): tumTouch changes 598 volumes
+(= ccRepair's tumour removal; no new arm, ccRepair D103 f0 is its trained twin), pos 84 (0.35 % of tumour voxels) →
+posRepair arm (Dataset113). Pre vs post comparisons declared in the journal s10.

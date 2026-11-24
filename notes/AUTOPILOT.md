@@ -4,6 +4,40 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s10 2026-11-24 22:55, event job_finished (B0_liver_label_counts)
+Saw: B0 exit 0 after 0.22 h (`$PROJ/logs/B0_liver_label_counts_20261124_222754.log`; spine centre found 999/999).
+On the 999 synthetic D101 labels: **tumTouch changes 598 volumes** (all lose tumour; 1659281 tumour voxels = 4.64 %,
+1701 pieces), **pos changes 84** (79 lose tumour; 124429 voxels = 0.35 %, 123 pieces; median 223 changed voxels),
+ccPost (reference) 656 (598 lose tumour, 1659548 voxels, 1704 pieces). `reports/data/post_rules/liver_label_counts/`.
+Both are >= 50 → "arm possible" by MISSION B. But tumTouch's label twin = ccRepair's tumour part (same 598 volumes,
+tumour voxels differ by 267 of 1.66 M); ccRepair (D103 f0) only adds the 58 liver-only volumes. The generator
+violates tumour-in-organ often (60 % of volumes), and the twin of that rule is already trained.
+gpu: thickSlice healthy (epoch 573 at 22:38, 17.2 s/epoch, EMA pseudo Dice 0.279, no NaN; train ETA 00:40, then its
+test prediction, ~03:00).
+Decision: cpu: one chained job `B1_liver_prepost_D113`: (1) new `nnunet/pre_vs_post_liver.py`: frozen A3L variants on
+ccRepair's test predictions + the declared comparisons below (finished arm: evaluation, not selection); (2) new
+`nnunet/build_rule_repair_dataset.py --rule pos` → **Dataset113_LiverSynthRepairPos** (999 labels, pos repair, plans
+copied from D101; the build asserts it changes exactly B0's per-volume counts), then `nnUNetv2_preprocess -d 113`.
+No tumTouch arm (D106 "touch" in build_repair_dataset.py would be its twin): ccRepair is it.
+gpu: unchanged. After thickSlice: `predict_test_probs.sh 102 0 1` (pancreas F2-F4) as planned; then the liver posRepair
+arm (D113, one run; needs a liver runner like pancreas_arm.sh — next session writes `nnunet/liver_arm.sh`), unless a
+pancreas B arm is confirmed first (pancreas has priority: the contrast case).
+**Declared before reading (tumTouch pre vs post, LiTS test 111, baseline = per-case mean 101:0/101:1):** P1 ccRepair
+saved vs baseline+tumTouch (equivalent if 95 % CI within ±0.02), P2 ccRepair+tumTouch vs baseline+tumTouch, P3
+ccRepair vs baseline; references R1/R2 = P1/P2 with ccPost. **posRepair (D113) comparisons, declared now:** posRepair
+saved vs baseline+pos (equivalence ±0.02), posRepair+pos vs baseline+pos, posRepair vs baseline; liver Dice reported.
+Reasons: MISSION B (rule changes >= 50 → twin); training a tumTouch twin would duplicate ccRepair (8 GPU h for a known
+answer). pos changes few labels and little tumour, so the arm is a weak but cheap test of the corollary "a rule changes
+something only where it is violated" (expected: posRepair ≈ baseline, while pos post-hoc +0.013); the GPU is free
+after ~07:30 Wed otherwise.
+Assumptions: ccRepair's extra liver-only removals (58 vols) do not matter for the tumour comparison; the val-label pos
+prior (union of 20) is the right prior for synthetic labels too; liver preprocessing with 12 procs takes ~1 h.
+Alternatives considered: tumTouch arm D106 (rejected: near-duplicate of ccRepair); no pos arm (rejected: GPU would
+idle, MISSION B says train when >= 50); a reject arm for pos (repair is definable, so no).
+Fake test: build on liver_0000/0014/0023 → 2 changed, counts match B0 (liver_0014 becomes tumour-free: its whole 9768-
+voxel tumour lies outside the prior), uint8, same affine; pre_vs_post on lits_000/001 runs.
+Started: cpu `B1_liver_prepost_D113` (log path in the NOTES Log; ~1.5-2 h).
+
 ### s9 2026-11-24 22:30, event job_finished (A3L_liver_test)
 Saw: A3L exit 0 after 1.12 h (`$PROJ/logs/A3L_liver_test_20261124_211829.log`; the 6 "error" lines are table rows
 with "rand_"/"nan"). Val sanity reproduces the s8 screen exactly. **Liver test (111 x 101:0 / 101:1, none 0.301 / 0.305):**

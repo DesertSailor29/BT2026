@@ -98,6 +98,10 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   [+0.002, +0.016] → not confirmed (< 0.01). ccPost+pos = ccPost, ccPost+tissueTxt +0.000 (nothing adds to ccPost);
   tumTouch − ccPost −0.016; controls open1 +0.011 (≈ pos), rand_tumTouch −0.187, rand_pos −0.035 (matched random
   piece removal hurts: which pieces, not how many).
+- **Confirmed liver rules on the 999 synthetic training labels** (B0, autopilot s9-s10; `nnunet/label_rule_counts.py`,
+  `reports/data/post_rules/liver_label_counts/`): tumTouch changes 598 volumes (4.64 % of tumour voxels, 1701 pieces),
+  pos 84 (0.35 %, 123 pieces), ccPost 656 (same tumour removal as tumTouch ±267 voxels). The generator often puts
+  tumour outside the liver; tumTouch's label twin = ccRepair's tumour part (D103, already trained).
 
 ## Pancreas (measured only)
 
