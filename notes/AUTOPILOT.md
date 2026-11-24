@@ -4,6 +4,20 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s4 2026-11-24 19:50, event job_finished (G0_valprobs)
+Saw: G0 exit 0 after 0.8 h (`$PROJ/logs/G0_valprobs_20261124_185954.log`): fold 0 and fold 1 each 43/43 val
+probability files. A2_postrules_val (cpu) started its real run right after (it polled for "fold 1: 43 / 43"),
+still running at 19:50 (the files in `reports/data/post_rules/pancreas_val/` dated 19:35 are from s3's fake test and
+will be overwritten by the run).
+Decision: gpu: start G1 `pancreas_arm.sh thickSlice` (D112 built + preprocessed in s3; the runner skips build and
+preprocessing, registers the fold, trains 1000 epochs, predicts 238 test, evals vs baseline). Wake-up +90 min to
+check the training is healthy. cpu: A2 keeps running; its end wakes the next session (ledger + second screen).
+Reasons: MISSION plan (G1 after G0); the GPU would idle otherwise; independent of the filter question.
+Assumptions: the runner's build step only re-checks existing files (build_thick_dataset.py skips existing outputs,
+plans exist) so it costs minutes of CPU next to A2 (376 cores, 2 TB RAM: no contention worth avoiding).
+Alternatives considered: none (planned, no free choices).
+Started: gpu `pancreas_thickSlice` (log path in the NOTES Log), expected end ~05:30 Wed (5.3 h train + 2.2 h test).
+
 ### s3 2026-11-24 19:40, event job_finished (D112_build)
 Saw: D112_build exit 0 (`$PROJ/logs/D112_build_20261124_190840.log`): 999 thick volumes (1.25 mm 29, 2.5 mm 823,
 3 mm 19, 5 mm 101, 7.5 mm 27) + 43 real val linked; preprocessing 1042/1042 (3126 files, same count as D102).
