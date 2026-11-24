@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s2 2026-11-24 19:15, event job_finished (A1)
+Saw: A1 exit 0 (log `$PROJ/logs/A1_pancreas_aucpost_20261124_190320.log`; the 3 "error-looking" lines are table
+text, no traceback). Outputs `reports/data/test_eval_pancreas/auc_post{,_val}/` (summary, per_case, components).
+**Pancreas ccPost hurts, unlike liver.** Test (238), tumour Dice none → ccPost: f0 0.183 → 0.163 (none − ccPost
++0.020 [+0.000, +0.041]), f1 0.172 → 0.139 (+0.033 [+0.014, +0.052]); pancreas Dice 0.209 → 0.189 / 0.173 → 0.157;
+lesion recall 0.550 → 0.354 / 0.521 → 0.304; FP pieces/case 16.9 → 0.7 / 5.3 → 0.5. ccAucPost0.509 vs ccPost:
+−0.001 / −0.002 (baseline −0.001 [−0.004, +0.001], p 0.4): adds nothing. Val (43): none → ccPost f0 0.141 → 0.145,
+f1 0.133 → 0.087 (lesion recall 0.465 → 0.349 / 0.233); stricter cuts (val-only sweep) all worse: 0.55 −0.002/−0.003,
+0.6 −0.033/−0.030, 0.7 −0.050/−0.053; sep AUROC (FP lower) 0.75 / 0.58.
+Reading: the cc rule removes FP pieces (17 → <1 per case) but also ~1/3 of the real lesions, because the predicted
+gland is fragmented (under-segmentation): tumours sitting in gland parts the model missed are not connected to the
+largest predicted pancreas piece. Consistent with the corollary: the rule acts where predictions violate it, but here
+the violation is mostly the model's *missing* gland, not anatomically wrong tumours. Points A2 to rules with
+tolerance (tumour near / adjacent to the gland, distance-based keep) and to grow rules (G0 probabilities).
+Decision: cpu lane: build + preprocess D112 (thickSlice) now (`build_thick_dataset.py --workers 16 --plans` +
+`nnUNetv2_preprocess -d 112 -np 16`), so G1 training can start right after G0 (~20:00). gpu lane: G0 still running
+(predicting, ~25 % at 19:08), no action. A2 exploration starts in the next session (needs the cpu lane free or runs
+in-session as short analyses; G0's probabilities for grow rules).
+Reasons: MISSION plan order; the GPU should not idle after G0; the build is ~1-1.5 h of CPU.
+Assumptions: 16 workers + nice is fine while G0 predicts (376 cores, 2 TB RAM, nothing else running).
+Alternatives considered: starting A2 on the cpu lane first (would delay G1 by the build time and idle the GPU).
+Started: cpu `D112_build` (log path below in NOTES Log). Wake-up: G0's end wakes the next session.
+
 ### s1 2026-11-24 19:00, event idle
 Saw: first session; no job yet; B200 idle (0 MiB), /work 2.1 PB free. D102 has 43 msd_* val images, fold_0/1
 `validation/` (43 cases) and `test_final/` present.

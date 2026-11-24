@@ -111,6 +111,14 @@ shell around the gland (< 0 HU) in 26 % of real test vs 2 % of synthetic → gla
 0.35); 5 mm slices (38 cases) 0.16 vs 0.30 at 2.5 mm (synthetic all 1.0 mm); pancreas < 40 HU (18) 0.05. Gland size,
 tumour share and z extent unrelated (|rho| ≤ 0.11).
 
+**Pancreas ccPost / ccAucPost (A1, autopilot s1-s2, 2026-11-24; rules fixed in advance, exploratory)**: on the
+predictions the cc rule **hurts**, unlike liver. Test (238) tumour Dice none → ccPost 0.183 → 0.163 / 0.172 → 0.139
+(none − ccPost +0.020 [+0.000, +0.041] / +0.033 [+0.014, +0.052]); pancreas Dice 0.209 → 0.189 / 0.173 → 0.157; lesion
+recall 0.55 → 0.35 / 0.52 → 0.30, FP pieces/case 16.9 → 0.7 / 5.3 → 0.5. ccAucPost0.509 vs ccPost −0.001 / −0.002
+(baseline −0.001 [−0.004, +0.001]). Val (43) none → ccPost 0.141 → 0.145 / 0.133 → 0.087; stricter AUC cuts (val
+only) all worse. Cause: fragmented (under-segmented) predicted gland, so real tumours lie outside the largest predicted
+pancreas piece. `reports/data/test_eval_pancreas/auc_post{,_val}/`, `nnunet/auc_post.py --target pancreas`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in
