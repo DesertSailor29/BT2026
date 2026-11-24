@@ -33,7 +33,8 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   GPU meanwhile val probabilities + `thickSlice` (D112, `nnunet/build_thick_dataset.py`). Runs until Fri 27 Nov.
   Fake-tested on the VM; autopilot work goes to branch `autopilot`.
 ## Next steps
-0. **Autopilot**: user starts it on UCloud (GUIDE "Optional: autopilot": smoke test, then `--until 'Fri 27 Nov 07:00'`).
+0. **Autopilot**: smoke test passed on UCloud 2026-11-24 18:56; next the real start (GUIDE "Optional: autopilot" step 5,
+   `--until '2026-11-27 07:00'`, UCloud job time limit must cover it).
    Friday: review branch `autopilot` (`notes/AUTOPILOT.md` summary on top), then merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
@@ -74,6 +75,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-24 18:57 (UCloud): Per user ran the autopilot smoke test (`supervisor.sh --smoke`, log `/work/Research/logs/autopilot_smoke_20261124_185556.log`): session 1 rc 0 (ap status ok, smoke job started on gpu lane, push dry-run ok → would create branch `autopilot`, B200 listed), session 2 woke on job end, rc 0, `STOP: smoke-ok`. Repo back on main, GPU idle.
 - 2026-11-24 18:30 (kali): Per user, plan revised: ccReject dropped; Phase A = anatomical rules on predictions (val screen + controls + ledger, frozen test confirmation), B = pre arms only for winners; supervisor got gpu/cpu lanes; `predict_val_probs.sh`, generic `pancreas_arm.sh <arm> <id> ...`. Until Fri 27 Nov. Committed + pushed (187a38e).
 - 2026-11-24 17:55 (kali): Per user: autopilot for ~2 days unattended B200 (supervisor + `ap` helper + MISSION plan + journal), E1 builder `build_thick_dataset.py` (D112) + runner `pancreas_arm.sh`; fake-tested (tiny volumes; fake `claude` end to end). Decisions with reasons in `notes/AUTOPILOT.md` s0. Uncommitted.
 - 2026-11-18 15:15 (UCloud): Per user committed + pushed everything: `pancreas_all.sh` (sequential), pancreas eval summary/confusion/per-case CSVs (copied from `$nnUNet_results/test_eval_pancreas`, CSVs force-added like liver), progress + training curves, case diagnostics CSVs. Working tree clean; GPU idle, session can be stopped.
