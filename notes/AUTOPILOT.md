@@ -4,6 +4,27 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s19 2026-11-25 19:00, event check
+Saw: gpu pancreas_minLesRepair healthy: epoch 929/1000 at 18:59, 17.2 s/epoch, no NaN, 0 error lines, GPU 99 %;
+status file ETA train end 19:19, then the 238-case test prediction with probabilities (~2.2 h) → job end ~21:30.
+cpu lane idle (no waiting work). Disk 2.1 PB free.
+**Correction of s16-s18 time budget:** the deadline is **Fri 27 Nov 05:20** (34.3 h left at 19:00 Wed), not Thu
+05:20. s16-s18 planned as if only ~8 h remained after minLesRepair ("last gpu slot", "start by ~21:40 / ~22:50").
+In fact ~32 h of GPU remain after ~21:30 → room for ~4 more runs. Revised gpu queue for the sessions to come
+(after the M1-M3 evaluation of minLesRepair):
+(1) **liver `posRepair_rep2 113 --same-as posRepair`** (~6.3 h): Q1 is the only pre-vs-post result against the
+thesis and is within run-to-run spread; (2) **pancreas `minLesRepair_rep2 114 --same-as minLesRepair`** (~7.5 h,
+with PANCREAS_TEST_PROBS=1 if M2 needs probabilities) if M1/M2 carry a claim (MISSION B second runs); order (1)/(2)
+may be swapped if M1-M3 make pancreas the stronger claim; (3) afterwards decide from the evidence (e.g. a pre arm
+for another confirmed rule, or nothing and the summary early). Every run must finish before Fri 05:20 (final
+session starts 04:20).
+Decision: nothing new; the job end (~21:30) wakes the next session.
+Reasons: MISSION "Every session" 3 (healthy → let the job end wake you).
+Assumptions: the prediction pass takes ~2.2 h as in G2/arm timings.
+Alternatives considered: a cpu job now (nothing declared is waiting; inventing analyses without a question is not
+useful).
+Started: nothing.
+
 ### s18 2026-11-25 15:00, event job_finished (B1_liver_prepost_pos)
 Saw: B1_liver_prepost_pos exit 0 after 0.47 h (`$PROJ/logs/B1_liver_prepost_pos_20261125_142334.log`, 0 error lines;
 `reports/data/post_rules/liver_test_pre_vs_post_pos/summary.md`). Declared s10 comparisons, liver test 111:
