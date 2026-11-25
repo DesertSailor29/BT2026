@@ -184,6 +184,12 @@ Subgroups: slices >= 4 mm (40) pancreas +0.030, tumour −0.002; < 4 mm (198) �
 (62) −0.003 / −0.026. Re-slicing does not close the image gap; no second run.
 `$nnUNet_results/test_eval_pancreas_thickSlice/summary.md`.
 
+**Pancreas minLesRepair (B, D114 f0, autopilot s15-s20, 2026-11-25; exploratory)**: the 131 synthetic labels with a
+single tumour < 1.19 ml made tumour-free. Test 238, tumour Dice 0.169 vs baseline 0.177: −0.008 [−0.022, +0.006], p 0.35
+(vs f0 −0.013, vs f1 −0.003); pancreas Dice 0.181, −0.010 [−0.016, −0.004]; lesion recall 0.429 (0.550 / 0.521), FP
+pieces/case 1.29 (16.95 / 5.33), FP ml/case 2.49. Val: nnU-Net mean Dice 0.140 / 0.146 (baseline 0.151 / 0.125).
+Pre vs post (M1/M2): pending (`pre_vs_post_pancreas.py`). `$nnUNet_results/test_eval_pancreas_minLesRepair/summary.md`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in

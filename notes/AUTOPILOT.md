@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s20 2026-11-25 21:50, event job_finished (pancreas_minLesRepair)
+Saw: pancreas_minLesRepair exit 0 after 7.39 h (`$PROJ/logs/pancreas_minLesRepair_20261125_142333.log`; the 2
+"error" lines are table text). D114 f0 trained 1000 epochs (best EMA pseudo Dice 0.292), nnU-Net val (43 real) pancreas /
+tumour 0.140 / 0.146 (baseline 0.151 / 0.125, thickSlice 0.151 / 0.150); test probs 238 + test_final 238.
+**M3 (declared s14) minLesRepair vs baseline, test 238: tumour Dice 0.169 vs 0.177, −0.008 [−0.022, +0.006], p 0.35
+(n.s.)**; vs f0 −0.013, vs f1 −0.003 (inside the f1−f0 spread −0.011). Pancreas Dice −0.010 [−0.016, −0.004];
+pancreas+tumour −0.027. Lesions: recall 0.429 (baseline 0.550 / 0.521), FP pieces/case 1.29 (16.95 / 5.33), FP ml/case
+2.49 (5.21 / 4.19): the arm learnt "small blobs are not tumour", so it predicts far fewer pieces but misses more
+lesions. `$nnUNet_results/test_eval_pancreas_minLesRepair/summary.md`.
+Decision: gpu `liver_posRepair_rep2` = `liver_arm.sh posRepair_rep2 113 --same-as posRepair` (~6.3 h → ~04:15 Thu);
+cpu `B1p_pancreas_prepost_minLes` = `pre_vs_post_pancreas.py --pre 114:0 --workers 12` niced (M1, M2, R1, R2; ~0.5 h).
+**Declared now, before posRepair_rep2 has any result:** the s10 comparisons Q1-Q3 are re-run for 113:1 alone and for the
+per-case mean of 113:0/113:1 (same baselines); the claim "pre ≠ post for pos" stands only if Q1 on the 2-run mean
+has a CI excluding 0 and both runs have the same sign; otherwise Q1 is reported as within run-to-run spread.
+Reasons: s19 queue (1). The GPU must not wait for the ~0.5 h M1/M2 analysis; both rep2 runs fit (6.3 + 7.5 h ≪ 31 h),
+so the order does not decide whether minLesRepair_rep2 runs; the session that reads M1/M2 decides it (start by ~21:00
+Thu at the latest). Q1 is the only pre-vs-post result against the working thesis.
+Assumptions: liver_arm.sh posRepair_rep2 works as its header says (same ids as posRepair, fold 1 via make_splits
+--same-as); pre_vs_post_liver.py may need a `--pre 113:1` run + a small mean mode (next session, cpu, cheap).
+Alternatives considered: minLesRepair_rep2 first (M3 is n.s. and M1/M2 unknown; no reason to prefer it now);
+waiting for M1/M2 before using the GPU (idle GPU ~0.5 h for no change in what runs).
+Started: see NOTES Log for log paths.
+
 ### s19 2026-11-25 19:00, event check
 Saw: gpu pancreas_minLesRepair healthy: epoch 929/1000 at 18:59, 17.2 s/epoch, no NaN, 0 error lines, GPU 99 %;
 status file ETA train end 19:19, then the 238-case test prediction with probabilities (~2.2 h) → job end ~21:30.
