@@ -4,6 +4,37 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s21 2026-11-25 22:10, event job_finished (B1p_pancreas_prepost_minLes)
+Saw: B1p exit 0 after 0.28 h (`$PROJ/logs/B1p_pancreas_prepost_minLes_20261125_214811.log`, 0 error lines;
+`reports/data/post_rules/pancreas_test_pre_vs_post_minLes/summary.md`). Declared s14, pancreas test 238:
+**M1 minLesRepair saved 0.169 vs baseline+minLes 0.183: −0.014 [−0.028, −0.000] p 0.039 → not equivalent, post
+better** (CI upper bound at −0.000: barely); M2 (grow0.1+minLes on both) −0.015 [−0.031, −0.000] p 0.075; M3 −0.008
+n.s.; R1 −0.016, R2 −0.011 n.s.; pancreas Dice −0.010 / −0.014; lesion recall 0.45 → 0.43 (M1), 0.52 → 0.43 (M2).
+Meaning: on pancreas, as on liver pos (Q1 −0.024), the rule on the training labels does not replace the rule on the
+predictions, for both weak rules whose repair touches ~100 labels. The pre arms learnt to predict fewer, not better,
+tumour pieces. Both results are single runs and M1's margin is within the baseline's run-to-run spread (0.011).
+gpu: liver_posRepair_rep2 healthy (epoch 34 at 21:58, 17.2 s/epoch, no NaN; train ETA ~02:36, + ~1 h predict → ~04:00 Thu).
+Decision: **M1/M2 carry a claim (MISSION B) → `minLesRepair_rep2` runs after posRepair_rep2**: the session woken by
+posRepair_rep2's end starts `ap start --lane gpu pancreas_minLesRepair_rep2 'PANCREAS_TEST_PROBS=1 bash
+"$REPO/nnunet/pancreas_arm.sh" minLesRepair_rep2 114 --same-as minLesRepair'` (~7.5 h → ~12:00 Thu; probabilities
+needed for M2) and on cpu `pre_vs_post_liver.py --rule pos --pre 113:1` then `--pre 113:0,113:1` (each ~15 min).
+**Declared now, before minLesRepair_rep2 has any result:** M1-M3 re-run for 114:1 alone and for the per-case mean of
+114:0/114:1 (`pre_vs_post_pancreas.py --pre 114:1`, `--pre 114:0,114:1`); "pre ≠ post for minLes" stands only if M1 on
+the 2-run mean has a CI excluding 0 and both runs have the same sign; otherwise reported as within run-to-run spread.
+Code (this session): `pre_vs_post_liver.py` / `pre_vs_post_pancreas.py` take `--pre` as one run or a comma list
+(per-case mean), accept `<arm>_rep2` runs, and write non-default runs to `..._<runs>/`; also fixes a bug where
+liver `--pre` other than the ARMS run still used the ARMS run in the comparisons. Fake test: all three committed
+summaries re-run byte-identical; `--pre 113:0,113:0` / `114:0,114:0` reproduce the single-run numbers (outputs deleted).
+Reasons: MISSION B (second run for any arm whose pre-vs-post comparison carries the claim); two arms on two organs now
+point the same way against the working thesis, so a rep2 of each decides whether that is a finding or noise.
+After minLesRepair_rep2 (~12:00 Thu) ~17 h remain: the session then decides between a third use (e.g. nothing and
+the summary early) from the evidence.
+Assumptions: `pancreas_arm.sh <arm>_rep2 114 --same-as minLesRepair` registers fold 1 as for thickSlice_rep2 (generic
+branch, not fake-tested this session); disk 2.1 PB free, probabilities ~50 GB fine.
+Alternatives considered: no pancreas rep2 (M1 is the declared claim and is marginal: exactly the case for a rep2);
+killing posRepair_rep2 to run pancreas first (both fit before the deadline; no gain).
+Started: nothing (gpu busy until ~04:00; no cpu work is waiting: the liver rep2 analyses need 113:1's predictions).
+
 ### s20 2026-11-25 21:50, event job_finished (pancreas_minLesRepair)
 Saw: pancreas_minLesRepair exit 0 after 7.39 h (`$PROJ/logs/pancreas_minLesRepair_20261125_142333.log`; the 2
 "error" lines are table text). D114 f0 trained 1000 epochs (best EMA pseudo Dice 0.292), nnU-Net val (43 real) pancreas /

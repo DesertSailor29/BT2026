@@ -24,6 +24,10 @@ posRepair (Dataset113, pos repair of the 999 labels; comparisons declared in s10
   R1-R2 the same with ccPost (reference, not declared)
   python nnunet/pre_vs_post_liver.py --pre 113:0 --rule pos --workers 12
 -> reports/data/post_rules/liver_test_pre_vs_post_pos/summary.md.
+Second run / 2-run mean (s20 declaration: the claim pre != post stands only if Q1 on the mean excludes 0 and both
+runs have the same sign):
+  python nnunet/pre_vs_post_liver.py --rule pos --pre 113:1 --workers 12        # -> ..._pos_113f1/
+  python nnunet/pre_vs_post_liver.py --rule pos --pre 113:0,113:1 --workers 12  # -> ..._pos_113f0_113f1/
 """
 import argparse
 import json
@@ -42,11 +46,13 @@ BASE = ["101:0", "101:1"]
 ARMS = {"tumTouch": ("103:0", "ccRepair", "P", "s10"), "pos": ("113:0", "posRepair", "Q", "s10")}
 
 
-def compare(rule):
-    """The declared comparisons for one rule's pre arm (tumTouch: the original P1-P3/R1-R2, unchanged)."""
-    if rule == "tumTouch":
+def compare(rule, pre=None):
+    """The declared comparisons for one rule's pre arm (tumTouch: the original P1-P3/R1-R2, unchanged).
+    pre: the pre-arm column key (default the rule's run in ARMS; "pre" = per-case mean over --pre runs)."""
+    if rule == "tumTouch" and pre is None:
         return COMPARE
-    pre, arm, k, _ = ARMS[rule]
+    _, arm, k, _ = ARMS[rule]
+    pre = pre or ARMS[rule][0]
     return ((f"{k}1", f"{arm} as saved vs baseline + {rule}", (pre, "none"), ("base", rule)),
             (f"{k}2", f"{arm} + {rule} vs baseline + {rule}", (pre, rule), ("base", rule)),
             (f"{k}3", f"{arm} as saved vs baseline", (pre, "none"), ("base", "none")),
@@ -67,13 +73,18 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--cases", nargs="+", help="subset (fake test)")
     ap.add_argument("--rule", choices=sorted(ARMS), default="tumTouch", help="post rule whose pre arm is compared")
-    ap.add_argument("--pre", help="dataset:fold of the pre arm (default: the rule's arm in ARMS)")
+    ap.add_argument("--pre", help="dataset:fold of the pre arm (default: the rule's arm in ARMS); several runs "
+                    "comma-separated (e.g. 113:0,113:1 = per-case mean of both, s20 declaration) -> own output dir")
     a = ap.parse_args()
-    pre, arm, _, decl = ARMS[a.rule]
-    pre = a.pre or pre
+    pre0, arm, _, decl = ARMS[a.rule]
+    pres = (a.pre or pre0).split(",")
     pt.set_target("liver")
     fl.ORG = "liver"
-    assert pt.arm_name(*map(int, pre.split(":"))) == arm, (pre, pt.arm_name(*map(int, pre.split(":"))))
+    for p in pres:  # rep2 runs are registered as <arm>_rep2
+        n = pt.arm_name(*map(int, p.split(":")))
+        assert n in (arm, arm + "_rep2"), (p, n)
+    single = pres == [pre0]
+    pre = pres[0]
     cases = a.cases or sorted(f[: -len("_0000.nii.gz")] for f in os.listdir(pt.IMG) if f.endswith("_0000.nii.gz"))
     if not a.cases:
         assert len(cases) == 111, len(cases)
@@ -83,7 +94,7 @@ def main():
     assert len(bins.files) == 20 and hu == (1.0, 210.0)
     support = pr.prior_support([bins[c] for c in bins.files])
     jobs = []
-    for run in [pre] + BASE:
+    for run in pres + BASE:
         cdir = f"{ptl.OUT}/test/{run.replace(':', '_')}"
         os.makedirs(cdir, exist_ok=True)
         for c in cases:
@@ -98,27 +109,31 @@ def main():
             print(f"  {k}/{len(jobs)} {run} {c}", flush=True)
 
     data = {(run, c): json.load(open(f"{ptl.OUT}/test/{run.replace(':', '_')}/{c}.json"))["metrics"]
-            for run in [pre] + BASE for c in cases}
+            for run in pres + BASE for c in cases}
 
     def col(src, rule, key="tumour_dice"):
-        if src == "base":
-            return np.nanmean([[data[(r, c)][rule][key] for c in cases] for r in BASE], axis=0)
+        if src in ("base", "pre"):
+            runs = BASE if src == "base" else pres
+            return np.nanmean([[data[(r, c)][rule][key] for c in cases] for r in runs], axis=0)
         return np.array([data[(src, c)][rule][key] for c in cases], float)
 
-    lines = [f"# Pre vs post for {a.rule} / ccPost: {arm} (D{pre.replace(':', ' f')}) vs the baseline, liver test "
+    cmp = compare(a.rule) if single else compare(a.rule, "pre" if len(pres) > 1 else pre)
+    what = f"D{pre.replace(':', ' f')}" if len(pres) == 1 else "per-case mean of " + " / ".join(pres)
+    lines = [f"# Pre vs post for {a.rule} / ccPost: {arm} ({what}) vs the baseline, liver test "
              f"({len(cases)} cases)",
              "", f"Comparisons declared in `notes/AUTOPILOT.md` {decl} before this run (`nnunet/pre_vs_post_liver.py`). "
              "Baseline = per-case mean of 101:0 / 101:1. b − a per case, bootstrap 95 % CI, Wilcoxon p. "
-             f"Equivalence ({compare(a.rule)[0][0]}, R1): CI within ±0.02. Exploratory.", "",
+             f"Equivalence ({cmp[0][0]}, R1): CI within ±0.02. Exploratory.", "",
              "| id | comparison | a | b | tumour Dice b − a [95% CI] | p | within ±0.02 | liver Dice b − a [95% CI] |",
              "|---|---|---|---|---|---|---|---|"]
-    for cid, what, b, a_ in compare(a.rule):
+    for cid, what, b, a_ in cmp:
         st = pt.paired(col(*a_), col(*b))
         sl = pt.paired(col(*a_, key="liver_dice"), col(*b, key="liver_dice"))
         eq = "yes" if -0.02 < st["lo"] and st["hi"] < 0.02 else "no"
         lines.append(f"| {cid} | {what} | {st['x']:.3f} | {st['y']:.3f} | {pt.fmt_diff(st, 3)} | {st['p']:.2g} | "
                      f"{eq} | {pt.fmt_diff(sl, 3)} |")
     pub = (f"{pr.REPO}/reports/data/post_rules/liver_test_pre_vs_post" + ("" if a.rule == "tumTouch" else f"_{a.rule}")
+           + ("" if single else "_" + "_".join(p.replace(":", "f") for p in pres))
            + ("_subset" if a.cases else ""))
     os.makedirs(pub, exist_ok=True)
     open(f"{pub}/summary.md", "w").write("\n".join(lines) + "\n")
