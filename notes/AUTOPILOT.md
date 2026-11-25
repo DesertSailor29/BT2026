@@ -4,6 +4,37 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s16 2026-11-25 08:55, event job_finished (B2p_build_D114)
+Saw: B2p exit 0 after 0.51 h (`$PROJ/logs/B2p_build_D114_20261125_081111.log`, 0 error lines): Dataset114
+PancreasSynthRepairMinLes built, 131/999 labels changed (counts match label_rule_counts), tumour voxels 9685523 →
+9598260 (−0.90 %), pancreas voxels removed 0, 131 tumour-free; plans copied from D102; preprocessed 1042/1042 pkl.
+gpu: liver_posRepair healthy (epoch 265 at 08:40, 17.3 s/epoch, EMA pseudo Dice 0.71, no NaN; train ETA 12:12,
+then test prediction ~1 h).
+Decision: no new job (gpu busy, cpu has no waiting work). Prepared code for the next two evaluations:
+(1) `predict_test.py predict --probs` + `PANCREAS_TEST_PROBS=1` in `pancreas_arm.sh`: the arm's test prediction
+saves probabilities in the same pass (fold_X/test_probs/) and copies the segmentations into test_final/, so M2
+(grow0.1+minLes needs probabilities) costs no extra ~2 h GPU prediction. Default behaviour unchanged.
+(2) `pre_vs_post_liver.py --rule pos` (posRepair, D113 f0: Q1-Q3 = the s10 declarations, + ccPost references);
+the tumTouch default re-run reproduces the committed summary byte-identically.
+(3) new `nnunet/pre_vs_post_pancreas.py --pre 114:<f>` (M1-M3 as declared in s14, + references minLes / thr0.1+minLes
+marked "not declared"; reuses post_rules_test.py's frozen measure and the A3b baseline caches).
+**Next gpu (the session woken by posRepair's end):** cpu `pre_vs_post_liver.py --rule pos --workers 12` (posRepair
+eval, ~15 min); gpu `ap start --lane gpu pancreas_minLesRepair 'PANCREAS_TEST_PROBS=1 bash "$REPO/nnunet/pancreas_arm.sh"
+minLesRepair 114 --all-synth'` (~7.5 h → ~21:00). Then `pre_vs_post_pancreas.py --pre 114:0` (fold from arms.json).
+With ~8 h left after that, the last gpu slot fits one more arm only if started by ~21:30 (train 5.3 h + predict
+2 h): candidate = minLesRepair_rep2 (`--same-as minLesRepair`) if M1/M2 carry a claim, else posRepair_rep2 if Q1
+carries one, else nothing (write the summary early).
+Reasons: MISSION B (declared comparisons, finished arms are evaluation); saving a GPU pass makes a second run fit
+before the deadline.
+Assumptions: nnUNetv2_predict with --save_probabilities writes the same segmentation as without (G2 vs test_final
+argmax agreement 1.0000 over 476 cases, s14); post_rules_test.measure asserts agreement > 0.995 anyway.
+Alternatives considered: building a minLes reject dataset now as fallback (not needed unless M1 says the repair
+hurts; builds in ~0.5 h then); a separate predict_test_probs.sh run after the arm (~2 h GPU more).
+Fake test: predict --probs with a stubbed nnUNetv2_predict (2 cases: probs + copies, resume, default path unchanged);
+pre_vs_post_liver --rule pos with ARMS patched to 103:0 on 3 cases; pre_vs_post_pancreas --pre 102:0 --arm all on
+238 (caches) and --no-probs on 2 cases. Subset outputs deleted.
+Started: nothing (gpu busy until ~13:15; cpu: no waiting work).
+
 ### s15 2026-11-25 08:30, event job_finished (B0p_pancreas_label_counts)
 Saw: B0p exit 0 after 0.24 h (`$PROJ/logs/B0p_pancreas_label_counts_20261125_075415.log`; spine found 999/999).
 On the 999 synthetic D102 labels: **minLes changes 131 volumes** (87263 tumour voxels = 0.90 %, 131 pieces; median

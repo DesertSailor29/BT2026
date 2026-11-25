@@ -17,7 +17,8 @@
 #     > "$PROJ/logs/pancreas_arm_thickSlice_$(date +%Y%m%d_%H%M%S).log" 2>&1 < /dev/null &
 # (under the autopilot: autopilot/ap start pancreas_thickSlice 'bash "$REPO/nnunet/pancreas_arm.sh" thickSlice')
 # Status: PANCREAS_<arm>__... (job_status.py) + NNUNET_D<id>_... (train_status.py). Eval:
-# $nnUNet_results/test_eval_pancreas_<arm>/summary.md. Env: PANCREAS_WORKERS (16).
+# $nnUNet_results/test_eval_pancreas_<arm>/summary.md. Env: PANCREAS_WORKERS (16), PANCREAS_TEST_PROBS (0; 1 = also
+# save test probabilities in the same prediction pass).
 set -euo pipefail
 ARM="${1:?arm name}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -85,7 +86,11 @@ python -c "import json; m=json.load(open('$FD/validation/summary.json'))['mean']
 step "4 predict $NTEST test cases"
 n=$(find "$FD/test_final" -name 'msd_*.nii.gz' 2>/dev/null | wc -l || true)
 if [ "$n" -eq $NTEST ]; then echo "test predictions already there"
-else python "$HERE/predict_test.py" predict --target pancreas --dataset $DID --fold "$F"; fi
+else
+  # PANCREAS_TEST_PROBS=1: the same pass also saves probabilities (fold_X/test_probs/, for frozen rules that need
+  # them, e.g. grow0.1 in post_rules_test.py); the segmentations are copied into test_final/
+  probs=(); [ "${PANCREAS_TEST_PROBS:-0}" = 1 ] && probs=(--probs)
+  python "$HERE/predict_test.py" predict --target pancreas --dataset $DID --fold "$F" "${probs[@]}"; fi
 
 step "5 eval vs baseline (102:0 + 102:1)"
 python "$HERE/predict_test.py" eval --target pancreas --runs "$DID:$F" --family "$ARM" \

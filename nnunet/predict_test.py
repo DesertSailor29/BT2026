@@ -39,6 +39,7 @@ import csv
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 from multiprocessing import Pool
@@ -123,15 +124,34 @@ def prepare(workers):
     assert n == len(s["test"]), n
 
 
-def predict(did, fold, npp, nps):
+def predict(did, fold, npp, nps, probs=False):
+    """probs: one pass with --save_probabilities into fold_X/test_probs/ (as predict_test_probs.sh, for frozen
+    post-hoc rules that need probabilities), then the segmentations are copied into test_final/ (the same
+    checkpoint and predictor give the same argmax; saves a second ~2 h prediction). checkpoint_final only."""
     prepare(16)
-    out = f"{res_dir(did)}/fold_{fold}/{PRED_SUB}"
+    fdir = f"{res_dir(did)}/fold_{fold}"
+    final = f"{fdir}/{PRED_SUB}"
+    assert not probs or PRED_SUB == "test_final", "--probs only with checkpoint_final"
+    out = f"{fdir}/test_probs" if probs else final
     cmd = ["nnUNetv2_predict", "-i", IMG, "-o", out, "-d", str(did), "-c", "3d_fullres", "-f", str(fold),
            "-chk", CHK, "-npp", str(npp), "-nps", str(nps), "--continue_prediction"]
+    if probs:
+        cmd.append("--save_probabilities")
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
-    n = len(glob.glob(f"{out}/{real_case(TARGET, 0)[:-3]}*.nii.gz"))
-    print(f"D{did} fold {fold}: {n} predictions in {out}", flush=True)
+    pat = f"{real_case(TARGET, 0)[:-3]}*.nii.gz"
+    if probs:
+        segs = sorted(glob.glob(f"{out}/{pat}"))
+        assert len(glob.glob(f"{out}/*.npz")) == len(segs), "probability files missing"
+        os.makedirs(final, exist_ok=True)
+        for src in segs:
+            dst = f"{final}/{os.path.basename(src)}"
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst + ".tmp")
+                os.replace(dst + ".tmp", dst)
+        print(f"D{did} fold {fold}: {len(segs)} probability files in {out}, segmentations copied", flush=True)
+    n = len(glob.glob(f"{final}/{pat}"))
+    print(f"D{did} fold {fold}: {n} predictions in {final}", flush=True)
 
 
 def dice(r, p):
@@ -444,6 +464,7 @@ def main():
     p.add_argument("--npp", type=int, default=3, help="nnU-Net preprocessing workers")
     p.add_argument("--nps", type=int, default=3, help="nnU-Net export workers")
     p.add_argument("--checkpoint", choices=("final", "best"), default="final")
+    p.add_argument("--probs", action="store_true", help="also save probabilities (fold_X/test_probs/)")
     e = sp.add_parser("eval", parents=[common])
     e.add_argument("--baseline", nargs="+",
                    help="dataset:fold runs whose per-case mean is the baseline (default: `all` + `all_rep2`, "
@@ -462,7 +483,7 @@ def main():
     if a.cmd == "prepare":
         prepare(16)
     elif a.cmd == "predict":
-        predict(a.dataset or TARGETS[a.target][0], a.fold, a.npp, a.nps)
+        predict(a.dataset or TARGETS[a.target][0], a.fold, a.npp, a.nps, a.probs)
     else:
         parse = lambda xs: [tuple(int(v) for v in x.split(":")) for x in xs]  # noqa: E731
         out = a.out or f"{os.environ['nnUNet_results']}/test_eval_{a.target}" + ("" if a.checkpoint == "final" else "_best")
