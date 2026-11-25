@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s12 2026-11-25 03:15, event job_finished (pancreas_thickSlice)
+Saw: G1 thickSlice exit 0 after 7.38 h (`$PROJ/logs/pancreas_thickSlice_20261124_194809.log`; the 2 "error" lines
+are table text). nnU-Net val (43 real, pancreas / tumour): 0.151 / 0.150 (baseline mean Validation Dice 0.151 / 0.125
+for f0 / f1). **Test 238 (D112 f0 vs baseline mean of 102:0/102:1): tumour Dice 0.161 vs 0.177, −0.016 [−0.030,
+−0.002], Wilcoxon/Holm p 0.023 (median diff 0) → worse, not a win**; vs f0 −0.021, vs f1 −0.011 (n.s.); noise pair
+f1 − f0 −0.011. Pancreas Dice +0.000 [−0.007, +0.008]; FP tumour pieces/case 8.4 (vs 17.0 / 5.3), lesion recall
+0.504 (vs 0.550 / 0.521). Subgroups (exploratory, in-session, `test_cases.csv`): slices >= 4 mm (n 40) pancreas
++0.030, tumour −0.002; < 4 mm (198) pancreas −0.006, tumour −0.019; fat around the gland (hu_shell < 0, n 62)
+pancreas −0.003, tumour −0.026. → re-slicing the synthetic images to real slice thicknesses helps the gland a little
+on thick-slice scans only and costs tumour Dice on thin ones; it does not close the image gap (fat untouched, as
+expected: the re-slicing does not add fat).
+Second thickSlice run: no (val score mean of pancreas + tumour 0.151 vs baseline ~0.138: +0.013 < the 0.02 bar;
+by the EMA pseudo Dice 0.286 vs 0.300 / 0.294 it is lower).
+Decision: gpu: `predict_test_probs.sh 102 0 1` (s6 plan; F2-F4 need test probabilities; ~4.4 h). cpu: nothing (no
+analysis waits; the full frozen test run needs the probs). Next: when the probs are done, cpu `post_rules_test.py`
+full test run (F1-F4, Holm over 4); gpu right after: `liver_arm.sh posRepair 113 --all-synth` (s10/s11), unless
+F2-F4 confirm a pancreas rule with a B twin first (grow needs probabilities: no label twin; so posRepair likely next).
+Reasons: MISSION A3 / s6 freeze; the GPU would idle otherwise.
+Assumptions: disk fine (2.1 PB free); probs reproduce test_final argmax (asserted later by post_rules_test.py).
+Alternatives considered: posRepair first (rejected in s11: pancreas F2-F4 were frozen first; order kept);
+thickSlice_rep2 (bar not met).
+Started: gpu `G2_testprobs_102` (log path in the NOTES Log; expected end ~07:45).
+
 ### s11 2026-11-24 23:55, event job_finished (B1_liver_prepost_D113)
 Saw: B1 exit 0 after 1.04 h (`$PROJ/logs/B1_liver_prepost_D113_20261124_224625.log`). Declared comparisons (s10),
 liver test 111: P1 ccRepair saved 0.375 vs baseline+tumTouch 0.365 +0.009 [−0.002, +0.021] p 0.14 (not within ±0.02,

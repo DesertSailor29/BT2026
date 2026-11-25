@@ -154,6 +154,14 @@ tumNear10 +0.083/+0.076; **pos +0.027/+0.024** (liver Dice +0.02); **tissueVal (
 −0.25. **ccPost+minLes / +pos / +tissueTxt = ccPost exactly** (nothing adds to the one-organ rule). Frozen for test (s8):
 tumTouch, pos, tissueVal. `reports/data/post_rules/liver_val/summary.md`.
 
+**Pancreas thickSlice (G1, D112 f0, autopilot s4-s12, 2026-11-25; exploratory)**: 999 synthetic images re-sliced to
+the MSD07 val slice thicknesses. Test 238, tumour Dice 0.161 vs baseline 0.177: −0.016 [−0.030, −0.002], p 0.023 (vs
+f0 −0.021, vs f1 −0.011 n.s.); pancreas Dice 0.192 (+0.000 [−0.007, +0.008]); lesion recall 0.504, FP pieces/case 8.4.
+Val: nnU-Net mean Dice 0.151 / 0.150 (baseline 0.151 / 0.125), EMA pseudo Dice 0.286 (baseline 0.300 / 0.294).
+Subgroups: slices >= 4 mm (40) pancreas +0.030, tumour −0.002; < 4 mm (198) −0.006 / −0.019; fat around the gland
+(62) −0.003 / −0.026. Re-slicing does not close the image gap; no second run.
+`$nnUNet_results/test_eval_pancreas_thickSlice/summary.md`.
+
 ## Size split (ids only, no training)
 
 D104 by measured in-liver burden, median split 2.29 ml: sizeLarge 590, sizeSmall 589, sizeRand 590 (tumour-free in
