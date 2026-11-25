@@ -14,7 +14,15 @@ Rules (s9: those confirmed on liver test, frozen in s8):
              pieces of liver ∪ tumour < 50 % inside -> bg
   ccPost     reference: the one-organ rule, whose training-label twin (ccRepair) is the liver study's arm
 
+Pancreas (s14: F2-F4 = grow0.1 + minLes / tumNear10 / pos+minLes confirmed on test; grow and its plain-threshold
+twin act on probabilities and have no label twin, so the label-definable parts are counted, frozen s6 parameters):
+  minLes     tumour pieces < 1.19 ml (smallest real val lesion) -> bg
+  pos        spine-relative prior = union of the 43 real MSD07 val labels (the test-time prior)
+  pos+minLes pos, then minLes (F1, not confirmed; counted for completeness)
+  ccPost     reference (one organ)
+
   python nnunet/label_rule_counts.py --target liver --workers 12
+  python nnunet/label_rule_counts.py --target pancreas --dataset 102 --workers 12
   python nnunet/label_rule_counts.py --target liver --cases liver_0000 liver_0001   # fake test
 -> reports/data/post_rules/liver_label_counts/{per_volume.csv, summary.md}; cache under
    $nnUNet_results/test_eval_liver/label_rule_counts/. Exploratory.
@@ -35,7 +43,8 @@ import post_rules as pr  # noqa: E402
 from cc_rules import main_structure  # noqa: E402
 
 VERSION = "labelcounts1"
-RULES = ("tumTouch", "pos", "ccPost")
+RULES_BY = {"liver": ("tumTouch", "pos", "ccPost"), "pancreas": ("minLes", "pos", "pos+minLes", "ccPost")}
+RULES = RULES_BY["liver"]
 MIN_CHANGED = 50  # MISSION B threshold (volumes)
 
 
@@ -45,7 +54,7 @@ def raw_dir(did):
 
 
 def measure(args):
-    case, raw, cache_f, support = args
+    case, raw, cache_f, support, min_ml = args
     lnii = nib.load(f"{raw}/labelsTr/{case}.nii.gz")
     lab = np.asarray(lnii.dataobj).astype(np.uint8)
     img = nib.load(f"{raw}/imagesTr/{case}_0000.nii.gz").get_fdata(dtype=np.float32)
@@ -53,9 +62,13 @@ def measure(args):
     sp = pr.spacing_of(lnii.affine)
     centre = pr.spine_centre(img, sp, lnii.affine)
     del img
-    v = {"tumTouch": pr.tum_touch(lab)[0],
-         "pos": pr.position(lab, centre, sp, lnii.affine, support),
+    v = {"pos": pr.position(lab, centre, sp, lnii.affine, support),
          "ccPost": np.where(main_structure(lab), lab, 0).astype(np.uint8)}
+    if min_ml is None:
+        v["tumTouch"] = pr.tum_touch(lab)[0]
+    else:
+        v["minLes"] = pr.min_les(lab, sp, min_ml)
+        v["pos+minLes"] = pr.min_les(v["pos"], sp, min_ml)
     n0 = pr.n_tumour_pieces(lab)
     out = {"version": VERSION, "case": case, "spine_found": centre is not None,
            "voxel_ml": float(np.prod(sp)) / 1000.0, "fg_vox": int((lab > 0).sum()),
@@ -71,11 +84,13 @@ def measure(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--target", choices=("liver",), default="liver")
+    ap.add_argument("--target", choices=("liver", "pancreas"), default="liver")
     ap.add_argument("--dataset", type=int, default=101)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--cases", nargs="+", help="subset (fake test)")
     a = ap.parse_args()
+    global RULES
+    RULES = RULES_BY[a.target]
     pr.set_target(a.target)
     raw = raw_dir(a.dataset)
     cases = a.cases or sorted(f[:-len(".nii.gz")] for f in os.listdir(f"{raw}/labelsTr")
@@ -83,16 +98,20 @@ def main():
     if not a.cases:
         assert len(cases) == 999, len(cases)
     bins = np.load(f"{pr.OUT}/pos_bins.npz")
-    assert len(bins.files) == 20, bins.files
+    assert len(bins.files) == {"liver": 20, "pancreas": 43}[a.target], bins.files
     support = pr.prior_support([bins[c] for c in bins.files])
-    cdir = f"{os.environ['nnUNet_results']}/test_eval_{a.target}/label_rule_counts"
+    min_ml = None
+    if a.target == "pancreas":
+        min_ml = json.load(open(f"{pr.PUB}/val_label_params.json"))["min_lesion_ml"]
+        assert abs(min_ml - 1.19) < 0.01, min_ml
+    cdir = f"{os.environ['nnUNet_results']}/test_eval_{a.target}/label_rule_counts" + ("_subset" if a.cases else "")
     os.makedirs(cdir, exist_ok=True)
     jobs = []
     for c in cases:
         f = f"{cdir}/{c}.json"
         if os.path.exists(f) and json.load(open(f)).get("version") == VERSION:
             continue
-        jobs.append((c, raw, f, support))
+        jobs.append((c, raw, f, support, min_ml))
     print(f"{len(jobs)} of {len(cases)} volumes to measure, {a.workers} workers", flush=True)
     with Pool(a.workers) as pool:
         for k, c in enumerate(pool.imap_unordered(measure, jobs, chunksize=1), 1):
@@ -110,8 +129,8 @@ def main():
                        [d["rules"][r][k] for r in RULES
                         for k in ("changed_vox", "tum_vox_removed", "tum_pieces_removed")])
     n = len(data)
-    lines = [f"# B-prep: confirmed liver rules applied to the {n} synthetic training labels (D{a.dataset})", "",
-             "Rule functions of `nnunet/post_rules.py` with the frozen s8 parameters (`nnunet/label_rule_counts.py`). "
+    lines = [f"# B-prep: confirmed {a.target} rules applied to the {n} synthetic training labels (D{a.dataset})", "",
+             f"Rule functions of `nnunet/post_rules.py` with the frozen {'s8' if a.target == 'liver' else 's6'} parameters (`nnunet/label_rule_counts.py`). "
              f"MISSION B: < {MIN_CHANGED} changed volumes → no pre-training arm. Exploratory.", "",
              f"Spine centre found in {sum(d['spine_found'] for d in data)} / {n} volumes.", "",
              "| rule | volumes changed | median changed voxels (changed vols) | volumes losing tumour | "

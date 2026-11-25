@@ -147,6 +147,14 @@ pieces/case 16.9 → 0.8 / 5.3 → 0.8; pancreas Dice ±0. Controls: minLes alon
 / far tumour pieces trades lesions for FP pieces; a small, run-dependent gain (large in f0 with 17 FP pieces/case,
 ≈0 in f1). F2-F4 (grow) wait for test probabilities. `reports/data/post_rules/pancreas_{val_frozen,test_frozen_noprobs}/`.
 
+**Pancreas frozen post rules, A3b full test (autopilot s13-s14, 2026-11-25; frozen s6, Holm over 4, exploratory)**:
+238 test, none 0.183 / 0.172. **F2 grow0.1+minLes +0.020 [+0.013, +0.028], F3 grow0.1+tumNear10 +0.020 [+0.013,
++0.027], F4 grow0.1+pos+minLes +0.021 [+0.014, +0.030] confirmed** (both runs > 0, Holm <= 1e-9; pancreas Dice +0.050;
+lesion recall −0.02). F1 not (+0.007). **The anatomical limits of grow add nothing**: grow0.1+X − thr0.1+X tumour
+±0.001, pancreas −0.002; thr0.1+minLes +0.019, thr0.1+pos+minLes +0.021. Alone: thr0.1 +0.004, grow0.1 +0.005 (n.s.),
+minLes +0.006. → a lower decision threshold (gland +0.05) plus dropping small/far tumour pieces; not anatomy-specific.
+`reports/data/post_rules/pancreas_test_frozen/summary.md`.
+
 **Liver post rules, A2L val screen (autopilot s7-s8, 2026-11-24; val only, exploratory)**: 20 LiTS val, 101:0 / 101:1,
 none 0.289 / 0.297. One-organ rules ccPost +0.097/+0.113, ccTol5-20 / ccK2-3 alike; **tumTouch +0.084/+0.097**,
 tumNear10 +0.083/+0.076; **pos +0.027/+0.024** (liver Dice +0.02); **tissueVal (1..210 HU) +0.018/+0.020**; tissueTxt

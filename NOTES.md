@@ -34,8 +34,10 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   tissueVal +0.009 not, nothing adds to ccPost; s10: on the 999 synthetic labels tumTouch changes 598 (twin = ccRepair,
   no new arm), pos 84; s11: B1 pre vs post: ccRepair ≈ baseline+ccPost (−0.006, equivalent), vs baseline+tumTouch +0.009 (CI
   just misses ±0.02); D113 posRepair built; s12: thickSlice test −0.016 [−0.030, −0.002] vs baseline (pancreas
-  Dice ±0; thick-slice scans' gland +0.03 only) → no gain, no rep2; s13: G2 test probs done (238/238 x 2);
-  cpu A3b full frozen pancreas test (F1-F4) running, gpu liver posRepair arm (D113) running, ~14:30)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
+  Dice ±0; thick-slice scans' gland +0.03 only) → no gain, no rep2; s13: G2 test probs done; s14: pancreas test
+  F2-F4 (grow0.1 + minLes / tumNear10 / pos+minLes) confirmed +0.020/+0.020/+0.021, pancreas Dice +0.05, but grow ≈
+  plain thr0.1 (anatomy adds nothing: a threshold fix + small-piece removal); cpu B0p pancreas label counts running,
+  gpu liver posRepair arm (D113) running, ~14:30)**: `autopilot/supervisor.sh` (gpu + cpu lane) wakes a new
   headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
   `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
   first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
@@ -43,7 +45,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   Fake-tested on the VM; autopilot work goes to branch `autopilot`. Rule ledger `reports/data/post_rules/ledger.md`.
 ## Next steps
 0. **Autopilot running** (since 2026-11-24 19:00, until Fri 27 Nov 05:20): journal `notes/AUTOPILOT.md`, branch
-   `autopilot`. Friday: review the branch (summary on top of the journal), then merge into main. Running: pancreas F2-F4 test (cpu A3b), liver posRepair arm (gpu, D113, `nnunet/liver_arm.sh`).
+   `autopilot`. Friday: review the branch (summary on top of the journal), then merge into main. Running: pancreas label counts (cpu B0p: minLes/pos on the 999 synthetic labels → minLesRepair arm or 'generator obeys'), liver posRepair arm (gpu, D113, `nnunet/liver_arm.sh`).
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -83,9 +85,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-25 07:55 (UCloud autopilot s14): A3b done (exit 0): pancreas test F2 grow0.1+minLes +0.020 [+0.013, +0.028], F3 +0.020, F4 +0.021 confirmed (Holm, both runs), pancreas Dice +0.050; F1 +0.007 not; grow − thr ±0.001 (the plain threshold does the same). `label_rule_counts.py --target pancreas`; cpu `B0p_pancreas_label_counts` (`$PROJ/logs/B0p_pancreas_label_counts_20261125_075415.log`). Next: counts → minLesRepair arm (declared M1-M3, journal s14) or 'generator obeys'; posRepair eval.
 - 2026-11-25 07:25 (UCloud autopilot s13): G2 done (exit 0, 238/238 probs per fold). cpu `A3b_frozen_full` (`$PROJ/logs/A3b_frozen_full_20261125_072131.log`, F1-F4 + controls on test, Holm over 4); gpu `liver_posRepair` (`$PROJ/logs/liver_posRepair_20261125_072131.log`, D113 train + test, ~7 h). Next: A3b verdicts; posRepair eval (s10 declarations).
 - 2026-11-25 03:15 (UCloud autopilot s12): thickSlice done (exit 0): test tumour 0.161 vs 0.177, −0.016 [−0.030, −0.002] p 0.023; pancreas +0.000; val 0.151 (baseline 0.151/0.125) → no rep2. gpu `G2_testprobs_102` (`$PROJ/logs/G2_testprobs_102_20261125_031312.log`, ~4.4 h). Next: probs done → post_rules_test.py full (F2-F4) on cpu + liver_arm.sh posRepair on gpu.
 - 2026-11-24 23:55 (UCloud autopilot s11): B1 done (exit 0): ccRepair vs baseline+ccPost −0.006 [−0.017, +0.003] (equivalent ±0.02), vs baseline+tumTouch +0.009 [−0.002, +0.021] (not quite), vs baseline +0.072 → pre ≈ post. D113 posRepair built + preprocessed (84 changed). New `nnunet/liver_arm.sh`. Nothing started (cpu: no waiting work). thickSlice epoch 812, train ETA 00:43. Next: thickSlice end → test probs 102 0 1 → posRepair.
 - 2026-11-24 22:55 (UCloud autopilot s10): B0 done (exit 0): synthetic liver labels changed by tumTouch 598/999 (= ccRepair's tumour part, no new arm), pos 84 (0.35 % tumour voxels). New `nnunet/pre_vs_post_liver.py`, `nnunet/build_rule_repair_dataset.py`; cpu `B1_liver_prepost_D113` (`$PROJ/logs/B1_liver_prepost_D113_20261124_224625.log`: ccRepair vs baseline+tumTouch, then D113 posRepair build + preprocess, ~2 h). thickSlice epoch 573. Next: B1 result; write liver_arm.sh; thickSlice end → test probs.
 - 2026-11-24 22:35 (UCloud autopilot s9): A3L liver test done (exit 0): tumTouch +0.063 [+0.046, +0.081] and pos +0.013 [+0.007, +0.019] confirmed (Holm), tissueVal +0.009 not; ccPost+pos = ccPost; open1 +0.011, rand_tumTouch −0.187. New `nnunet/label_rule_counts.py`; cpu `B0_liver_label_counts` (`$PROJ/logs/B0_liver_label_counts_20261124_222754.log`, ~1 h). thickSlice epoch 525, train ETA 00:40. Next: counts → liver repair arm or 'generator obeys'; thickSlice end → test probs (F2-F4).
-- 2026-11-24 21:20 (UCloud autopilot s8): A2L liver val done (exit 0): ccPost +0.097/+0.113, tumTouch +0.084/+0.097, pos +0.027/+0.024, tissueVal +0.018/+0.020 promising; ccPost+X = ccPost (nothing adds to the cc rule); controls ≤ +0.009 or negative. Frozen FL1-3 tumTouch / pos / tissueVal (journal s8); new `nnunet/post_rules_test_liver.py`; cpu `A3L_liver_test` (`$PROJ/logs/A3L_liver_test_20261124_211829.log`). Next: liver test result; thickSlice end → test probs (F2-F4).

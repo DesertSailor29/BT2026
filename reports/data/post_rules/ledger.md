@@ -88,3 +88,8 @@ tumTouch − ccPost −0.016 [−0.025, −0.008].
 Liver B-prep (B0, s10, 999 synthetic D101 labels, `liver_label_counts/summary.md`): tumTouch changes 598 volumes
 (= ccRepair's tumour removal; no new arm, ccRepair D103 f0 is its trained twin), pos 84 (0.35 % of tumour voxels) →
 posRepair arm (Dataset113). Pre vs post comparisons declared in the journal s10.
+
+Pancreas full frozen test (A3b, s14, 238 test, 2-run mean vs saved; `pancreas_test_frozen/summary.md`): **F2
+grow0.1+minLes +0.020, F3 grow0.1+tumNear10 +0.020, F4 grow0.1+pos+minLes +0.021 confirmed** (pancreas Dice +0.050);
+F1 +0.007 not. Declared contrast grow − thr ≈ 0 (tumour ±0.001, pancreas −0.002): the gain is the lower threshold +
+small/far tumour removal, not the anatomical growth limits. Pancreas B-prep counts: `pancreas_label_counts/` (s14).

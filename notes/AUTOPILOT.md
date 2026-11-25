@@ -4,6 +4,44 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s14 2026-11-25 07:55, event job_finished (A3b_frozen_full)
+Saw: A3b exit 0 after 0.5 h (`$PROJ/logs/A3b_frozen_full_20261125_072131.log`; argmax agreement probs vs test_final
+1.0000 over 476). **Pancreas test 238, frozen s6 set (Holm over 4, 2-run mean vs saved, none 0.183 / 0.172):**
+- F1 pos+minLes NOT confirmed (as s7): +0.007 [+0.002, +0.012] (f1 +0.002).
+- **F2 grow0.1+minLes CONFIRMED** +0.022 / +0.018, mean +0.020 [+0.013, +0.028], Holm 1e-10; pancreas Dice +0.050.
+- **F3 grow0.1+tumNear10 CONFIRMED** +0.023 / +0.017, mean +0.020 [+0.013, +0.027], Holm 1e-9; pancreas +0.050.
+- **F4 grow0.1+pos+minLes CONFIRMED** +0.023 / +0.019, mean +0.021 [+0.014, +0.030], Holm 2e-11; pancreas +0.050.
+- But the anatomical part of grow does nothing (declared contrast, expectation "grow ≈ thr" written before test held):
+  grow0.1+X − thr0.1+X tumour +0.000 / −0.001 / +0.000, pancreas Dice −0.002 (the plain threshold is slightly
+  *better* for the gland); thr0.1+minLes +0.019, thr0.1+tumNear10 +0.021, thr0.1+pos+minLes +0.021. Components alone:
+  thr0.1 +0.004 (n.s.), grow0.1 +0.005 (n.s.), minLes +0.006, tumNear10 +0.011 (f1 +0.003), pos +0.004; open1 +0.005
+  (pancreas −0.010); random matched removal −0.14. Lesion recall 0.55 → 0.53 / 0.52 → 0.51 (F2/F4).
+Meaning: on pancreas the gain is a **calibration fix** (lower the decision threshold to 0.1: gland +0.05, the main
+failure is under-segmentation) **plus removing small / far tumour pieces** (which the lower threshold creates more of:
+together +0.02, each alone ≤ +0.006). Anatomical limits on the growth (distance, HU window, connectivity to the gland)
+add nothing over the threshold. The position prior adds ~0.001. So on pancreas, unlike liver, the confirmed effect is
+not anatomy-specific: the anatomical rule (minLes = "smaller than any real lesion", a size fact) only works together
+with a generic threshold change; a matched random removal is still strongly harmful (which pieces matter).
+Decision: cpu: B-prep for the label-definable parts of the confirmed rules: `label_rule_counts.py --target pancreas`
+(extended this session; minLes, pos, pos+minLes, ccPost reference on the 999 D102 synthetic labels). grow / thr act
+on probabilities and have no label twin (a twin would be a loss re-weighting = custom trainer, excluded by MISSION).
+gpu: unchanged (liver_posRepair, train ETA 12:10, then test prediction; ~14:30). Next gpu job is decided by the
+session that sees the counts: if minLes changes >= 50 synthetic labels → pancreas minLesRepair arm (the twin of F2's
+label part; declared comparisons below); else "generator obeys minLes" and the GPU goes to a posRepair second run
+only if its pre-vs-post comparison carries a claim, otherwise to the best remaining option recorded then.
+**Declared now (before any count or arm), if a pancreas minLesRepair arm is trained** (238 test, baseline = per-case
+mean 102:0/102:1): M1 arm saved vs baseline+minLes (equivalence ±0.02), M2 arm+grow0.1+minLes vs baseline+grow0.1+minLes
+(= F2), M3 arm vs baseline; pancreas Dice reported.
+Reasons: MISSION B ("apply the rule to the 999 labels, < 50 changed → no arm"); counting selects nothing. Expectation:
+MAISI pancreas tumours are single blobs (cc flagged only 88/999), so minLes likely changes few labels.
+Assumptions: the val_label_params / pos_bins of the A2 screen (43 real val labels) are the frozen test-time prior and
+size cut; D102 synthetic labels use 0/1/2 like the predictions; spine finder works on the synthetic pancreas images
+(3/3 in the fake test).
+Alternatives considered: training a "thr0.1 twin" (no label twin exists); a reject arm for minLes (repair definable).
+Fake test: pancreas_0000-0002 → runs, 0 changed by any rule, spine found 3/3; liver code path unchanged (RULES for
+liver identical, same function calls).
+Started: cpu `B0p_pancreas_label_counts` (log path in the NOTES Log; ~15-20 min).
+
 ### s13 2026-11-25 07:25, event job_finished (G2_testprobs_102)
 Saw: G2 exit 0 after 4.12 h (`$PROJ/logs/G2_testprobs_102_20261125_031312.log`, 0 error lines): fold 0 238/238 and
 fold 1 238/238 probability files in `fold_X/test_probs/`. Disk 2.1 PB free.
