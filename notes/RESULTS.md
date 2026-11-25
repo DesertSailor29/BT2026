@@ -112,7 +112,11 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
 - **Liver posRepair arm** (D113 f0, autopilot s17, exploratory; 84/999 labels repaired by the position rule;
   `$nnUNet_results/test_eval_liver_posRepair/summary.md`): val (20) liver / tumour 0.853 / 0.283; test 111 tumour
   0.291 vs baseline 0.303: −0.011 [−0.024, +0.001] p 0.060 (n.s.); liver Dice −0.009 [−0.016, −0.003]; FP pieces/case
-  61 (baseline runs 67 / 46); lesion recall 0.443. Pre-vs-post comparisons Q1-Q3: pending (B1_liver_prepost_pos).
+  61 (baseline runs 67 / 46); lesion recall 0.443. **Pre vs post** (declared s10, `reports/data/post_rules/liver_test_pre_vs_post_pos/summary.md`):
+  Q1 posRepair saved 0.291 vs baseline+pos 0.315: −0.024 [−0.039, −0.010] p 1e-4 (not equivalent: post better);
+  Q2 posRepair+pos vs baseline+pos −0.014 [−0.027, −0.002] p 0.008; Q3 vs baseline −0.011 [−0.024, +0.001] p 0.059;
+  R2 with ccPost on both −0.003 [−0.018, +0.011] equivalent. → for pos (84 labels changed) pre does not replace post;
+  one run only, and the run-to-run spread (ccAucRepair 0.022) is as large as Q1's gap.
 
 ## Pancreas (measured only)
 

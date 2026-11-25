@@ -4,6 +4,32 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s18 2026-11-25 15:00, event job_finished (B1_liver_prepost_pos)
+Saw: B1_liver_prepost_pos exit 0 after 0.47 h (`$PROJ/logs/B1_liver_prepost_pos_20261125_142334.log`, 0 error lines;
+`reports/data/post_rules/liver_test_pre_vs_post_pos/summary.md`). Declared s10 comparisons, liver test 111:
+**Q1 posRepair saved 0.291 vs baseline+pos 0.315: −0.024 [−0.039, −0.010] p 1e-4 → not equivalent, post better**;
+Q2 posRepair+pos vs baseline+pos −0.014 [−0.027, −0.002] p 0.008; Q3 vs baseline −0.011 [−0.024, +0.001] p 0.059;
+R1 vs baseline+ccPost −0.090; R2 with ccPost on both −0.003 [−0.018, +0.011] (equivalent). Liver Dice −0.025 (Q1).
+Meaning: for the weak pos rule (84 labels), repairing the training labels does not replace applying it to the
+predictions (unlike tumTouch/ccPost, where pre ≈ post). Caveat: one run, and the two ccAucRepair runs differed by
+0.022, so Q1's gap is within run-to-run spread → if anything carries a claim against the thesis, it is this, and it
+needs posRepair_rep2.
+gpu: pancreas_minLesRepair healthy (epoch ~90 at 14:52, 17.3 s/epoch, EMA pseudo Dice 0.26, no NaN; train ETA 19:12,
+then the 238-case test prediction with probabilities ~2.2 h → ~21:30).
+Decision: cpu: nothing (no waiting cpu work). gpu: unchanged. **Last gpu slot (decided by the session minLesRepair's end
+wakes):** (a) if M1/M2 carry a claim and a pancreas rep2 can still finish (5.3 h train + 2.2 h predict before 05:20,
+i.e. start by ~21:40): `minLesRepair_rep2 114 --same-as minLesRepair` (without PANCREAS_TEST_PROBS unless M2 needs it);
+(b) otherwise **`liver_arm.sh posRepair_rep2 113 --same-as posRepair`** (5.3 h + ~1 h predict, fits if started by
+~22:50), then `pre_vs_post_liver.py --rule pos` on the 2-run mean if the script supports it (else per run).
+Pancreas rep2 will most likely not fit (minLesRepair ends ~21:30), so (b) is the expected choice.
+Reasons: MISSION B ("a second run for any arm whose pre-vs-post comparison carries the claim"); Q1 is the only
+pre-vs-post result so far that disagrees with the working thesis, and one run cannot separate it from noise.
+Assumptions: liver test prediction ~1 h (D113 took ~1 h in s17); the posRepair_rep2 entry in liver_arm.sh works as
+its header comment says (not fake-tested this session).
+Alternatives considered: starting nothing on gpu after minLesRepair and writing the summary early (wastes ~7 GPU h
+that can settle Q1); a pos repair on pancreas (pos changes 5 labels: generator obeys, no arm).
+Started: nothing (gpu busy; cpu has no waiting work). Wake-up set for 19:00 as a health check of the training.
+
 ### s17 2026-11-25 14:25, event job_finished (liver_posRepair)
 Saw: liver_posRepair exit 0 after 7.02 h (`$PROJ/logs/liver_posRepair_20261125_072131.log`; the 3 "error" lines are
 table text). D113 f0 trained 1000 epochs (EMA pseudo Dice 0.748), nnU-Net val (20 real) liver / tumour 0.853 / 0.283.
