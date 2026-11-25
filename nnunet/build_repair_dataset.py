@@ -121,8 +121,8 @@ def repair_one(args):
     return rec
 
 
-def copy_plans(did, name, pre_dst):
-    """Dataset101's plans -> this dataset (same patch size / spacing / normalisation), + its fingerprint and
+def copy_plans(did, name, pre_dst, src_id=None, src=None):
+    """Dataset101's plans (or src_id / src's) -> this dataset (same patch size / spacing / normalisation), + its fingerprint and
     dataset.json (nnUNetv2_preprocess reads dataset.json from the preprocessed folder)."""
     os.makedirs(pre_dst, exist_ok=True)
     shutil.copy(f"{os.environ['nnUNet_raw']}/{name}/dataset.json", f"{pre_dst}/dataset.json")
@@ -130,10 +130,11 @@ def copy_plans(did, name, pre_dst):
         print("plans already copied")
         return
     os.makedirs(pre_dst, exist_ok=True)
-    cmd = ["nnUNetv2_move_plans_between_datasets", "-s", str(SRC_ID), "-t", str(did), "-sp", "nnUNetPlans", "-tp", "nnUNetPlans"]
+    src_id, src = src_id or SRC_ID, src or SRC
+    cmd = ["nnUNetv2_move_plans_between_datasets", "-s", str(src_id), "-t", str(did), "-sp", "nnUNetPlans", "-tp", "nnUNetPlans"]
     print(" ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
-    fp = f"{os.environ['nnUNet_preprocessed']}/{SRC}/dataset_fingerprint.json"
+    fp = f"{os.environ['nnUNet_preprocessed']}/{src}/dataset_fingerprint.json"
     if os.path.exists(fp):
         shutil.copy(fp, f"{pre_dst}/dataset_fingerprint.json")
     plans = json.load(open(f"{pre_dst}/nnUNetPlans.json"))

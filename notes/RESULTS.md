@@ -155,6 +155,12 @@ lesion recall −0.02). F1 not (+0.007). **The anatomical limits of grow add not
 minLes +0.006. → a lower decision threshold (gland +0.05) plus dropping small/far tumour pieces; not anatomy-specific.
 `reports/data/post_rules/pancreas_test_frozen/summary.md`.
 
+**Confirmed pancreas rules on the 999 synthetic training labels** (B0p, autopilot s14-s15, 2026-11-25;
+`nnunet/label_rule_counts.py --target pancreas`, `reports/data/post_rules/pancreas_label_counts/`): **minLes changes
+131 volumes** (each has one tumour < 1.19 ml, which goes → all 131 become tumour-free; 0.90 % of tumour voxels);
+**pos 5** (0.01 %) → the generator obeys the position prior on pancreas; pos+minLes = minLes; ccPost 88 (reference).
+grow / thr0.1 act on probabilities (no label twin). → minLesRepair arm D114 (s15).
+
 **Liver post rules, A2L val screen (autopilot s7-s8, 2026-11-24; val only, exploratory)**: 20 LiTS val, 101:0 / 101:1,
 none 0.289 / 0.297. One-organ rules ccPost +0.097/+0.113, ccTol5-20 / ccK2-3 alike; **tumTouch +0.084/+0.097**,
 tumNear10 +0.083/+0.076; **pos +0.027/+0.024** (liver Dice +0.02); **tissueVal (1..210 HU) +0.018/+0.020**; tissueTxt

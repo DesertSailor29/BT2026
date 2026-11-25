@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s15 2026-11-25 08:30, event job_finished (B0p_pancreas_label_counts)
+Saw: B0p exit 0 after 0.24 h (`$PROJ/logs/B0p_pancreas_label_counts_20261125_075415.log`; spine found 999/999).
+On the 999 synthetic D102 labels: **minLes changes 131 volumes** (87263 tumour voxels = 0.90 %, 131 pieces; median
+536 changed voxels), pos 5 ("generator obeys"), pos+minLes = minLes (131), ccPost reference 88. Every one of the 131
+has a single tumour < 1.19 ml, so the repair makes them **tumour-free** (tumour-free volumes 0 → 131).
+`reports/data/post_rules/pancreas_label_counts/`. gpu: liver_posRepair healthy (epoch ~150, 17.3 s/epoch, EMA pseudo
+Dice ~0.70, train ETA 12:11, then test prediction ~1 h → ~13:30).
+Decision: cpu: build **Dataset114_PancreasSynthRepairMinLes** (`build_rule_repair_dataset.py --rule minLes`, extended
+this session: target-aware, plans from D102; `build_repair_dataset.copy_plans` got optional src args, liver default
+unchanged) + `nnUNetv2_preprocess -d 114` (~1-1.5 h). gpu: when posRepair ends, the session it wakes starts
+`pancreas_arm.sh minLesRepair 114 --all-synth` (~7.5 h) and evaluates posRepair (s10 declarations). minLesRepair
+comparisons M1-M3 as declared in s14 (unchanged).
+Reasons: MISSION B: minLes is the label-definable part of the confirmed F2 and changes >= 50 volumes → one repair arm.
+pos (5) → "the generator obeys pos" on pancreas (a recorded answer, no arm).
+Assumptions: relabelling a small *drawn* tumour as background leaves the image showing a lesion labelled background
+(the same image/label conflict as ccRepair's removed tumour pieces on liver); MISSION says repair, not reject, when a
+repair is definable, so repair. A reject arm (drop the 131) would avoid that conflict: an option if M1 says the
+repair hurts. Preprocessing 1042 cases niced next to the liver training does not slow it much.
+Alternatives considered: reject arm (MISSION: repair first); waiting with the build until the GPU is free (lane idle).
+Fake test: pancreas_0000/0005/0007 → 2 changed (both become tumour-free), counts match B0p, uint8, same affine; liver
+`--rule pos` on liver_0000/0014 → labels byte-identical to D113.
+Started: cpu `B2p_build_D114` (log path in the NOTES Log; ~1-1.5 h).
+
 ### s14 2026-11-25 07:55, event job_finished (A3b_frozen_full)
 Saw: A3b exit 0 after 0.5 h (`$PROJ/logs/A3b_frozen_full_20261125_072131.log`; argmax agreement probs vs test_final
 1.0000 over 476). **Pancreas test 238, frozen s6 set (Holm over 4, 2-run mean vs saved, none 0.183 / 0.172):**
