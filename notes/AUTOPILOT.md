@@ -4,6 +4,24 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s17 2026-11-25 14:25, event job_finished (liver_posRepair)
+Saw: liver_posRepair exit 0 after 7.02 h (`$PROJ/logs/liver_posRepair_20261125_072131.log`; the 3 "error" lines are
+table text). D113 f0 trained 1000 epochs (EMA pseudo Dice 0.748), nnU-Net val (20 real) liver / tumour 0.853 / 0.283.
+**Test 111 vs baseline (mean of 101:0/101:1): tumour Dice 0.291 vs 0.303, −0.011 [−0.024, +0.001], Wilcoxon p 0.060
+(n.s.)**; vs f0 −0.009, vs f1 −0.013; liver Dice −0.009 [−0.016, −0.003]; FP tumour pieces/case +4.6 (61 vs 67/46);
+lesion recall 0.443 (= rep2, f0 0.422). → repairing the 84 labels that violate the position rule does not help (as
+expected: pos on the predictions was only +0.013 on test).
+Decision: cpu `B1_liver_prepost_pos` = `pre_vs_post_liver.py --rule pos --workers 12` (declared s10 comparisons
+Q1-Q3, ~15 min, niced). gpu `pancreas_minLesRepair` = `PANCREAS_TEST_PROBS=1 pancreas_arm.sh minLesRepair 114
+--all-synth` (~7.5 h → ~22:00; M1-M3 declared s14).
+Reasons: s14-s16 plan; MISSION B (minLes changes 131 ≥ 50 labels; finished arms are evaluated with declared
+comparisons). Running the liver pre-vs-post on cpu now keeps both lanes busy.
+Assumptions: the last gpu slot (second run) must start by ~22:30 to finish before 05:20 (5.3 h train + ~2 h predict);
+minLesRepair should end ~22:00, so it is tight; decided by the session it wakes.
+Alternatives considered: posRepair_rep2 first (posRepair alone is n.s. and worse than baseline; its pre-vs-post result
+is not in yet, and pancreas is the contrast case with a new arm).
+Started: see NOTES Log for log paths.
+
 ### s16 2026-11-25 08:55, event job_finished (B2p_build_D114)
 Saw: B2p exit 0 after 0.51 h (`$PROJ/logs/B2p_build_D114_20261125_081111.log`, 0 error lines): Dataset114
 PancreasSynthRepairMinLes built, 131/999 labels changed (counts match label_rule_counts), tumour voxels 9685523 →

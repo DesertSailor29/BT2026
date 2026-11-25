@@ -109,6 +109,10 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   R1 ccRepair vs baseline+ccPost −0.006 [−0.017, +0.003] **equivalent**; R2 with ccPost on both −0.001 [−0.011, +0.008]
   equivalent. Liver Dice of ccRepair −0.007 (−0.028 vs baseline+ccPost). → label repair before training ≈ the same
   rule on the predictions (pre ≈ post), as the working thesis says. D113 posRepair built (84 changed, counts match B0).
+- **Liver posRepair arm** (D113 f0, autopilot s17, exploratory; 84/999 labels repaired by the position rule;
+  `$nnUNet_results/test_eval_liver_posRepair/summary.md`): val (20) liver / tumour 0.853 / 0.283; test 111 tumour
+  0.291 vs baseline 0.303: −0.011 [−0.024, +0.001] p 0.060 (n.s.); liver Dice −0.009 [−0.016, −0.003]; FP pieces/case
+  61 (baseline runs 67 / 46); lesion recall 0.443. Pre-vs-post comparisons Q1-Q3: pending (B1_liver_prepost_pos).
 
 ## Pancreas (measured only)
 
