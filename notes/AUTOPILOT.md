@@ -4,6 +4,21 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s13 2026-11-25 07:25, event job_finished (G2_testprobs_102)
+Saw: G2 exit 0 after 4.12 h (`$PROJ/logs/G2_testprobs_102_20261125_031312.log`, 0 error lines): fold 0 238/238 and
+fold 1 238/238 probability files in `fold_X/test_probs/`. Disk 2.1 PB free.
+Decision: cpu: `A3b_frozen_full` = `post_rules_test.py --split test --workers 12` (all frozen F1-F4 + controls, Holm
+over the 4, as frozen in s6; nice -n 10 next to training). gpu: `liver_arm.sh posRepair 113 --all-synth` (D113, s10
+declarations: posRepair saved vs baseline+pos (equivalence ±0.02), posRepair+pos vs baseline+pos, posRepair vs
+baseline; liver Dice reported). Both start now.
+Reasons: s6/s12 plan; F2-F4 need exactly these probabilities; the GPU would idle otherwise. A pancreas B arm can only
+follow a confirmed rule; F2-F4 all contain grow (needs probabilities, no label twin), so even a confirmation would
+not give a pancreas pre arm directly → posRepair does not block anything more useful.
+Assumptions: post_rules_test.py asserts probs vs test_final argmax agreement (> 0.995) itself; running it with
+12 workers niced next to the liver training slows training little.
+Alternatives considered: pancreas thr0.1-label arm (no confirmed rule yet); thickSlice_rep2 (bar not met, s12).
+Started: cpu `A3b_frozen_full`, gpu `liver_posRepair` (log paths in the NOTES Log; ~1-2 h / ~7 h).
+
 ### s12 2026-11-25 03:15, event job_finished (pancreas_thickSlice)
 Saw: G1 thickSlice exit 0 after 7.38 h (`$PROJ/logs/pancreas_thickSlice_20261124_194809.log`; the 2 "error" lines
 are table text). nnU-Net val (43 real, pancreas / tumour): 0.151 / 0.150 (baseline mean Validation Dice 0.151 / 0.125
