@@ -4,6 +4,34 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s26 2026-11-26 19:25, event job_finished (liver_all_rep3)
+Saw: liver_all_rep3 exit 0 after 7.04 h (`$PROJ/logs/liver_all_rep3_20261126_121504.log`; the 3 "error" lines are
+table text). D101 f3, 1000 epochs, nnU-Net val (20 real) liver / tumour 0.856 / 0.305. **Test 111 tumour Dice 0.301
+vs baseline mean 0.303: −0.001 [−0.009, +0.006] p 0.82**; vs 101:0 +0.001 [−0.010, +0.011], vs 101:1 −0.003
+[−0.012, +0.006]. Liver Dice +0.004, recall 0.395 (0.422 / 0.443), FP pieces/case 60.6 (66.8 / 46.3).
+`$nnUNet_results/test_eval_liver_all_rep3/summary.md`.
+**Verdict by the s24 declaration:** |rep3 − baseline mean| = 0.001 ≤ 0.015 → the liver baseline is stable (three
+runs 0.301 / 0.305 / 0.301, range 0.004); the larger spreads of the repeated repaired-label arms (ccAucRepair 0.022,
+posRepair 0.028) are reported as a property of those arms (or chance with 2 runs each), not as general run noise.
+Arm-vs-baseline differences of the liver study stay worded as before (noise floor 0.01 holds for the baseline).
+Decision: gpu **`pancreas_all_rep3` = `pancreas_arm.sh all_rep3 102 --same-as all`** (D102 fold 2, no test probs,
+~7.4 h like thickSlice → ~02:55 Fri, before the final session 04:20). cpu: nothing.
+**Declared now, before any result:** same rule as s24 for pancreas: if |all_rep3 − pancreas baseline mean (0.177)|
+> 0.015 on test tumour Dice, the pancreas baseline pair spread (0.011) was luck and the minLesRepair spread (0.037)
+is read as ordinary run noise on pancreas; if ≤ 0.015, the "repaired arms vary more than the baseline" pattern holds
+on both organs. Not added to any existing baseline mean; no arm chosen from it. If it is not finished when the final
+session starts, the final session reports it as unfinished (no GPU start then).
+Reasons: the only remaining open question the results' wording depends on is whether the larger arm spread is
+organ-general; the pancreas baseline spread rests on one pair. It fits the remaining time (10 h) with ~1.4 h margin;
+the user granted the full B200 until Friday. Liver posRepair_rep3 considered: its 2-run range (0.028) already
+exceeds the liver baseline range many times, so a 3rd run cannot change the wording.
+Assumptions: the generic branch of pancreas_arm.sh registers all_rep3 as D102 fold 2 (arms.json now: all, all_rep2)
+and its eval compares a D102 run against 102:0/102:1 like the other arms; 7.4 h as thickSlice (no probabilities).
+Alternatives considered: summary early + stop (saves ~8 GPU h but leaves the pancreas half of the noise question
+open); pancreas minLesRepair_rep3 (same reasoning as posRepair_rep3); a run with test probabilities (+~0.5 h, not
+needed for the declared question, cuts the margin).
+Started: see NOTES Log for log path.
+
 ### s25 2026-11-26 12:35, event job_finished (B1p_pancreas_prepost_minLes_rep2)
 Saw: B1p rep2 exit 0 after 0.29 h (`$PROJ/logs/B1p_pancreas_prepost_minLes_rep2_20261126_121504.log`, 0 error
 lines). Declared s14/s21, pancreas test 238. **114:1 alone:** M1 minLesRepair saved vs baseline+minLes +0.023

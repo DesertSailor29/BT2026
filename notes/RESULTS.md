@@ -20,6 +20,10 @@ generalisation check (measured only, no arms trained).
 - 2026-11-08, checkpoint_final, 111 LiTS test: liver Dice 0.870/0.876, **tumour 0.301/0.305**, run-to-run f1−f0
   +0.004 (p 0.072). Lesion-wise: recall 0.42/0.44, precision 0.04/0.06, 46–67 FP components per case, FPs in 10/10
   tumour-free cases. lits_045 liver Dice 0 on val (thick slices). `reports/data/test_eval_liver/summary.md`.
+- **Third liver baseline `all_rep3`** (autopilot s24/s26, D101 f3, 2026-11-26, exploratory): val liver/tumour
+  0.856/0.305; test 111 tumour 0.301, vs the 2-run baseline −0.001 [−0.009, +0.006] p 0.82 → three runs 0.301 / 0.305 /
+  0.301 (range 0.004): the liver baseline is stable; repeated repaired-label arms vary more (ccAucRepair 0.022,
+  posRepair 0.028). `$nnUNet_results/test_eval_liver_all_rep3/summary.md`.
 
 ## Filter measurements (liver pool vs real LiTS)
 
