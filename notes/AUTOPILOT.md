@@ -4,6 +4,29 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s25 2026-11-26 12:35, event job_finished (B1p_pancreas_prepost_minLes_rep2)
+Saw: B1p rep2 exit 0 after 0.29 h (`$PROJ/logs/B1p_pancreas_prepost_minLes_rep2_20261126_121504.log`, 0 error
+lines). Declared s14/s21, pancreas test 238. **114:1 alone:** M1 minLesRepair saved vs baseline+minLes +0.023
+[+0.008, +0.039] p 0.026 (pre better), M2 +0.022, M3 +0.029. **Per-case mean 114:0/114:1:** M1 +0.005 [−0.008,
++0.017] p 0.62 (within ±0.02: equivalent), M2 +0.003 [−0.009, +0.016] (equivalent), M3 +0.011 [−0.001, +0.022] n.s.,
+R1 +0.003, R2 +0.005 (within); pancreas Dice −0.008 [−0.014, −0.003]; lesion recall M1 0.45 → 0.48.
+**Verdict by the s21 declaration:** runs have opposite signs (−0.014 / +0.023) and the 2-run mean CI includes 0 →
+"pre ≠ post for minLes" does **not** stand; s21's M1 is within run-to-run spread. With liver pos (s23) this makes
+both repeated pre arms agree with the working thesis on the 2-run mean: rule on labels ≈ same rule on predictions
+(pancreas formally equivalent on M1/M2; liver Q1 lower bound −0.023 just misses). Single runs of a pre arm mislead in
+both directions (spreads 0.028 / 0.037).
+gpu: liver_all_rep3 healthy (epoch 56 at 12:32, 17.3 s/epoch, no NaN, 0 error lines; train ETA 17:04, then test
+prediction → ~18:45).
+Decision: cpu: nothing; gpu: keep running. The session woken by all_rep3's end applies the s24 declaration (|rep3 −
+baseline mean| > 0.015 or not), then decides final summary early vs nothing more (no GPU run of ≤ ~9 h has a
+question waiting; deadline Fri 05:20).
+Reasons: MISSION "Every session"; no declared cpu analysis waits (all pre-vs-post comparisons are done for both
+organs; all_rep3's analysis needs its predictions).
+Assumptions: none new.
+Alternatives considered: drafting the final summary now (better once all_rep3's noise-floor verdict is known, as it
+decides the wording of every arm-vs-baseline difference).
+Started: nothing (s24's 13:45 check wake still set; job end wakes the next session).
+
 ### s24 2026-11-26 12:20, event job_finished (pancreas_minLesRepair_rep2)
 Saw: pancreas_minLesRepair_rep2 exit 0 after 7.4 h (`$PROJ/logs/pancreas_minLesRepair_rep2_20261126_044858.log`; the
 2 "error" lines are table text). D114 f1 1000 epochs, nnU-Net val (43 real) pancreas / tumour 0.136 / 0.160 (f0
