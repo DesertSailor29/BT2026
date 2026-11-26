@@ -12,3 +12,4 @@ Smoothed = centred 51-epoch rolling mean. Validation = 20 real LiTS cases. Writt
 | D104 f0 ccAucRepair | 1000 | -0.444 (966) | -0.429 | 0.183 | 0.582 (948) | 0.908 |
 | D104 f1 ccAucRepair_rep2 | 1000 | -0.461 (992) | -0.450 | 0.160 | 0.594 (997) | 0.908 |
 | D113 f0 posRepair | 1000 | -0.443 (944) | -0.401 | 0.169 | 0.583 (990) | 0.907 |
+| D113 f1 posRepair_rep2 | 1000 | -0.460 (998) | -0.460 | 0.112 | 0.603 (999) | 0.908 |

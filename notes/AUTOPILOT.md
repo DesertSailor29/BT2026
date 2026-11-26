@@ -4,6 +4,22 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s22 2026-11-26 04:50, event job_finished (liver_posRepair_rep2)
+Saw: liver_posRepair_rep2 exit 0 after 7.0 h (`$PROJ/logs/liver_posRepair_rep2_20261125_214811.log`; the 3 "error"
+lines are table text). D113 f1 1000 epochs, nnU-Net val (20 real) liver / tumour 0.859 / 0.328 (f0 0.853 / 0.283).
+**Test 111 vs baseline: tumour Dice 0.320 vs 0.303, +0.017 [+0.004, +0.030], p 6e-4** (vs f0 +0.019, vs f1 +0.015);
+liver Dice +0.011; FP ml/case 23.5 (baseline 35 / 41); recall 0.439. posRepair f0 was −0.011 [−0.024, +0.001]:
+**the two posRepair runs differ by 0.028 per mean** (ccAucRepair pair 0.022, `all` pair 0.004) → the arm-vs-baseline
+sign of posRepair is not reproducible; 2-run mean ≈ +0.003. `$nnUNet_results/test_eval_liver_posRepair_rep2/summary.md`.
+Decision: as declared s21. gpu `pancreas_minLesRepair_rep2` = `PANCREAS_TEST_PROBS=1 pancreas_arm.sh
+minLesRepair_rep2 114 --same-as minLesRepair` (~7.5 h → ~12:30 Thu). cpu `B1_liver_prepost_pos_rep2` =
+`pre_vs_post_liver.py --rule pos --pre 113:1` then `--pre 113:0,113:1` (niced, 12 workers, ~30 min); verdict on Q1
+by the s20 declaration (2-run mean CI excludes 0 and both runs same sign).
+Reasons: s20/s21 declarations; both lanes busy; minLesRepair_rep2 ends ~17 h before the deadline.
+Assumptions: the generic `<arm>_rep2` branch of pancreas_arm.sh registers fold 1 via `--same-as` (as thickSlice_rep2).
+Alternatives considered: none new (plan fixed before the result).
+Started: see NOTES Log for log paths.
+
 ### s21 2026-11-25 22:10, event job_finished (B1p_pancreas_prepost_minLes)
 Saw: B1p exit 0 after 0.28 h (`$PROJ/logs/B1p_pancreas_prepost_minLes_20261125_214811.log`, 0 error lines;
 `reports/data/post_rules/pancreas_test_pre_vs_post_minLes/summary.md`). Declared s14, pancreas test 238:
