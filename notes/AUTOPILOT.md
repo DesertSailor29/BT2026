@@ -4,6 +4,33 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s24 2026-11-26 12:20, event job_finished (pancreas_minLesRepair_rep2)
+Saw: pancreas_minLesRepair_rep2 exit 0 after 7.4 h (`$PROJ/logs/pancreas_minLesRepair_rep2_20261126_044858.log`; the
+2 "error" lines are table text). D114 f1 1000 epochs, nnU-Net val (43 real) pancreas / tumour 0.136 / 0.160 (f0
+0.140 / 0.146). **M3-type test (238) vs baseline: tumour Dice 0.207 vs 0.177, +0.029 [+0.015, +0.044], p 3e-5**
+(vs f0 +0.024, vs f1 +0.035); pancreas Dice −0.007 [−0.014, −0.000]; recall 0.529, FP pieces/case 1.61, FP ml 3.05.
+f0 was −0.008 [−0.022, +0.006] → **the two minLesRepair runs differ by 0.037 per mean** (baseline pair 0.011). Same
+pattern as liver: posRepair runs differ 0.028, ccAucRepair 0.022, liver `all` pair only 0.004. Every repeated pre arm
+so far flips or shifts by more than the effect sizes. `$nnUNet_results/test_eval_pancreas_minLesRepair_rep2/summary.md`.
+Decision: cpu `B1p_pancreas_prepost_minLes_rep2` = `pre_vs_post_pancreas.py --pre 114:1` then `--pre 114:0,114:1`
+(s21 declaration; verdict next session). gpu: **`liver_all_rep3` = `liver_arm.sh all_rep3 101 --same-as all`** (D101
+fold 3, ~6.3 h → ~18:45): a third liver baseline run. **Declared now, before any result:** its test tumour Dice vs
+the 2-run baseline and vs each of 101:0 / 101:1 is reported; if |all_rep3 − baseline mean| > 0.015, the liver
+baseline's 0.004 pair spread was luck and every arm-vs-baseline difference < ~0.03 in this project is read as
+within run-to-run spread; if <= 0.015, the larger spread of the repeated pre arms (0.022 / 0.028) is a property of
+the repaired-label arms (or chance) and is reported as such. No arm is chosen from it (it decides only how the
+existing results are worded). It is not added to the baseline mean of any existing comparison (declared analyses
+stay as declared).
+Reasons: after this run ~17 h remain; no confirmed rule waits for a pre arm (MISSION B: tumTouch = ccRepair, pos 84
+and minLes 131 done with rep2; pancreas pos 5 < 50). The one open question every result now depends on is the
+run-to-run noise floor (NOTES: "noise floor too small for arm-vs-arm claims"), measured from a single baseline pair
+per organ. Liver: the main study, cheaper (~6.3 h vs 7.5 h), ends well before the final session (04:20 Fri).
+Assumptions: `liver_arm.sh` generic branch registers `all_rep3` as fold 3 of D101 via make_splits `--same-as all`
+(append-only: folds 0-2 untouched; done the same way for posRepair_rep2); eval vs 101:0+101:1 works for a run of D101.
+Alternatives considered: pancreas all_rep3 (larger spread 0.037 but 7.5 h, secondary organ); thickSlice_rep2 (its
+val criterion failed, s12); nothing + summary early (leaves a cheap, decisive measurement undone with 17 h of GPU).
+Started: see NOTES Log for log paths.
+
 ### s23 2026-11-26 05:25, event job_finished (B1_liver_prepost_pos_rep2)
 Saw: B1_liver_prepost_pos_rep2 exit 0 after 0.54 h (`$PROJ/logs/B1_liver_prepost_pos_rep2_20261126_044858.log`, 0
 error lines). Declared s10 comparisons, liver test 111. **113:1 alone:** Q1 posRepair saved vs baseline+pos +0.004

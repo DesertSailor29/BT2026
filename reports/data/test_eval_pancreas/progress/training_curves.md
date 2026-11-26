@@ -8,3 +8,4 @@ Smoothed = centred 51-epoch rolling mean. Validation = 43 real MSD07 cases. Writ
 | D102 f1 all_rep2 | 1000 | -0.087 (454) | 0.003 | 0.655 | 0.314 (736) | 0.279 |
 | D112 f0 thickSlice | 1000 | -0.074 (132) | 0.007 | 0.650 | 0.306 (915) | 0.279 |
 | D114 f0 minLesRepair | 1000 | -0.075 (156) | -0.037 | 0.610 | 0.308 (707) | 0.264 |
+| D114 f1 minLesRepair_rep2 | 1000 | -0.077 (210) | 0.006 | 0.648 | 0.308 (886) | 0.259 |
