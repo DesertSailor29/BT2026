@@ -8,7 +8,7 @@ it, record why, push, and end. The next session knows only what you wrote down.
 
 ## Liver extension (user, 2026-11-26 21:00; takes priority over everything below that is still open)
 The user added **48 h** and asked to "go for the liver": the open liver questions, not more pancreas. **Time: the
-UCloud job ends ~Sun 29 Nov 06:40 (57.5 h from 2026-11-26 21:10); supervisor deadline Sun 29 Nov 05:20.** You may add
+UCloud job ends ~Sun 29 Nov 06:30 (57.5 h from 2026-11-26 21:00); supervisor deadline Sun 29 Nov 05:20.** You may add
 liver experiments that the findings motivate, if they fit the remaining time (declare them in the journal first). If
 a worthwhile experiment does not fit, write the request into **`TIME_REQUEST.md` at the repo root** (top: how many
 extra hours, for what, expected end; below: why), commit + push it; the user decides and restarts the supervisor

@@ -45,7 +45,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   L2 liver probability rules, L3 tumour-size arms Large/Rand/Small + rep2 of Large/Rand).
   Fake-tested on the VM; autopilot work goes to branch `autopilot`. Rule ledger `reports/data/post_rules/ledger.md`.
 ## Next steps
-0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:40, supervisor deadline 05:20; more-time requests go to
+0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:30, supervisor deadline 05:20; more-time requests go to
    `TIME_REQUEST.md` at the repo root): journal `notes/AUTOPILOT.md`,
    branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". Running: gpu pancreas `all_rep3` (~02:55 Fri,
    s26 verdict), cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`). Then gpu L2 (liver val +
