@@ -4,6 +4,15 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s27 2026-11-26 20:50, event check
+Saw: gpu pancreas_all_rep3 healthy: D102 f2 training log at epoch 304 at 20:49 (17.3 s/epoch, no NaN, 0 error lines;
+stdout log lags by buffering), GPU 99 %, status-file train ETA 00:10, then test prediction → ~02:55. cpu idle.
+Decision: nothing new; check wake at 00:40 (confirm the test prediction started after training).
+Reasons: MISSION "Every session" step 3; no declared cpu analysis waits (s26).
+Assumptions: none new.
+Alternatives considered: none (s26 plan stands).
+Started: nothing.
+
 ### s26 2026-11-26 19:25, event job_finished (liver_all_rep3)
 Saw: liver_all_rep3 exit 0 after 7.04 h (`$PROJ/logs/liver_all_rep3_20261126_121504.log`; the 3 "error" lines are
 table text). D101 f3, 1000 epochs, nnU-Net val (20 real) liver / tumour 0.856 / 0.305. **Test 111 tumour Dice 0.301
