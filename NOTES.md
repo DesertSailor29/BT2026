@@ -40,11 +40,16 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   headless Claude session whenever a watched job ends; handoff + plan `autopilot/MISSION.md`, journal
   `notes/AUTOPILOT.md`, how-to GUIDE "Optional: autopilot". Direction (user): anatomical rules on the predictions
   first (pancreas ccPost/ccAucPost, then explore on val, freeze, test once), pre-training arms only for confirmed rules;
-  GPU meanwhile val probabilities + `thickSlice` (D112, `nnunet/build_thick_dataset.py`). Runs until Fri 27 Nov.
+  GPU meanwhile val probabilities + `thickSlice` (D112, `nnunet/build_thick_dataset.py`). **Extended by 48 h (user,
+  2026-11-26 21:00) to Sun 29 Nov 05:20 for the liver** (MISSION "Liver extension": L1 failure analysis + 3-run vote,
+  L2 liver probability rules, L3 tumour-size arms Large/Rand/Small + rep2 of Large/Rand).
   Fake-tested on the VM; autopilot work goes to branch `autopilot`. Rule ledger `reports/data/post_rules/ledger.md`.
 ## Next steps
-0. **Autopilot running** (since 2026-11-24 19:00, until Fri 27 Nov 05:20): journal `notes/AUTOPILOT.md`, branch
-   `autopilot`. Friday: review the branch (summary on top of the journal), then merge into main. Running: gpu `pancreas_arm.sh all_rep3 102 --same-as all` (D102 fold 2, 3rd pancreas baseline, ~02:55 Fri; verdict declared s26: |rep3 − 0.177| > 0.015 or not); cpu idle. Next session (pancreas all_rep3 end, or the final one): s26 verdict, then final summary.
+0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:40, supervisor deadline 05:20; more-time requests go to
+   `TIME_REQUEST.md` at the repo root): journal `notes/AUTOPILOT.md`,
+   branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". Running: gpu pancreas `all_rep3` (~02:55 Fri,
+   s26 verdict), cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`). Then gpu L2 (liver val +
+   test probabilities) → L3 size arms (~7 h each, serial). Sunday: review the branch (summary on top), merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -84,9 +89,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-26 21:05 (UCloud, with user): user added 48 h for liver work. MISSION.md "Liver extension" (L1-L3, comparisons declared); new `nnunet/liver_failure.py` (fake-tested on 3 cases, matches the eval's per-case Dice); started cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`); supervisor restarted with deadline Sun 29 Nov 05:20, AP_MAX_SESSIONS 90 (`$PROJ/logs/autopilot_20261126_210106.log`).
 - 2026-11-26 20:50 (UCloud autopilot s27): check: gpu pancreas_all_rep3 healthy (epoch 304, train ETA 00:10, end ~02:55); cpu idle; wake 00:40.
 - 2026-11-26 19:25 (UCloud autopilot s26): liver_all_rep3 done (exit 0): D101 f3 val liver/tumour 0.856/0.305; test tumour 0.301 vs baseline 0.303, −0.001 [−0.009, +0.006] p 0.82 → liver baseline stable (s24 rule). Started gpu `pancreas_all_rep3` (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`, ~7.4 h).
 - 2026-11-26 12:35 (UCloud autopilot s25): B1p_pancreas_prepost_minLes_rep2 done (exit 0): 114:1 M1 +0.023 [+0.008, +0.039]; 2-run mean M1 +0.005 [−0.008, +0.017] p 0.62, M2 +0.003 (both within ±0.02) → pancreas "pre ≠ post for minLes" does not stand (s21 rule). gpu all_rep3 healthy (epoch 56, train ETA 17:04). Nothing started.
 - 2026-11-26 12:20 (UCloud autopilot s24): pancreas_minLesRepair_rep2 done (exit 0): D114 f1 val pancreas/tumour 0.136/0.160; test tumour 0.207 vs 0.177, +0.029 [+0.015, +0.044] p 3e-5 (f0 −0.008 → runs differ 0.037). Started gpu `liver_all_rep3` (`$PROJ/logs/liver_all_rep3_20261126_121504.log`, ~6.3 h), cpu `B1p_pancreas_prepost_minLes_rep2` (`$PROJ/logs/B1p_pancreas_prepost_minLes_rep2_20261126_121504.log`).
 - 2026-11-26 05:25 (UCloud autopilot s23): B1_liver_prepost_pos_rep2 done (exit 0): 113:1 Q1 +0.004 [−0.010, +0.018]; 2-run mean Q1 −0.010 [−0.023, +0.002] p 0.15, Q2/Q3/R2 within ±0.02 → liver "pre ≠ post for pos" does not stand (s20 rule). gpu minLesRepair_rep2 healthy (epoch 99, ETA ~12:00). Nothing started.
-- 2026-11-26 04:50 (UCloud autopilot s22): liver_posRepair_rep2 done (exit 0): D113 f1 val liver/tumour 0.859/0.328; test tumour 0.320 vs 0.303, +0.017 [+0.004, +0.030] p 6e-4 (f0 −0.011 → runs differ 0.028). Started gpu `pancreas_minLesRepair_rep2` (`$PROJ/logs/pancreas_minLesRepair_rep2_20261126_044858.log`, ~7.5 h), cpu `B1_liver_prepost_pos_rep2` (`$PROJ/logs/B1_liver_prepost_pos_rep2_20261126_044858.log`).

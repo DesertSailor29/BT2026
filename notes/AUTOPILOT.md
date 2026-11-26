@@ -13,6 +13,16 @@ Assumptions: none new.
 Alternatives considered: none (s26 plan stands).
 Started: nothing.
 
+### planning 2026-11-26 21:05 (interactive session with the user, not a supervisor session)
+User added **48 h** (deadline now Sun 29 Nov 05:20) and asked to go for the liver. Wrote MISSION.md "Liver
+extension" (L1 failure analysis + 3-run vote, L2 liver probability rules on val → freeze → test, L3 tumour-size arms
+sizeLarge/sizeRand/sizeSmall + rep2 of Large and Rand; L1c contrast phase optional), with the L1 and L3 comparisons
+declared before any result. New `nnunet/liver_failure.py` (fake test 3 cases: 101:0 mean tumour Dice 0.313 = eval
+CSV). Started cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`, ~15-30 min). Supervisor
+restarted (old deadline in `$AP_DIR/deadline.bak_fri`), `AP_MAX_SESSIONS=90`, log
+`$PROJ/logs/autopilot_20261126_210106.log`. gpu pancreas all_rep3 untouched (s26 verdict still due). Next gpu after
+it: L2 `predict_val_probs.sh 101 0 1 && predict_test_probs.sh 101 0 1`.
+
 ### s26 2026-11-26 19:25, event job_finished (liver_all_rep3)
 Saw: liver_all_rep3 exit 0 after 7.04 h (`$PROJ/logs/liver_all_rep3_20261126_121504.log`; the 3 "error" lines are
 table text). D101 f3, 1000 epochs, nnU-Net val (20 real) liver / tumour 0.856 / 0.305. **Test 111 tumour Dice 0.301

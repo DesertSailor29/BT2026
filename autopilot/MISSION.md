@@ -6,6 +6,56 @@ until then. You are one of a chain of short headless sessions. The supervisor (`
 when a watched job ends, when a wake-up you asked for is due, or when nothing runs. You decide the next step, start
 it, record why, push, and end. The next session knows only what you wrote down.
 
+## Liver extension (user, 2026-11-26 21:00; takes priority over everything below that is still open)
+The user added **48 h** and asked to "go for the liver": the open liver questions, not more pancreas. **Time: the
+UCloud job ends ~Sun 29 Nov 06:40 (57.5 h from 2026-11-26 21:10); supervisor deadline Sun 29 Nov 05:20.** You may add
+liver experiments that the findings motivate, if they fit the remaining time (declare them in the journal first). If
+a worthwhile experiment does not fit, write the request into **`TIME_REQUEST.md` at the repo root** (top: how many
+extra hours, for what, expected end; below: why), commit + push it; the user decides and restarts the supervisor
+with a new deadline. Never plan GPU work past the deadline. Pancreas `all_rep3` (running, ~02:55 Fri) is still evaluated as declared in s26; no
+further pancreas GPU work. Same authority, hard rules and journal format as below; one GPU job at a time (serial
+fits: ~38 h of GPU work in ~50 h).
+
+**Timings (liver, full B200):** 1000-epoch training ~6.3 h + 111 test predictions ~0.7 h → **one liver arm ~7 h**
+(`nnunet/liver_arm.sh`). Val probabilities (20 cases) ~15 min per run; test probabilities ~1-1.5 h per run (check
+`df` and the first run's time).
+
+**L1 (cpu lane, started by the planning session 2026-11-26):** `nnunet/liver_failure.py` (`L1_liver_failure`):
+lesion recall / coverage by real lesion size, tumour Dice by case tumour burden (runs 101:0/1/2, 103:0, 104:0/1,
+saved + ccPost), and the 3-run baseline vote. Declared: the vote helps if vote − 3-run mean > +0.01, CI > 0.
+Evaluate it, put the key numbers in the journal and `notes/RESULTS.md`. It informs the reading of L3 (which lesion
+sizes are missed), it does not choose anything.
+
+**L2 (gpu, first after pancreas all_rep3; then cpu):** `predict_val_probs.sh 101 0 1`, then
+`predict_test_probs.sh 101 0 1` (one gpu job, chained). Screen on the 20 val cases (both runs, ledger, same
+"promising" criteria) the probability rules the liver never had: tumour threshold (p(tumour) > t, t 0.3/0.2/0.1),
+liver+tumour threshold, grow of tumour/liver as on pancreas, each **alone and on top of ccPost** (ccPost is the liver
+reference: a rule that does not add to ccPost is not a finding for the liver). Extend `post_rules.py` /
+`post_rules_test_liver.py` if they lack the liver-probability path (fake-test; existing outputs byte-identical).
+Freeze <= 4 + controls in the journal, then one test evaluation.
+
+**L3 (gpu, after L2's prediction job): tumour-size arms**, ids ready (`nnunet/size_split.py`,
+`$MAISI_RUNS/pool/filter_metrics/liver/size/ids_size{Large,Rand,Small}.json`: subsets of the ccAucRepair labels
+(Dataset104), 590/590/589 volumes, each = its tumour volumes + all 180 tumour-free ones; sizeLarge median 20 ml per
+tumour volume, sizeSmall 0.3, real val 18). Order, one at a time:
+`bash nnunet/liver_arm.sh ccAucRepair_sizeLarge 104 --ids <metrics>/size/ids_sizeLarge.json`, then `_sizeRand`, then
+`_sizeSmall`, then second runs `ccAucRepair_sizeLarge_rep2 104 --same-as ccAucRepair_sizeLarge` and `_sizeRand_rep2`
+(the claim rests on Large vs Rand and single repaired-label runs vary 0.02-0.04, so both get a second run whatever the
+first results say: declared now, nothing is chosen from test). Remaining time after that (~12 h): `_sizeSmall_rep2`,
+or a follow-up that L2's frozen test result motivates; record the choice and why.
+**Comparisons, declared now (2026-11-26, before any result), per-case tumour Dice on the 111 test cases, saved and
+with ccPost:** primary sizeLarge vs sizeRand (per-case mean of the runs available, paired bootstrap CI + Wilcoxon;
+"large tumours help" if diff > +0.01 with CI > 0, and on 2 runs each); secondary sizeSmall vs sizeRand, each vs
+ccAucRepair (104:0/104:1 mean) and vs the baseline (101:0/101:1 mean); lesion recall by lesion size bin as in L1 (do
+large-tumour arms find the large lesions the baseline misses?). Write a small eval script for this (reuse
+`predict_test.py` paired/boot_ci) rather than ad-hoc numbers.
+
+**L1c (optional, only if the gpu lane would otherwise idle):** contrast phase of the 111 test cases (backlog (a)):
+TotalSegmentator into `$PROJ/venv-ts`, aorta + portal vein only (never its liver output), the HU rule of
+`liver_check`, tumour Dice per phase. Skip if it needs anything beyond pip + its weight download.
+
+**Final session:** summary covering both the pancreas autopilot (s1-s26) and the liver extension; same rules.
+
 ## Authority (what the user granted; overrides CLAUDE.md where they differ)
 - You may explore: decide and start experiments within the direction below, change the plan when the evidence says
   so (record why), write and change code, and **commit code + notes and push to branch `autopilot` without asking**.
