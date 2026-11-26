@@ -6,7 +6,7 @@ Part 1, missed tumours: every real lesion (26-connected piece of label 2 in the 
 run + variant (saved / ccPost) the share of its voxels predicted as tumour (detected = share > 0, as the eval's
 lesion recall). Summary: lesion recall and mean coverage by lesion size bin, tumour Dice by the case's real tumour
 burden, so the tumour-size arms (L3) can be read against it.
-Part 2, vote: per voxel, tumour where >= 2 of the 3 baseline runs (101:0/1/2) say tumour, else liver where >= 2 say
+Part 2, vote: per voxel, tumour where >= 2 of the 3 baseline runs (101:0/1/3) say tumour, else liver where >= 2 say
 liver or tumour, else background; scored as saved and with ccPost (maisi/cc_rules.py main_structure), compared per
 case (paired, bootstrap CI, Wilcoxon: predict_test.py definitions) with each single run and the per-case 3-run mean.
 Declared before any number (planning session 2026-11-26, MISSION.md L1): the vote "helps" if vote − 3-run mean > +0.01 with CI > 0.
@@ -35,9 +35,9 @@ sys.path.insert(0, os.path.join(REPO, "maisi"))
 import predict_test as pt  # noqa: E402  (paths, Dice, lesion metrics, paired stats)
 from cc_rules import main_structure  # noqa: E402  (the training-label cc rule = ccPost)
 
-VERSION = "fail1"
-BASE3 = ["101:0", "101:1", "101:2"]           # all, all_rep2, all_rep3
-OTHER = ["103:0", "104:0", "104:1"]           # ccRepair, ccAucRepair, ccAucRepair_rep2
+VERSION = "fail2"  # fail1 wrongly used 101:2 (= ccReject, see arms.json) as all_rep3
+BASE3 = ["101:0", "101:1", "101:3"]           # all, all_rep2, all_rep3 (D101 arms.json folds 0/1/3)
+OTHER = ["101:2", "103:0", "104:0", "104:1"]  # ccReject, ccRepair, ccAucRepair, ccAucRepair_rep2
 RUNS = BASE3 + OTHER
 SIZE_BINS = [(0, 0.1), (0.1, 1.0), (1.0, 10.0), (10.0, 100.0), (100.0, float("inf"))]  # ml
 BURDEN_BINS = [(0, 1e-9), (1e-9, 10.0), (10.0, 100.0), (100.0, float("inf"))]          # ml per case
@@ -112,7 +112,7 @@ def summarise(data, cases, out_dir):
             w.writerows(rows)
 
     L = [f"# Liver failure analysis + 3-run vote (L1, `nnunet/liver_failure.py`, {len(cases)} LiTS test cases)", "",
-         "Exploratory. Runs: 101:0/1/2 = all/all_rep2/all_rep3, 103:0 ccRepair, 104:0/1 ccAucRepair(_rep2); "
+         "Exploratory. Runs: 101:0/1/3 = all/all_rep2/all_rep3, 101:2 ccReject, 103:0 ccRepair, 104:0/1 ccAucRepair(_rep2); "
          "vote3 = per-voxel majority of the three baseline runs. Variant ccPost = one-structure rule on the prediction.", "",
          f"Real lesions: {len(les_rows)}; cases with tumour: {sum(1 for c in cases if data[c]['lesion_ml'])}.", "",
          "## 1. Lesion recall (share of real lesions with any predicted tumour voxel) / mean coverage, by lesion size", ""]

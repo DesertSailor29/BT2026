@@ -48,7 +48,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
 0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:30, supervisor deadline 05:20; more-time requests go to
    `TIME_REQUEST.md` at the repo root): journal `notes/AUTOPILOT.md`,
    branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". Running: gpu pancreas `all_rep3` (~02:55 Fri,
-   s26 verdict), cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`). Then gpu L2 (liver val +
+   s26 verdict), cpu `L1_liver_failure_v2` (`$PROJ/logs/L1_liver_failure_v2_20261126_212227.log`; v1 used 101:2 = ccReject as all_rep3, invalid). Then gpu L2 (liver val +
    test probabilities) → L3 size arms (~7 h each, serial). Sunday: review the branch (summary on top), merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
@@ -89,6 +89,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-26 21:22 (UCloud autopilot s28): L1 v1 done but its 3-run vote used 101:2 (= ccReject; all_rep3 is 101:3) → invalid; fixed `liver_failure.py` (BASE3 101:0/1/3, VERSION fail2), old output moved to `test_eval_liver/failure_fail1_wrong_base3`; re-run cpu `L1_liver_failure_v2` (`$PROJ/logs/L1_liver_failure_v2_20261126_212227.log`). gpu pancreas all_rep3 healthy (epoch 405).
 - 2026-11-26 21:05 (UCloud, with user): user added 48 h for liver work. MISSION.md "Liver extension" (L1-L3, comparisons declared); new `nnunet/liver_failure.py` (fake-tested on 3 cases, matches the eval's per-case Dice); started cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`); supervisor restarted with deadline Sun 29 Nov 05:20, AP_MAX_SESSIONS 90 (`$PROJ/logs/autopilot_20261126_210106.log`).
 - 2026-11-26 20:50 (UCloud autopilot s27): check: gpu pancreas_all_rep3 healthy (epoch 304, train ETA 00:10, end ~02:55); cpu idle; wake 00:40.
 - 2026-11-26 19:25 (UCloud autopilot s26): liver_all_rep3 done (exit 0): D101 f3 val liver/tumour 0.856/0.305; test tumour 0.301 vs baseline 0.303, −0.001 [−0.009, +0.006] p 0.82 → liver baseline stable (s24 rule). Started gpu `pancreas_all_rep3` (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`, ~7.4 h).

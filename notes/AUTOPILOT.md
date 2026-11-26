@@ -4,6 +4,24 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s28 2026-11-26 21:22, event job_finished (L1_liver_failure)
+Saw: L1 exit 0 after 0.32 h (`$PROJ/logs/L1_liver_failure_20261126_210047.log`; the 1 "error" line is table text).
+**Bug: the run list was wrong.** `liver_failure.py` used 101:2 as all_rep3, but D101 `arms.json` folds are
+0 all, 1 all_rep2, **2 ccReject**, 3 all_rep3 (101:2's saved Dice 0.382 = ccReject's known 0.382). So the 3-run
+"baseline" vote was all + all_rep2 + ccReject and its section-3 numbers (none −0.005 vs 3-run mean; ccPost +0.0098
+[+0.0016, +0.0182]) are invalid, not a result. Per-run rows of 101:0/101:1/103:0/104:0/104:1 are correct (e.g.
+by burden, 101:0 saved 0-10 ml 0.106 → ccPost 0.216: ccPost's gain is in the small-burden cases; lesion recall
+0.1-1 ml 0.24-0.28, 1-10 ml ~0.68, ≥10 ml ~0.95 for all runs), but are reported from the re-run only.
+Decision: fixed `BASE3 = 101:0/1/3`, 101:2 kept as an extra run labelled ccReject, VERSION fail2 (invalidates the
+caches); old output moved (not deleted) to `$nnUNet_results/test_eval_liver/failure_fail1_wrong_base3`. Fake test
+on 2 cases ok. Re-run cpu `L1_liver_failure_v2` (~20 min). The declared criterion is unchanged (vote − 3-run mean >
++0.01, CI > 0); the declaration was made before any number, and I read the wrong numbers only on the wrong set, so the
+re-run is still a clean test. gpu: pancreas_all_rep3 keeps running (epoch ~405, healthy); L2 next after it.
+Reasons: MISSION L1; the vote must be of the three baseline runs as declared.
+Assumptions: arms.json fold order is the truth (it matches the known ccReject score).
+Alternatives considered: patching only the summary from the caches (caches lack 101:3: not possible).
+Started: cpu `L1_liver_failure_v2` (log path in NOTES Log).
+
 ### s27 2026-11-26 20:50, event check
 Saw: gpu pancreas_all_rep3 healthy: D102 f2 training log at epoch 304 at 20:49 (17.3 s/epoch, no NaN, 0 error lines;
 stdout log lags by buffering), GPU 99 %, status-file train ETA 00:10, then test prediction → ~02:55. cpu idle.
