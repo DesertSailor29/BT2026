@@ -63,6 +63,16 @@ small/medium tumour burden; on the largest third ccReject loses (−0.07, misses
 val loss rises after epoch ~756 (mild overfit to 343 volumes); best epochs: all 915, all_rep2 988, ccReject 775,
 ccRepair 879, ccRepairDel 938, ccAucRepair 871.
 
+- **L1 liver failure analysis + 3-run vote** (autopilot s29, 2026-11-26; `nnunet/liver_failure.py`,
+  `reports/data/test_eval_liver/failure/`; 709 real lesions in 101 tumour cases, exploratory). Lesion recall
+  (any predicted voxel) by real lesion size, all runs similar: < 0.1 ml ~0.02, 0.1-1 ml 0.17-0.28, 1-10 ml 0.60-0.69,
+  10-100 ml 0.86-0.99, ≥ 100 ml 0.73-1.00 → **the misses are small lesions**; ccPost barely changes recall. Tumour Dice
+  by case burden (baseline 101:0/1/3 saved → ccPost): 0-10 ml ~0.10 → ~0.21, 10-100 ml ~0.44 → ~0.54, 100+ ml
+  ~0.59 → ~0.61 → ccPost's (and the cc arms') gain is FP removal in small/medium-burden cases. ccReject (101:2) is
+  the best arm at 0-10 ml (0.282) but the worst at 100+ ml (0.464 vs ~0.59; recall of ≥ 100 ml lesions 0.73).
+  **3-run baseline vote** (per-voxel majority of 101:0/1/3): saved 0.311 vs 3-run mean 0.302, +0.009 [+0.006,
+  +0.012] → below the declared +0.01 → "vote helps" **not met**; with ccPost +0.005 [+0.002, +0.008].
+
 ## Test-time postprocessing (exploratory, decided after seeing results)
 
 - **ccPost** = the training cc rule applied to the predictions (`nnunet/fp_location.py`,

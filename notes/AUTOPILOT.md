@@ -4,6 +4,34 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s29 2026-11-26 21:45, event job_finished (L1_liver_failure_v2)
+Saw: L1 v2 exit 0 after 0.37 h (`$PROJ/logs/L1_liver_failure_v2_20261126_212227.log`; the 1 "error" line is table
+text), `reports/data/test_eval_liver/failure/{summary.md, cases.csv, lesions.csv}`, 709 real lesions / 101 tumour
+cases. **Lesion recall by real size** (all runs alike): < 0.1 ml ~0.02, 0.1-1 ml 0.17-0.28, 1-10 ml 0.60-0.69,
+10-100 ml 0.86-0.99, ≥ 100 ml 0.73-1.00 → the misses are small lesions; ccPost hardly changes recall. **Tumour Dice
+by case burden**, baseline saved → ccPost: 0-10 ml ~0.10 → ~0.21, 10-100 ml ~0.44 → ~0.54, 100+ ml ~0.59 → ~0.61
+(the gain is FP removal in small/medium-burden cases). ccReject (101:2): best at 0-10 ml (0.282), worst at 100+ ml
+(0.464; ≥ 100 ml lesion recall 0.73), consistent with fewer large-tumour volumes in its 343. **Vote** (majority of
+101:0/1/3): saved 0.311 vs 3-run mean 0.302, **+0.009 [+0.006, +0.012]** p 7e-10 → declared criterion (> +0.01)
+**not met** (CI > 0 but the gain is below the bar); ccPost +0.005 [+0.002, +0.008]. Into RESULTS.md.
+gpu: pancreas_all_rep3 healthy (epoch 476 at 21:40, 17.2 s/epoch, train ETA 00:11, then test → ~02:55).
+Decision: cpu: nothing to run (L2's screen needs the val probabilities). In-session code: `post_rules.py --target
+liver --probs` (L2): rules tumThr0.3/0.2/0.1 (p(tumour) ≥ t → tumour), thr0.3/0.1 (liver+tumour threshold),
+grow0.1/0.05, growT0.2/0.1, control dilateT1 (tumour dilation without probabilities), each alone and as
+`<rule>+ccPost` (ccPost applied after), with a second table vs ccPost (same "promising" criteria, ccPost as
+reference). Own cache/output dirs (`post_rules_val_probs`, `reports/data/post_rules/liver_val_probs`), so the s7
+screen is untouched; pancreas + s7 liver `--tables-only` regenerate byte-identical (git diff empty). Fake test on one
+liver val case with one-hot probabilities (+0.25 tumour in the liver): every rule changes what it should; ~110 s per
+case for all rules. gpu after all_rep3: L2 `predict_val_probs.sh 101 0 1 && predict_test_probs.sh 101 0 1`, as
+MISSION.
+Reasons: MISSION L1 evaluation + L2 preparation; L1 says small lesions are the miss, which tumThr targets.
+Assumptions: tumThr is defined globally (not only inside the predicted liver); ccPost after it removes pieces off the
+liver. If a threshold floods the liver with tumour, ccPost (keeps the structure of the largest *liver* piece) can
+empty the case: a real property of the rule, scored as is.
+Alternatives considered: val probs only, test probs later only if a frozen rule needs them (saves ~2.5 GPU h if
+nothing is promising); kept the MISSION chain (L3 time is fixed by the 5 declared arms, ~12 h spare either way).
+Started: nothing (the all_rep3 end wakes the next session, which applies the s26 declaration and starts L2 gpu).
+
 ### s28 2026-11-26 21:22, event job_finished (L1_liver_failure)
 Saw: L1 exit 0 after 0.32 h (`$PROJ/logs/L1_liver_failure_20261126_210047.log`; the 1 "error" line is table text).
 **Bug: the run list was wrong.** `liver_failure.py` used 101:2 as all_rep3, but D101 `arms.json` folds are

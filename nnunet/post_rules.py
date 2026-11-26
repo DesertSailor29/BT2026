@@ -51,6 +51,14 @@ with the liver's known winner ccPost (ccPost+minLes, ccPost+pos, ccPost+tissueTx
   python nnunet/post_rules.py --target liver --workers 12
 -> reports/data/post_rules/liver_val/ (cache $nnUNet_results/test_eval_liver/post_rules_val). "pancreas" in the rule
 descriptions above reads "liver" for this target.
+liver probabilities (s29, MISSION "Liver extension" L2; needs predict_val_probs.sh 101 0 1): --target liver --probs
+screens only none, ccPost and LIVER_PROB, each alone and followed by ccPost (`<rule>+ccPost`, second table vs ccPost):
+  tumThr<t>      small lesions are missed (L1): voxels with p(tumour) >= t -> tumour (t 0.3 / 0.2 / 0.1)
+  thr<t>         liver + tumour threshold: p(liver) + p(tumour) >= t -> foreground, argmax of the two (t 0.3 / 0.1)
+  grow<t>        as above, for the liver (t 0.1 / 0.05); growT<t> tumour growth (t 0.2 / 0.1)
+  dilateT1       control: one dilation of the predicted tumour into predicted liver, no probabilities
+  python nnunet/post_rules.py --target liver --probs --workers 12
+-> reports/data/post_rules/liver_val_probs/ (cache $nnUNet_results/test_eval_liver/post_rules_val_probs).
 -> reports/data/post_rules/pancreas_val/{summary.md, per_case.csv, val_label_params.json}. Exploratory.
 """
 import argparse
@@ -92,17 +100,25 @@ RULES = ("none", "ccPost", "ccTol5", "ccTol10", "ccTol20", "ccK2", "ccK3", "tumT
          "tissueVal", "minLes", "minLes0.5", "minLes1.75", "minLes+tumNear10", "pos", "pos+minLes") + PROB_RULES + (
          "rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1")
 LIVER_EXTRA = ("ccPost+minLes", "ccPost+pos", "ccPost+tissueTxt")
+# L2 (MISSION "Liver extension", s29): liver probability rules, only with --target liver --probs. Each alone and with
+# ccPost applied afterwards (`<rule>+ccPost`: does it add to the liver's reference rule?).
+TUM_T = (0.3, 0.2, 0.1)
+LIVER_PROB_BASE = tuple(f"tumThr{t:g}" for t in TUM_T) + ("thr0.3", "thr0.1", "grow0.1", "grow0.05", "growT0.2",
+                                                           "growT0.1", "dilateT1")
+LIVER_PROB = LIVER_PROB_BASE + tuple(f"{r}+ccPost" for r in LIVER_PROB_BASE)
 CONTROLS = ("rand_ccPost", "rand_ccTol10", "rand_tumTouch", "rand_minLes", "rand_pos", "open1", "dilate1", "thr0.1",
             "thr0.05")
 
 
-def set_target(target):
-    """Switch the module to 'liver' (paths, runs); the default 'pancreas' leaves everything as before."""
+def set_target(target, probs=False):
+    """Switch the module to 'liver' (paths, runs); the default 'pancreas' leaves everything as before.
+    probs (liver only, L2): separate cache + output dirs (`*_probs`), so the s7 no-probability screen stays as it is."""
     global TARGET, RUNS, OUT, PUB
     TARGET = target
     RUNS = {"pancreas": ["102:0", "102:1"], "liver": ["101:0", "101:1"]}[target]
-    OUT = f"{os.environ['nnUNet_results']}/test_eval_{target}/post_rules_val"
-    PUB = f"{REPO}/reports/data/post_rules/{target}_val"
+    sfx = "_probs" if probs else ""
+    OUT = f"{os.environ['nnUNet_results']}/test_eval_{target}/post_rules_val{sfx}"
+    PUB = f"{REPO}/reports/data/post_rules/{target}_val{sfx}"
 
 
 def spacing_of(aff):
@@ -318,6 +334,40 @@ def dilate(p):
     return out
 
 
+def tum_thr(p, prob, t):
+    """tumThr<t> (liver L2): small lesions are missed (L1: recall ~0.2 below 1 ml) -> every voxel with
+    p(tumour) >= t becomes tumour, the rest keeps its saved label."""
+    out = p.copy()
+    out[prob[2] >= t] = 2
+    return out
+
+
+def dilate_tumour(p):
+    """dilateT1 control: one 26-neighbour dilation of the predicted tumour into predicted organ (no probabilities)."""
+    ring = ndimage.binary_dilation(p == 2, S26) & (p == 1)
+    out = p.copy()
+    out[ring] = 2
+    return out
+
+
+def cc_post(p):
+    return np.where(main_structure(p), p, 0).astype(np.uint8)
+
+
+def liver_prob_rules(p, img, prob, spacing):
+    """L2 variants (LIVER_PROB): the probability rules alone and followed by ccPost."""
+    v = {f"tumThr{t:g}": tum_thr(p, prob, t) for t in TUM_T}
+    for t in (0.3, 0.1):
+        v[f"thr{t:g}"] = threshold(prob, t)
+    for t in (0.1, 0.05):
+        v[f"grow{t:g}"] = grow(p, img, prob, spacing, t)
+    for t in (0.2, 0.1):
+        v[f"growT{t:g}"] = grow_tumour(p, img, prob, spacing, t)
+    v["dilateT1"] = dilate_tumour(p)
+    v.update({f"{r}+ccPost": cc_post(v[r]) for r in LIVER_PROB_BASE})
+    return v
+
+
 def n_tumour_pieces(p):
     return ndimage.label(p == 2, S26)[1]
 
@@ -343,7 +393,9 @@ def apply_rules(p, img, prob, spacing, params, seed, aff=None, support=None):
         v["pos"] = position(p, centre, spacing, aff, support)
         v["pos+minLes"] = min_les(v["pos"], spacing, params["min_lesion_ml"])
         v["ccPost+pos"] = position(v["ccPost"], centre, spacing, aff, support)
-    if prob is not None:
+    if prob is not None and TARGET == "liver":
+        v.update(liver_prob_rules(p, img, prob, spacing))
+    elif prob is not None:
         for t in GROW_T + (0.05, 0.02):
             v[f"grow{t:g}"] = grow(p, img, prob, spacing, t)
         v["grow0.2+ccTol10"] = cc_tol(v["grow0.2"], spacing, 10.0)
@@ -486,31 +538,44 @@ def tables(runs, cases, rules):
              "| rule | run | tumour Dice | vs none [95% CI] | p | pancreas Dice | vs none | lesion recall | lesions lost | FP pieces / case | promising |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     verdict = {}
-    for rule in rules:
-        gains, lost_all, ref_all, rows = [], 0, 0, []
-        for run in runs:
-            m = [data[(run, c)]["metrics"] for c in cases]
-            t0 = [x["none"]["tumour_dice"] for x in m]
-            t1 = [x[rule]["tumour_dice"] for x in m]
-            g0 = [x["none"][f"{TARGET}_dice"] for x in m]
-            g1 = [x[rule][f"{TARGET}_dice"] for x in m]
-            st, sg = pt.paired(t0, t1), pt.paired(g0, g1)
-            ref = sum(x["none"]["les_ref"] for x in m)
-            det = sum(x[rule]["les_det"] for x in m)
-            lost = sum(max(0, x["none"]["les_det"] - x[rule]["les_det"]) for x in m)
-            fp = np.mean([x[rule]["les_fp"] for x in m])
-            gains.append(st["diff"])
-            lost_all += lost
-            ref_all += ref
-            rows.append((run, st, sg, det / ref if ref else float("nan"), lost, fp))
-        prom = rule != "none" and min(gains) > 0 and np.mean(gains) >= 0.01 and lost_all <= 0.05 * ref_all
-        verdict[rule] = {"gain_f0": gains[0], "gain_f1": gains[-1], "lost": lost_all, "promising": bool(prom)}
-        for run, st, sg, rec, lost, fp in rows:
-            diff = "–" if rule == "none" else pt.fmt_diff(st, 3)
-            gd = "–" if rule == "none" else f"{sg['diff']:+.3f}"
-            p = "–" if rule == "none" else f"{st['p']:.2g}"
-            lines.append(f"| {rule} | {names[run]} | {st['y']:.3f} | {diff} | {p} | {sg['y']:.3f} | {gd} | {rec:.3f} | "
-                         f"{lost} | {fp:.1f} | {'**yes**' if prom else ''} |")
+    # base "none" for every rule; liver L2 (`<rule>+ccPost` present) adds a second table vs ccPost (MISSION: a liver
+    # rule that does not add to ccPost is not a finding). Pancreas / s7 liver: only the first, unchanged.
+    sections = [("none", rules)]
+    plus = [r for r in rules if r.endswith("+ccPost") and "ccPost" in rules]
+    if plus:
+        sections.append(("ccPost", ["ccPost"] + plus))
+    for base, srules in sections:
+        if base != "none":
+            lines += ["", f"## vs ccPost (the rule followed by ccPost, compared with ccPost alone; promising = same "
+                      "criteria with ccPost as the reference)", "",
+                      lines[4].replace("vs none", "vs ccPost"), lines[5]]
+        for rule in srules:
+            gains, lost_all, ref_all, rows = [], 0, 0, []
+            for run in runs:
+                m = [data[(run, c)]["metrics"] for c in cases]
+                t0 = [x[base]["tumour_dice"] for x in m]
+                t1 = [x[rule]["tumour_dice"] for x in m]
+                g0 = [x[base][f"{TARGET}_dice"] for x in m]
+                g1 = [x[rule][f"{TARGET}_dice"] for x in m]
+                st, sg = pt.paired(t0, t1), pt.paired(g0, g1)
+                ref = sum(x[base]["les_ref"] for x in m)
+                det = sum(x[rule]["les_det"] for x in m)
+                lost = sum(max(0, x[base]["les_det"] - x[rule]["les_det"]) for x in m)
+                fp = np.mean([x[rule]["les_fp"] for x in m])
+                gains.append(st["diff"])
+                lost_all += lost
+                ref_all += ref
+                rows.append((run, st, sg, det / ref if ref else float("nan"), lost, fp))
+            prom = rule != base and min(gains) > 0 and np.mean(gains) >= 0.01 and lost_all <= 0.05 * ref_all
+            key = rule if base == "none" else f"{rule} vs ccPost"
+            if base == "none" or rule != base:
+                verdict[key] = {"gain_f0": gains[0], "gain_f1": gains[-1], "lost": lost_all, "promising": bool(prom)}
+            for run, st, sg, rec, lost, fp in rows:
+                diff = "–" if rule == base else pt.fmt_diff(st, 3)
+                gd = "–" if rule == base else f"{sg['diff']:+.3f}"
+                p = "–" if rule == base else f"{st['p']:.2g}"
+                lines.append(f"| {rule} | {names[run]} | {st['y']:.3f} | {diff} | {p} | {sg['y']:.3f} | {gd} | "
+                             f"{rec:.3f} | {lost} | {fp:.1f} | {'**yes**' if prom else ''} |")
     ag = [data[k]["prob_agree"] for k in data if data[k]["prob_agree"] is not None]
     if ag:
         lines += ["", f"Probabilities vs saved label maps: argmax agreement min {min(ag):.4f} over {len(ag)} cases."]
@@ -528,15 +593,20 @@ def main():
     ap.add_argument("--cases", nargs="+", help="subset (fake test); default all val cases")
     ap.add_argument("--no-probs", action="store_true", help="skip the grow rules")
     ap.add_argument("--tables-only", action="store_true")
+    ap.add_argument("--probs", action="store_true", help="liver only (L2): the probability rules (LIVER_PROB), "
+                    "needs fold_X/val_probs; own cache + output dirs (*_probs)")
     a = ap.parse_args()
-    set_target(a.target)
+    set_target(a.target, a.probs and a.target == "liver")
     a.runs = a.runs or RUNS
-    a.no_probs = a.no_probs or TARGET == "liver"
+    a.no_probs = a.no_probs or (TARGET == "liver" and not a.probs)
     pt.set_target(TARGET)
     fl.ORG = TARGET
     val = [real_case(TARGET, i) for i in pt.split()["val"]]
     cases = a.cases or val
-    rules = [r for r in RULES if not (a.no_probs and r in PROB_RULES)] + (list(LIVER_EXTRA) if TARGET == "liver" else [])
+    if TARGET == "liver" and not a.no_probs:
+        rules = ["none", "ccPost"] + list(LIVER_PROB)
+    else:
+        rules = [r for r in RULES if not (a.no_probs and r in PROB_RULES)] + (list(LIVER_EXTRA) if TARGET == "liver" else [])
     if not a.tables_only:
         os.makedirs(OUT, exist_ok=True)
         params = label_params(val, a.workers)
