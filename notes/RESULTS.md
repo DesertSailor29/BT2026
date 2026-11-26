@@ -120,7 +120,11 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
 - **Liver posRepair_rep2** (D113 f1, autopilot s22, exploratory; `$nnUNet_results/test_eval_liver_posRepair_rep2/summary.md`):
   val (20) liver / tumour 0.859 / 0.328; test 111 tumour 0.320 vs baseline 0.303: **+0.017 [+0.004, +0.030] p 6e-4**
   (f0 was −0.011) → the two posRepair runs differ by 0.028: the arm's sign vs baseline is not reproducible (2-run
-  mean ≈ +0.003). Liver Dice +0.011; FP ml/case 23.5 (baseline 35 / 41); recall 0.439. Pre-vs-post on rep2 / 2-run mean: pending (s22 cpu).
+  mean ≈ +0.003). Liver Dice +0.011; FP ml/case 23.5 (baseline 35 / 41); recall 0.439. Pre-vs-post (s23, declared s10/s20; `reports/data/post_rules/liver_test_pre_vs_post_pos_113f1/`, `..._113f0_113f1/`):
+  rep2 alone Q1 +0.004 [−0.010, +0.018] equivalent, Q2 +0.016, Q3 +0.017, R2 +0.009 n.s.; **2-run mean Q1 −0.010
+  [−0.023, +0.002] p 0.15 (CI includes 0; runs −0.024 / +0.004, opposite signs) → "pre ≠ post for pos" does not stand
+  (s20 rule): within run-to-run spread**; 2-run mean Q2 +0.001 [−0.011, +0.012], Q3 +0.003 [−0.009, +0.013], R2 +0.003
+  [−0.010, +0.015], all within ±0.02 → on the 2-run mean pre ≈ post for pos, consistent with the working thesis.
 
 ## Pancreas (measured only)
 

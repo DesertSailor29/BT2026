@@ -4,6 +4,28 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s23 2026-11-26 05:25, event job_finished (B1_liver_prepost_pos_rep2)
+Saw: B1_liver_prepost_pos_rep2 exit 0 after 0.54 h (`$PROJ/logs/B1_liver_prepost_pos_rep2_20261126_044858.log`, 0
+error lines). Declared s10 comparisons, liver test 111. **113:1 alone:** Q1 posRepair saved vs baseline+pos +0.004
+[−0.010, +0.018] p 0.18 (equivalent), Q2 +0.016 [+0.003, +0.029], Q3 +0.017 [+0.004, +0.030], R2 +0.009 n.s.
+**Per-case mean 113:0/113:1:** Q1 −0.010 [−0.023, +0.002] p 0.15; Q2 +0.001 [−0.011, +0.012] (within ±0.02); Q3
++0.003 [−0.009, +0.013] (within); R2 +0.003 [−0.010, +0.015] (within); R1 −0.076.
+**Verdict by the s20 declaration:** Q1 on the 2-run mean has a CI including 0 and the runs have opposite signs
+(−0.024 / +0.004) → "pre ≠ post for pos" does **not** stand; s18's Q1 is reported as within run-to-run spread. On
+the 2-run mean every pre-vs-post contrast with the post rule on both sides is within ±0.02: pos behaves as the working
+thesis says (Q1's CI lower bound −0.023 just misses formal equivalence).
+gpu: pancreas_minLesRepair_rep2 healthy (epoch 99 at 05:19, 17.3 s/epoch, no NaN, EMA 0.264; train ETA 09:39, then
+238 test probs ~2.2 h → ~12:00 Thu).
+Decision: cpu: nothing; gpu: keep running. When it ends: `pre_vs_post_pancreas.py --pre 114:1` and `--pre
+114:0,114:1` (s21) on cpu, plus the arm's own eval. After that ~17 h remain; that session decides the last GPU use
+(candidates: nothing + summary early, or one more run that the evidence asks for; it must end by ~04:00 Fri).
+Reasons: MISSION "Every session"; no declared cpu work is waiting (the pancreas analyses need 114:1's predictions);
+inventing analyses without a question is not useful.
+Assumptions: none new.
+Alternatives considered: start drafting the final summary now (better done once M1 rep2 is known; the final session
+has 1 h and the s22-s24 entries hold the numbers).
+Started: nothing (gpu busy; job end wakes the next session; health-check wake from s22 at 06:19 still set).
+
 ### s22 2026-11-26 04:50, event job_finished (liver_posRepair_rep2)
 Saw: liver_posRepair_rep2 exit 0 after 7.0 h (`$PROJ/logs/liver_posRepair_rep2_20261125_214811.log`; the 3 "error"
 lines are table text). D113 f1 1000 epochs, nnU-Net val (20 real) liver / tumour 0.859 / 0.328 (f0 0.853 / 0.283).
