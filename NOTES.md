@@ -47,7 +47,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
 ## Next steps
 0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:30, supervisor deadline 05:20; more-time requests go to
    `TIME_REQUEST.md` at the repo root): journal `notes/AUTOPILOT.md`,
-   branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". Running: gpu L2 liver val + test probabilities (`L2_liver_probs`, ~06:00); wake 03:25 to start the L2 val screen on cpu (`post_rules.py --target liver --probs`) → L3 size arms (~7 h each, serial; L3 eval script still to write). Sunday: review the branch (summary on top), merge into main.
+   branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". Running: gpu L2 liver test probabilities (`L2_liver_probs`, val done, end ~07:30); cpu L2 val screen (`L2_liver_screen`, ~15 min) → freeze ≤ 4 rules → L3 size arms (~7 h each, serial; L3 eval script still to write). Sunday: review the branch (summary on top), merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -87,9 +87,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-27 03:27 (UCloud autopilot s31): L2 val probs 101:0/1 done (20/20 each, ~21 min/run; test part ~2 h/run → gpu end ~07:30). Started cpu `L2_liver_screen` (`$PROJ/logs/L2_liver_screen_20261127_032710.log`).
 - 2026-11-27 02:50 (UCloud autopilot s30): pancreas all_rep3 done (exit 0): test tumour 0.165 vs baseline 0.177, −0.012 [−0.025, +0.001] p 0.095 → within ±0.015, stable by the s26 rule (3 runs range 0.018). Started gpu `L2_liver_probs` (`$PROJ/logs/L2_liver_probs_20261127_024420.log`, val then test probs of 101:0/1, ~3 h).
 - 2026-11-26 22:05 (UCloud autopilot s29): L1 v2 done (exit 0): small lesions are the miss (recall 0.1-1 ml 0.17-0.28, 1-10 ml ~0.65, ≥ 10 ml ~0.95); vote3 0.311 vs 3-run mean 0.302, +0.009 [+0.006, +0.012] → below declared +0.01, not met. Added `post_rules.py --target liver --probs` (L2 rules, fake-tested, old tables byte-identical). gpu pancreas all_rep3 epoch 476 healthy.
 - 2026-11-26 21:22 (UCloud autopilot s28): L1 v1 done but its 3-run vote used 101:2 (= ccReject; all_rep3 is 101:3) → invalid; fixed `liver_failure.py` (BASE3 101:0/1/3, VERSION fail2), old output moved to `test_eval_liver/failure_fail1_wrong_base3`; re-run cpu `L1_liver_failure_v2` (`$PROJ/logs/L1_liver_failure_v2_20261126_212227.log`). gpu pancreas all_rep3 healthy (epoch 405).
 - 2026-11-26 21:05 (UCloud, with user): user added 48 h for liver work. MISSION.md "Liver extension" (L1-L3, comparisons declared); new `nnunet/liver_failure.py` (fake-tested on 3 cases, matches the eval's per-case Dice); started cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`); supervisor restarted with deadline Sun 29 Nov 05:20, AP_MAX_SESSIONS 90 (`$PROJ/logs/autopilot_20261126_210106.log`).
 - 2026-11-26 20:50 (UCloud autopilot s27): check: gpu pancreas_all_rep3 healthy (epoch 304, train ETA 00:10, end ~02:55); cpu idle; wake 00:40.
-- 2026-11-26 19:25 (UCloud autopilot s26): liver_all_rep3 done (exit 0): D101 f3 val liver/tumour 0.856/0.305; test tumour 0.301 vs baseline 0.303, −0.001 [−0.009, +0.006] p 0.82 → liver baseline stable (s24 rule). Started gpu `pancreas_all_rep3` (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`, ~7.4 h).

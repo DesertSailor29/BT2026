@@ -4,6 +4,22 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s31 2026-11-27 03:25, event check
+Saw: gpu `L2_liver_probs` healthy: val probabilities fold 0 20/20 (02:44-03:05, ~21 min/run), fold 1 on its 20th
+case at 03:25; then the 111 test cases per run. At ~1 min/case the test part is ~2 h/run → gpu end ~07:30 (not
+~06:00 as s30 estimated). Disk 2.0 PB free. cpu idle.
+Decision: cpu **`L2_liver_screen` = `post_rules.py --target liver --probs --workers 12`** (MISSION L2 val screen,
+rules from s29, both runs, alone and +ccPost, ledger) as soon as fold 1's 20th file exists. gpu: keep running; L3
+sizeLarge starts when it ends.
+Reasons: MISSION L2 order; the screen needs only val probabilities, so it runs in parallel with the test prediction.
+Assumptions: 12 workers do not slow the GPU prediction much (prediction, not training; nnU-Net's export workers use
+a few cores). L3 start slips ~1.5 h; remaining L3 plan (5 arms × ~7 h = 35 h from ~07:30 → ~Sat 18:30 + spare)
+still fits before the deadline (Sun 05:20).
+Alternatives considered: stop the gpu job after val and run test probs later only if a frozen rule needs them
+(saves ~4 GPU h if nothing is promising, but would need a second prediction job later and stalls the GPU lane
+while the screen runs); kept the chain as declared in s30.
+Started: cpu `L2_liver_screen` (log path in the NOTES Log).
+
 ### s30 2026-11-27 02:45, event job_finished (pancreas_all_rep3)
 Saw: pancreas_all_rep3 exit 0 after 7.4 h (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`; the 2 "error" lines
 are table text). D102 f2, 1000 epochs, final val Dice 0.306 (status file). **Test 238 tumour Dice 0.165 vs baseline
