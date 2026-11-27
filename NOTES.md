@@ -47,7 +47,7 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
 ## Next steps
 0. **Autopilot running** (since 2026-11-24 19:00, extended: UCloud job ends ~Sun 29 Nov 06:30, supervisor deadline 05:20; more-time requests go to
    `TIME_REQUEST.md` at the repo root): journal `notes/AUTOPILOT.md`,
-   branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". L2 done (null, s32). Running: gpu L3 `L3_sizeLarge` (D104 f2, ~7 h → ~11:15), then sizeRand, sizeSmall, Large_rep2, Rand_rep2; cpu: L3 eval script `nnunet/size_eval.py` written + fake-tested (s33), cache warmed (s34, numbers match); re-run it on the cpu lane after each L3 arm. Sunday: review the branch (summary on top), merge into main.
+   branch `autopilot`; plan `autopilot/MISSION.md` "Liver extension". L2 done (null, s32). L3 sizeLarge done (s35: test tumour 0.419 vs baseline 0.303, one run). Running: gpu `L3_sizeRand` (D104 f3, ~7 h → ~18:30), then sizeSmall, Large_rep2, Rand_rep2; cpu `L3_size_eval` (`size_eval.py`, re-run after each L3 arm). Sunday: review the branch (summary on top), merge into main.
 1. **Supervisor deck built** (`Research/5 - Liver filter arms - supervisor slides.pptx`, VM only; 13 main + 8 backup
    slides, speaker notes): user reviews it in PowerPoint, then present. Rebuild: `reports/slides/make_assets.py <dir>`
    (charts + CT crops, scratchpad venv) → `NODE_PATH=… node reports/slides/build_deck.js <dir> <out.pptx>
@@ -87,9 +87,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-27 11:20 (UCloud autopilot s35): gpu L3_sizeLarge done (exit 0; D104 f2, val 0.626): test tumour 0.419 vs baseline 0.303, +0.117 [+0.086, +0.149]; FP pieces 2.8/case; one run. Started gpu `L3_sizeRand` (`$PROJ/logs/L3_sizeRand_20261127_111908.log`), cpu `L3_size_eval` (`$PROJ/logs/L3_size_eval_20261127_111908.log`).
 - 2026-11-27 06:00 (UCloud autopilot s34): cpu `L3_size_eval_warm` done (exit 0; baseline 0.303/ccPost 0.381, ccAucRepair 0.392/0.403 as before; output `reports/data/test_eval_liver/size/`). gpu sizeLarge epoch 334, ETA 09:07 train. Nothing new started.
 - 2026-11-27 05:47 (UCloud autopilot s33): gpu L3_sizeLarge healthy (epoch ~300, train ETA 09:06). Wrote `nnunet/size_eval.py` (L3 eval, declared comparisons; fake-tested = L1 caches); started cpu `L3_size_eval_warm` (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`).
 - 2026-11-27 04:15 (UCloud autopilot s32): L2 liver val screen done: no probability rule adds to ccPost (vs ccPost f0 ≤ +0.009, f1 −0.010..−0.037) → nothing frozen; killed `L2_liver_probs` (test probs not needed; 55/111 fold-0 files left). Started gpu `L3_sizeLarge` (`$PROJ/logs/L3_sizeLarge_20261127_041352.log`, D104 f2).
 - 2026-11-27 03:27 (UCloud autopilot s31): L2 val probs 101:0/1 done (20/20 each, ~21 min/run; test part ~2 h/run → gpu end ~07:30). Started cpu `L2_liver_screen` (`$PROJ/logs/L2_liver_screen_20261127_032710.log`).
 - 2026-11-27 02:50 (UCloud autopilot s30): pancreas all_rep3 done (exit 0): test tumour 0.165 vs baseline 0.177, −0.012 [−0.025, +0.001] p 0.095 → within ±0.015, stable by the s26 rule (3 runs range 0.018). Started gpu `L2_liver_probs` (`$PROJ/logs/L2_liver_probs_20261127_024420.log`, val then test probs of 101:0/1, ~3 h).
-- 2026-11-26 22:05 (UCloud autopilot s29): L1 v2 done (exit 0): small lesions are the miss (recall 0.1-1 ml 0.17-0.28, 1-10 ml ~0.65, ≥ 10 ml ~0.95); vote3 0.311 vs 3-run mean 0.302, +0.009 [+0.006, +0.012] → below declared +0.01, not met. Added `post_rules.py --target liver --probs` (L2 rules, fake-tested, old tables byte-identical). gpu pancreas all_rep3 epoch 476 healthy.

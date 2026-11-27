@@ -4,6 +4,22 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s35 2026-11-27 11:20, event job_finished (L3_sizeLarge)
+Saw: gpu `L3_sizeLarge` exit 0 after 7.06 h (`$PROJ/logs/L3_sizeLarge_20261127_041352.log`; the 3 "error" lines are
+table text). D104 f2, 1000 epochs (training done 09:12, real val Dice 0.626), 111/111 test predictions.
+**Test 111 tumour Dice 0.419 vs baseline 0.303: +0.117 [+0.086, +0.149] p 1e-11** (highest single liver run so far;
+ccAucRepair runs 0.403 / 0.381); liver Dice 0.872 (±0); lesion recall 0.430 (baseline 0.422/0.443), recall ≥ 1 ml
+0.771; FP pieces/case 2.8 (baseline 67/46), precision 0.51; thesis 40: +0.106 [+0.052, +0.170].
+`$nnUNet_results/test_eval_liver_ccAucRepair_sizeLarge/summary.md`. One run only: not a claim (single repaired runs
+varied 0.02-0.04); the primary comparison needs sizeRand (+ rep2 of both).
+Decision: gpu **L3 `ccAucRepair_sizeRand`** (`liver_arm.sh ccAucRepair_sizeRand 104 --ids .../size/ids_sizeRand.json`,
+~7 h → ~18:30). cpu **`L3_size_eval` = `nice -n 10 python nnunet/size_eval.py --workers 12`** (adds sizeLarge to the
+declared tables; only descriptive until sizeRand exists).
+Reasons: MISSION L3 order (declared 2026-11-26, nothing chosen from test).
+Assumptions: liver_arm.sh picks the next free fold of D104 (f3) itself as for sizeLarge.
+Alternatives considered: none (order fixed in advance).
+Started: gpu `L3_sizeRand`, cpu `L3_size_eval` (log paths in the NOTES Log).
+
 ### s34 2026-11-27 06:00, event job_finished (L3_size_eval_warm)
 Saw: cpu `L3_size_eval_warm` exit 0 after 0.21 h (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`, no errors);
 `reports/data/test_eval_liver/size/{summary.md, cases.csv}` with the 4 existing runs only (all size groups "none
