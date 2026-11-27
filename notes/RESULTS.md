@@ -24,6 +24,11 @@ generalisation check (measured only, no arms trained).
   0.856/0.305; test 111 tumour 0.301, vs the 2-run baseline −0.001 [−0.009, +0.006] p 0.82 → three runs 0.301 / 0.305 /
   0.301 (range 0.004): the liver baseline is stable; repeated repaired-label arms vary more (ccAucRepair 0.022,
   posRepair 0.028). `$nnUNet_results/test_eval_liver_all_rep3/summary.md`.
+- **Third pancreas baseline `all_rep3`** (autopilot s26/s30, D102 f2, 2026-11-27, exploratory): val Dice 0.306; test
+  238 tumour 0.165 vs the 2-run baseline 0.177, −0.012 [−0.025, +0.001] p 0.095 (vs f0 −0.018 [−0.033, −0.003]);
+  pancreas Dice 0.172, recall 0.46, FP pieces 7.3/case. Within the declared ±0.015 → baseline stable by the rule, but
+  three runs 0.183 / 0.172 / 0.165 (range 0.018 vs liver 0.004): pancreas run noise is larger; minLesRepair (0.037)
+  still varies more. `$nnUNet_results/test_eval_pancreas_all_rep3/summary.md`.
 
 ## Filter measurements (liver pool vs real LiTS)
 

@@ -4,6 +4,26 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s30 2026-11-27 02:45, event job_finished (pancreas_all_rep3)
+Saw: pancreas_all_rep3 exit 0 after 7.4 h (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`; the 2 "error" lines
+are table text). D102 f2, 1000 epochs, final val Dice 0.306 (status file). **Test 238 tumour Dice 0.165 vs baseline
+mean 0.177: −0.012 [−0.025, +0.001] p 0.095**; vs 102:0 −0.018 [−0.033, −0.003], vs 102:1 −0.007 [−0.021, +0.007].
+Pancreas Dice 0.172 (0.209 / 0.173), lesion recall 0.463 (0.550 / 0.521), FP pieces/case 7.3 (17.0 / 5.3).
+`$nnUNet_results/test_eval_pancreas_all_rep3/summary.md`.
+**Verdict by the s26 declaration:** |rep3 − baseline mean| = 0.012 ≤ 0.015 → the pancreas baseline is stable within
+the declared bound; "repaired arms vary more than the baseline" (minLesRepair runs 0.037 apart) holds on both organs.
+Caveat to report: the three pancreas baseline runs span 0.183 / 0.172 / 0.165 (range 0.018, vs liver 0.004), so the
+pancreas run noise is larger than the liver's and the 0.01 noise floor is tight there. Not added to any baseline mean.
+Decision: gpu **L2 `L2_liver_probs` = `predict_val_probs.sh 101 0 1 && predict_test_probs.sh 101 0 1`** (MISSION
+L2; val ~15 min/run, test ~1-1.5 h/run → ~3 h, end ~06:00). cpu: nothing until the val probabilities exist; the
+next session (gpu job end) runs the L2 screen `post_rules.py --target liver --probs` on the cpu lane (~110 s/case
+× 40 ≈ 75 min at 1 worker; parallel). L3 starts on the gpu right after L2's job.
+Reasons: MISSION liver extension order; no pancreas GPU work left.
+Assumptions: liver test probability files fit easily (2.0 PB free); test probs are predicted now (before the screen)
+as MISSION chains it, so L3 is not delayed by an extra gpu job later.
+Alternatives considered: val probs only (saves ~2.5 GPU h if nothing is promising; rejected in s29, L3 time fixed).
+Started: gpu `L2_liver_probs` (log path in the NOTES Log).
+
 ### s29 2026-11-26 21:45, event job_finished (L1_liver_failure_v2)
 Saw: L1 v2 exit 0 after 0.37 h (`$PROJ/logs/L1_liver_failure_v2_20261126_212227.log`; the 1 "error" line is table
 text), `reports/data/test_eval_liver/failure/{summary.md, cases.csv, lesions.csv}`, 709 real lesions / 101 tumour
