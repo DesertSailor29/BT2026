@@ -4,6 +4,26 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s33 2026-11-27 05:45, event check
+Saw: gpu `L3_sizeLarge` healthy (D104 f2, epoch ~300/1000 at 05:44, 17.3 s/epoch, EMA pseudo Dice 0.724, no
+errors; training ETA ~09:06, then 111 test predictions → ~09:50). cpu idle since L2.
+Decision: cpu: **wrote `nnunet/size_eval.py`** (the L3 eval, before any L3 result): groups baseline (101 all/all_rep2),
+ccAucRepair (104 ccAucRepair/_rep2), sizeLarge/sizeRand/sizeSmall (+_rep2), runs found by arm name in arms.json and
+used only once all 111 test predictions exist; group score per case = mean of its runs; saved + ccPost. Comparisons
+exactly as MISSION L3: primary sizeLarge vs sizeRand ("large tumours help" if diff > +0.01, CI > 0, 2 runs each),
+secondary sizeSmall vs sizeRand, each size arm vs ccAucRepair and vs baseline, single size runs vs baseline
+(descriptive), lesion recall/coverage by L1 size bins. Fake-tested on 3 cases: scores + coverage identical to the L1
+caches (101:0, 104:1, both variants); comparison path exercised with stand-in groups. Started cpu
+`L3_size_eval_warm` (the 4 existing runs, fills the per-run cache; re-run after each L3 arm only measures the new run).
+gpu: keep training.
+Reasons: MISSION L3 ("write a small eval script ... rather than ad-hoc numbers", declared before results).
+Assumptions: the arm names used by later sessions are exactly `ccAucRepair_size{Large,Rand,Small}` and `..._rep2`
+(MISSION order); if renamed, edit GROUPS.
+Alternatives considered: extending predict_test.py eval (its baseline logic is fixed to 101:0/1 and has no group
+means or size bins; a separate script keeps the existing outputs untouched).
+Started: cpu `L3_size_eval_warm` (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`, ~10-20 min). After each L3
+arm: `nice -n 10 python nnunet/size_eval.py --workers 12` on the cpu lane.
+
 ### s32 2026-11-27 04:15, event job_finished (L2_liver_screen)
 Saw: cpu `L2_liver_screen` exit 0 after 0.75 h (`$PROJ/logs/L2_liver_screen_20261127_032710.log`),
 `reports/data/post_rules/liver_val_probs/summary.md` (20 val, 101:0 / 101:1; argmax of the probabilities = saved

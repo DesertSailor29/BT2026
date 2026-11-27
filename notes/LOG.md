@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-26 21:05 (UCloud, with user): user added 48 h for liver work. MISSION.md "Liver extension" (L1-L3, comparisons declared); new `nnunet/liver_failure.py` (fake-tested on 3 cases, matches the eval's per-case Dice); started cpu `L1_liver_failure` (`$PROJ/logs/L1_liver_failure_20261126_210047.log`); supervisor restarted with deadline Sun 29 Nov 05:20, AP_MAX_SESSIONS 90 (`$PROJ/logs/autopilot_20261126_210106.log`).
 - 2026-11-26 20:50 (UCloud autopilot s27): check: gpu pancreas_all_rep3 healthy (epoch 304, train ETA 00:10, end ~02:55); cpu idle; wake 00:40.
 - 2026-11-26 19:25 (UCloud autopilot s26): liver_all_rep3 done (exit 0): D101 f3 val liver/tumour 0.856/0.305; test tumour 0.301 vs baseline 0.303, −0.001 [−0.009, +0.006] p 0.82 → liver baseline stable (s24 rule). Started gpu `pancreas_all_rep3` (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`, ~7.4 h).
 - 2026-11-26 12:35 (UCloud autopilot s25): B1p_pancreas_prepost_minLes_rep2 done (exit 0): 114:1 M1 +0.023 [+0.008, +0.039]; 2-run mean M1 +0.005 [−0.008, +0.017] p 0.62, M2 +0.003 (both within ±0.02) → pancreas "pre ≠ post for minLes" does not stand (s21 rule). gpu all_rep3 healthy (epoch 56, train ETA 17:04). Nothing started.
