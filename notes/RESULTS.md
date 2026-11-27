@@ -231,4 +231,4 @@ every list). `$MAISI_RUNS/pool/filter_metrics/liver/size/`.
 **L3 sizeLarge (D104 f2, s35, 2026-11-27; exploratory, one run)**: 590 volumes (its tumour volumes + 180 tumour-free), real
 val Dice 0.626. Test 111 tumour Dice **0.419 vs baseline 0.303, +0.117 [+0.086, +0.149] p 1e-11** (ccAucRepair runs
 0.403 / 0.381); liver Dice 0.872 (±0); lesion recall 0.430, ≥ 1 ml 0.771; FP pieces/case 2.8, precision 0.51; thesis 40
-+0.106. Primary comparison (vs sizeRand, 2 runs each) still open. `$nnUNet_results/test_eval_liver_ccAucRepair_sizeLarge/summary.md`.
++0.106. Primary comparison (vs sizeRand, 2 runs each) still open. `$nnUNet_results/test_eval_liver_ccAucRepair_sizeLarge/summary.md`. vs ccAucRepair (2-run mean): +0.027 [+0.005, +0.049] saved, +0.039 [+0.019, +0.061] ccPost; lesion recall per size bin ≈ baseline (gain = fewer FP pieces, 2.8 vs 67/46). `reports/data/test_eval_liver/size/summary.md`.
