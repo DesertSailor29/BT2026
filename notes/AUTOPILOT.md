@@ -4,6 +4,19 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s34 2026-11-27 06:00, event job_finished (L3_size_eval_warm)
+Saw: cpu `L3_size_eval_warm` exit 0 after 0.21 h (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`, no errors);
+`reports/data/test_eval_liver/size/{summary.md, cases.csv}` with the 4 existing runs only (all size groups "none
+yet"). Numbers match the known ones: baseline mean 0.3027 saved / 0.3810 ccPost, ccAucRepair mean 0.3921 / 0.4032
+(runs 0.4028 / 0.3814) → cache valid. gpu `L3_sizeLarge` healthy (epoch 334 at 05:54, 17.4 s/epoch, EMA pseudo
+Dice 0.725, training ETA 09:07, then test predictions → ~09:50).
+Decision: gpu: keep training. cpu: nothing to start (the next L3 eval needs sizeLarge's 111 test predictions).
+Committed the warm-up output (small tables, no images).
+Reasons: MISSION L3 order; L1c is only for an idle gpu lane.
+Assumptions: the job end of L3_sizeLarge wakes the next session (supervisor alive).
+Alternatives considered: L1c contrast phase on the cpu lane now (MISSION: only if the gpu would idle; rejected).
+Started: nothing, because nothing waits on the cpu lane. Next: sizeLarge ends → cpu `size_eval.py`, gpu `sizeRand`.
+
 ### s33 2026-11-27 05:45, event check
 Saw: gpu `L3_sizeLarge` healthy (D104 f2, epoch ~300/1000 at 05:44, 17.3 s/epoch, EMA pseudo Dice 0.724, no
 errors; training ETA ~09:06, then 111 test predictions → ~09:50). cpu idle since L2.
