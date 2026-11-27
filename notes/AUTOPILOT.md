@@ -4,6 +4,24 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s37 2026-11-27 18:25, event job_finished (L3_sizeRand)
+Saw: gpu `L3_sizeRand` exit 0 after 7.06 h (`$PROJ/logs/L3_sizeRand_20261127_111908.log`; the 3 "error" lines are
+table text). D104 f3, 1000 epochs (training done 16:19), real val Dice liver 0.848 / tumour 0.373 (sizeLarge 0.853 /
+0.399), 111/111 test predictions. **Test 111 tumour Dice 0.426 vs baseline 0.303: +0.123 [+0.094, +0.153] p 4e-12**;
+liver Dice 0.872; lesion recall 0.429, recall >= 1 ml 0.767; FP pieces/case 9.5 (sizeLarge 2.8, baseline 67/46);
+thesis 40: +0.101 [+0.052, +0.157]. One run: sizeRand (0.426) ≥ sizeLarge (0.419), so the first pair does not point
+to "large tumours help"; a random 590-volume subset of the ccAucRepair labels also scores above full ccAucRepair
+(0.403 / 0.381). Single repaired runs varied 0.02-0.04, so this is not read as anything before the rep2 runs.
+Decision: gpu **L3 `ccAucRepair_sizeSmall`** (`liver_arm.sh ccAucRepair_sizeSmall 104 --ids .../size/ids_sizeSmall.json`,
+~7 h → ~01:30 Sat). cpu **`L3_size_eval`** (`nice -n 10 python nnunet/size_eval.py --workers 12`; fills the primary
+sizeLarge vs sizeRand row, 1 run each, still not decisive by the declared rule).
+Reasons: MISSION L3 order (declared 2026-11-26; nothing chosen from test). Remaining after sizeSmall: Large_rep2
+(~08:30 Sat), Rand_rep2 (~15:30 Sat), then ~13.8 h to the deadline: sizeSmall_rep2 (~22:30 Sat) fits; a 4th 7-h arm
+after it would end ~05:30, past the deadline (do not start it).
+Assumptions: liver_arm.sh picks the next free D104 fold (f4).
+Alternatives considered: none (order fixed in advance).
+Started: gpu `L3_sizeSmall`, cpu `L3_size_eval` (log paths in the NOTES Log).
+
 ### s36 2026-11-27 11:25, event job_finished (L3_size_eval)
 Saw: cpu `L3_size_eval` exit 0 after 0.06 h (`$PROJ/logs/L3_size_eval_20261127_111908.log`, no errors);
 `reports/data/test_eval_liver/size/summary.md` now has sizeLarge (1 run): saved 0.419 / ccPost 0.442. Secondary
