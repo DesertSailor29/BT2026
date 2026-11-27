@@ -4,6 +4,33 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s32 2026-11-27 04:15, event job_finished (L2_liver_screen)
+Saw: cpu `L2_liver_screen` exit 0 after 0.75 h (`$PROJ/logs/L2_liver_screen_20261127_032710.log`),
+`reports/data/post_rules/liver_val_probs/summary.md` (20 val, 101:0 / 101:1; argmax of the probabilities = saved
+maps in 40/40 cases). **Alone, every probability rule hurts in both runs**: tumThr0.3 −0.004/−0.015, tumThr0.1
+−0.017/−0.039, thr0.3 −0.004/−0.014, grow0.1 −0.011/−0.030, growT0.2 −0.006/−0.022, control dilateT1 −0.004/−0.007
+(lower thresholds raise lesion recall 0.28→0.35 / 0.37→0.43 but add FP pieces). **On top of ccPost (the liver
+reference) none adds**: vs ccPost f0 / f1 tumThr0.3 +0.003/−0.014, tumThr0.2 +0.002/−0.023, thr0.3 +0.005/−0.010,
+thr0.1 +0.008/−0.018, grow0.1 +0.008/−0.017, grow0.05 +0.009/−0.018, growT0.2 +0.003/−0.022, dilateT1 −0.021/−0.028.
+All "+ccPost" rows are "promising" vs saved only because ccPost is. **No rule is promising vs ccPost** → by MISSION L2
+("a rule that does not add to ccPost is not a finding for the liver") the frozen set is **empty**: no L2 test
+evaluation. Contrast with pancreas (thr0.1 +0.02 confirmed): the liver's miss is small lesions the model gives low
+probability *and* that sit among FP candidates, so lowering the threshold trades recall for FP; the pancreas's miss
+was under-segmentation of one organ, which a lower threshold fixes. Ledger: section "Liver probability rules (L2)".
+gpu `L2_liver_probs`: val probs done, test probs fold 0 at 55/111 files, fold 1 not started (~3 h left).
+Decision: gpu: **kill `L2_liver_probs`** (no frozen rule needs test probabilities; the 55 partial fold-0 test files
+are left on disk, not deleted, `--continue_prediction` can finish them later) and **start L3 `ccAucRepair_sizeLarge`**
+(`liver_arm.sh ccAucRepair_sizeLarge 104 --ids .../size/ids_sizeLarge.json`, ~7 h → ~11:30). cpu: nothing waits
+(the L3 eval script is written in a later session while sizeLarge trains, before any L3 result).
+Reasons: MISSION L2/L3; test is never read for a decision, and with nothing frozen the test probabilities have no
+use; the saved ~3 GPU h go to L3 (spare grows from ~12 h to ~15 h, enough for `_sizeSmall_rep2` plus a follow-up).
+Assumptions: killing the prediction mid-case leaves at most one incomplete output (nnU-Net writes after export;
+--continue_prediction would redo it). D104 preprocessed with 1019 pkl (liver_arm.sh checks).
+Alternatives considered: let the test probs finish for a descriptive (non-confirmatory) test table of all rules
+(3 GPU h for numbers that cannot support a claim and would invite reading test for selection; rejected); a stricter
+"vs ccPost" re-screen with other thresholds (forking paths on 20 cases after a clear null; rejected, recorded).
+Started: gpu `L3_sizeLarge` (log path in the NOTES Log).
+
 ### s31 2026-11-27 03:25, event check
 Saw: gpu `L2_liver_probs` healthy: val probabilities fold 0 20/20 (02:44-03:05, ~21 min/run), fold 1 on its 20th
 case at 03:25; then the 111 test cases per run. At ~1 min/case the test part is ~2 h/run → gpu end ~07:30 (not

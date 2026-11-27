@@ -93,3 +93,19 @@ Pancreas full frozen test (A3b, s14, 238 test, 2-run mean vs saved; `pancreas_te
 grow0.1+minLes +0.020, F3 grow0.1+tumNear10 +0.020, F4 grow0.1+pos+minLes +0.021 confirmed** (pancreas Dice +0.050);
 F1 +0.007 not. Declared contrast grow − thr ≈ 0 (tumour ±0.001, pancreas −0.002): the gain is the lower threshold +
 small/far tumour removal, not the anatomical growth limits. Pancreas B-prep counts: `pancreas_label_counts/` (s14).
+
+## Liver probability rules (L2, s29-s32, 20 LiTS val, runs 101:0 / 101:1; `liver_val_probs/summary.md`)
+
+Rules in `post_rules.py --target liver --probs` (s29). Val tumour Dice change f0 / f1, alone (vs saved) and on top of
+ccPost (vs ccPost alone). Thresholds from the pancreas screen's grid, not tuned on liver.
+
+| rule | anatomical fact / idea | alone | +ccPost vs ccPost | verdict |
+|---|---|---|---|---|
+| tumThr0.3 / 0.2 / 0.1 | small lesions are missed (L1): accept p(tumour) ≥ t | −0.004/−0.015, −0.008/−0.025, −0.017/−0.039 | +0.003/−0.014, +0.002/−0.023, −0.006/−0.037 | not promising |
+| thr0.3 / 0.1 | liver+tumour threshold | −0.004/−0.014, −0.013/−0.033 | +0.005/−0.010, +0.008/−0.018 | not promising |
+| grow0.1 / 0.05 | grow liver+tumour from the kept piece (pancreas twin) | −0.011/−0.030, −0.016/−0.038 | +0.008/−0.017, +0.009/−0.018 | not promising |
+| growT0.2 / 0.1 | grow tumour only inside the liver | −0.006/−0.022, −0.014/−0.036 | +0.003/−0.022, −0.003/−0.035 | not promising |
+| dilateT1 (control) | tumour dilation, no probabilities | −0.004/−0.007 | −0.021/−0.028 | not promising |
+
+Lower thresholds raise lesion recall (f0 0.28 → 0.35, f1 0.37 → 0.43) but add FP pieces; nothing adds to ccPost →
+frozen set empty (s32), no test evaluation.

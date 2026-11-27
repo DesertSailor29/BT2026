@@ -77,6 +77,11 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   the best arm at 0-10 ml (0.282) but the worst at 100+ ml (0.464 vs ~0.59; recall of ≥ 100 ml lesions 0.73).
   **3-run baseline vote** (per-voxel majority of 101:0/1/3): saved 0.311 vs 3-run mean 0.302, +0.009 [+0.006,
   +0.012] → below the declared +0.01 → "vote helps" **not met**; with ccPost +0.005 [+0.002, +0.008].
+- **L2 liver probability rules, val screen** (autopilot s32, 2026-11-27, exploratory; 20 val, 101:0/1;
+  `reports/data/post_rules/liver_val_probs/summary.md`, ledger): tumour/liver thresholds 0.3-0.1 and grow rules all
+  *lower* tumour Dice alone (−0.004 to −0.039; recall up, FP pieces up) and add nothing on top of ccPost (vs ccPost
+  f0 +0.002 to +0.009, f1 −0.010 to −0.037) → none promising, nothing frozen, no test run. Unlike pancreas (thr0.1
+  +0.02 confirmed), a lower threshold does not fix the liver's small-lesion misses.
 
 ## Test-time postprocessing (exploratory, decided after seeing results)
 

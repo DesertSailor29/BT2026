@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-26 20:50 (UCloud autopilot s27): check: gpu pancreas_all_rep3 healthy (epoch 304, train ETA 00:10, end ~02:55); cpu idle; wake 00:40.
 - 2026-11-26 19:25 (UCloud autopilot s26): liver_all_rep3 done (exit 0): D101 f3 val liver/tumour 0.856/0.305; test tumour 0.301 vs baseline 0.303, −0.001 [−0.009, +0.006] p 0.82 → liver baseline stable (s24 rule). Started gpu `pancreas_all_rep3` (`$PROJ/logs/pancreas_all_rep3_20261126_191859.log`, ~7.4 h).
 - 2026-11-26 12:35 (UCloud autopilot s25): B1p_pancreas_prepost_minLes_rep2 done (exit 0): 114:1 M1 +0.023 [+0.008, +0.039]; 2-run mean M1 +0.005 [−0.008, +0.017] p 0.62, M2 +0.003 (both within ±0.02) → pancreas "pre ≠ post for minLes" does not stand (s21 rule). gpu all_rep3 healthy (epoch 56, train ETA 17:04). Nothing started.
 - 2026-11-26 12:20 (UCloud autopilot s24): pancreas_minLesRepair_rep2 done (exit 0): D114 f1 val pancreas/tumour 0.136/0.160; test tumour 0.207 vs 0.177, +0.029 [+0.015, +0.044] p 3e-5 (f0 −0.008 → runs differ 0.037). Started gpu `liver_all_rep3` (`$PROJ/logs/liver_all_rep3_20261126_121504.log`, ~6.3 h), cpu `B1p_pancreas_prepost_minLes_rep2` (`$PROJ/logs/B1p_pancreas_prepost_minLes_rep2_20261126_121504.log`).

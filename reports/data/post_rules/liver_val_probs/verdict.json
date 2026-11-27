@@ -1,0 +1,194 @@
+{
+ "none": {
+  "gain_f0": 0.0,
+  "gain_f1": 0.0,
+  "lost": 0,
+  "promising": false
+ },
+ "ccPost": {
+  "gain_f0": 0.09726605993342279,
+  "gain_f1": 0.11316715929994123,
+  "lost": 4,
+  "promising": true
+ },
+ "tumThr0.3": {
+  "gain_f0": -0.004172976211011966,
+  "gain_f1": -0.014801991968881042,
+  "lost": 0,
+  "promising": false
+ },
+ "tumThr0.2": {
+  "gain_f0": -0.00834899576949653,
+  "gain_f1": -0.024690557494934918,
+  "lost": 0,
+  "promising": false
+ },
+ "tumThr0.1": {
+  "gain_f0": -0.017272347859078864,
+  "gain_f1": -0.039115929674461196,
+  "lost": 0,
+  "promising": false
+ },
+ "thr0.3": {
+  "gain_f0": -0.004107191059793126,
+  "gain_f1": -0.014063480364235811,
+  "lost": 0,
+  "promising": false
+ },
+ "thr0.1": {
+  "gain_f0": -0.013488713601216968,
+  "gain_f1": -0.033221097375717996,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.1": {
+  "gain_f0": -0.010661763766267887,
+  "gain_f1": -0.029721010052447115,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.05": {
+  "gain_f0": -0.015977663510099695,
+  "gain_f1": -0.038049108604813545,
+  "lost": 0,
+  "promising": false
+ },
+ "growT0.2": {
+  "gain_f0": -0.006433789833538135,
+  "gain_f1": -0.02237795723498291,
+  "lost": 0,
+  "promising": false
+ },
+ "growT0.1": {
+  "gain_f0": -0.014029006495648155,
+  "gain_f1": -0.035507790386013746,
+  "lost": 0,
+  "promising": false
+ },
+ "dilateT1": {
+  "gain_f0": -0.0036821852165952623,
+  "gain_f1": -0.007239815586041217,
+  "lost": 0,
+  "promising": false
+ },
+ "tumThr0.3+ccPost": {
+  "gain_f0": 0.10064726393520285,
+  "gain_f1": 0.09925036366471178,
+  "lost": 2,
+  "promising": true
+ },
+ "tumThr0.2+ccPost": {
+  "gain_f0": 0.09910420588948941,
+  "gain_f1": 0.09050117685133881,
+  "lost": 2,
+  "promising": true
+ },
+ "tumThr0.1+ccPost": {
+  "gain_f0": 0.09082168466633933,
+  "gain_f1": 0.07658945927698588,
+  "lost": 2,
+  "promising": true
+ },
+ "thr0.3+ccPost": {
+  "gain_f0": 0.10240257499187559,
+  "gain_f1": 0.10339596558365982,
+  "lost": 1,
+  "promising": true
+ },
+ "thr0.1+ccPost": {
+  "gain_f0": 0.10512694055725998,
+  "gain_f1": 0.09544616353507389,
+  "lost": 1,
+  "promising": true
+ },
+ "grow0.1+ccPost": {
+  "gain_f0": 0.10565712996414374,
+  "gain_f1": 0.0959884080127071,
+  "lost": 1,
+  "promising": true
+ },
+ "grow0.05+ccPost": {
+  "gain_f0": 0.106603685601567,
+  "gain_f1": 0.09469879790662179,
+  "lost": 1,
+  "promising": true
+ },
+ "growT0.2+ccPost": {
+  "gain_f0": 0.09993489944987405,
+  "gain_f1": 0.09129126731750921,
+  "lost": 2,
+  "promising": true
+ },
+ "growT0.1+ccPost": {
+  "gain_f0": 0.09378025867275393,
+  "gain_f1": 0.07864037980153926,
+  "lost": 2,
+  "promising": true
+ },
+ "dilateT1+ccPost": {
+  "gain_f0": 0.07647620779625705,
+  "gain_f1": 0.0846871916902169,
+  "lost": 4,
+  "promising": true
+ },
+ "tumThr0.3+ccPost vs ccPost": {
+  "gain_f0": 0.00338120400178006,
+  "gain_f1": -0.013916795635229406,
+  "lost": 0,
+  "promising": false
+ },
+ "tumThr0.2+ccPost vs ccPost": {
+  "gain_f0": 0.0018381459560666267,
+  "gain_f1": -0.022665982448602386,
+  "lost": 0,
+  "promising": false
+ },
+ "tumThr0.1+ccPost vs ccPost": {
+  "gain_f0": -0.006444375267083455,
+  "gain_f1": -0.036577700022955316,
+  "lost": 0,
+  "promising": false
+ },
+ "thr0.3+ccPost vs ccPost": {
+  "gain_f0": 0.005136515058452816,
+  "gain_f1": -0.009771193716281375,
+  "lost": 0,
+  "promising": false
+ },
+ "thr0.1+ccPost vs ccPost": {
+  "gain_f0": 0.007860880623837194,
+  "gain_f1": -0.017720995764867308,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.1+ccPost vs ccPost": {
+  "gain_f0": 0.008391070030720937,
+  "gain_f1": -0.017178751287234093,
+  "lost": 0,
+  "promising": false
+ },
+ "grow0.05+ccPost vs ccPost": {
+  "gain_f0": 0.009337625668144195,
+  "gain_f1": -0.018468361393319414,
+  "lost": 0,
+  "promising": false
+ },
+ "growT0.2+ccPost vs ccPost": {
+  "gain_f0": 0.002668839516451257,
+  "gain_f1": -0.021875891982431978,
+  "lost": 0,
+  "promising": false
+ },
+ "growT0.1+ccPost vs ccPost": {
+  "gain_f0": -0.0034858012606688686,
+  "gain_f1": -0.03452677949840193,
+  "lost": 0,
+  "promising": false
+ },
+ "dilateT1+ccPost vs ccPost": {
+  "gain_f0": -0.020789852137165738,
+  "gain_f1": -0.028479967609724283,
+  "lost": 0,
+  "promising": false
+ }
+}
