@@ -77,6 +77,15 @@ ccRepair 879, ccRepairDel 938, ccAucRepair 871.
   the best arm at 0-10 ml (0.282) but the worst at 100+ ml (0.464 vs ~0.59; recall of ≥ 100 ml lesions 0.73).
   **3-run baseline vote** (per-voxel majority of 101:0/1/3): saved 0.311 vs 3-run mean 0.302, +0.009 [+0.006,
   +0.012] → below the declared +0.01 → "vote helps" **not met**; with ccPost +0.005 [+0.002, +0.008].
+- **L1c contrast phase of the 111 LiTS test cases** (autopilot s47, 2026-11-28, descriptive; TotalSegmentator
+  aorta + portal/splenic vein on CPU, its liver output unused; `nnunet/phase_segment.sh` + `phase_eval.py`,
+  `reports/data/test_eval_liver/phase/`). Real test aorta HU p5/median/p95 106/143/206 (pool 59/94/123), portal vein
+  121/156/224 (pool 52/88/131). Phase mix, same rule: **test 0 non-contrast / 3 arterial / 45 portal venous / 63
+  late; MAISI pool 612 / 45 / 2 / 340** → the synthetic pool is mostly non-contrast and has almost no portal-venous
+  scans, the real test is all contrast-enhanced: a **contrast-phase gap** (an image-appearance gap, like pancreas).
+  Tumour Dice per phase (saved / ccPost; size groups without Small_rep2 at the time): portal venous baseline 0.332 /
+  0.383, sizeLarge 0.426 / 0.432; late 0.288 / 0.389, 0.430 / 0.453; arterial n = 3. Phases differ in tumour burden
+  (median 22 vs 8 ml), so no phase effect can be read from it.
 - **L2 liver probability rules, val screen** (autopilot s32, 2026-11-27, exploratory; 20 val, 101:0/1;
   `reports/data/post_rules/liver_val_probs/summary.md`, ledger): tumour/liver thresholds 0.3-0.1 and grow rules all
   *lower* tumour Dice alone (−0.004 to −0.039; recall up, FP pieces up) and add nothing on top of ccPost (vs ccPost

@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-28 08:40 (UCloud autopilot s42): cpu L3_size_eval done (exit 0): primary sizeLarge (2 runs) − sizeRand (1) −0.005 [−0.021, +0.012] saved / −0.002 ccPost (not met yet); sizeLarge vs ccAucRepair +0.029 [+0.013, +0.046]. gpu Rand_rep2 epoch 13, train ETA 13:26. Nothing new started.
 - 2026-11-28 08:35 (UCloud autopilot s41): gpu L3_sizeLarge_rep2 done (exit 0; D104 f5, val tumour 0.404): test tumour 0.423 vs baseline 0.303, +0.120 [+0.090, +0.153]; FP pieces 2.4/case; sizeLarge runs 0.419/0.423. Started gpu `L3_sizeRand_rep2` (`$PROJ/logs/L3_sizeRand_rep2_20261128_083422.log`), cpu `L3_size_eval` (`$PROJ/logs/L3_size_eval_20261128_083422.log`).
 - 2026-11-28 01:35 (UCloud autopilot s40): cpu L3_size_eval done (exit 0): sizeSmall vs sizeRand −0.320 [−0.386, −0.254], large-lesion coverage ~0; primary Large − Rand unchanged (1 run each). gpu Large_rep2 epoch 11, train ETA 06:22. Nothing new started.
 - 2026-11-28 01:30 (UCloud autopilot s39): gpu L3_sizeSmall done (exit 0; D104 f4, val 0.479): test tumour 0.106 vs baseline 0.303, −0.197 [−0.266, −0.130]; recall ≥ 1 ml 0.43. Started gpu `L3_sizeLarge_rep2` (`$PROJ/logs/L3_sizeLarge_rep2_20261128_012916.log`), cpu `L3_size_eval` (`$PROJ/logs/L3_size_eval_20261128_012916.log`).

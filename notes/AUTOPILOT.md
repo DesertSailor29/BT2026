@@ -4,6 +4,23 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s47 2026-11-28 20:20, event job_finished (L1c_phase)
+Saw: cpu `L1c_phase` exit 0 after 1.15 h (`$PROJ/logs/L1c_phase_20261128_190619.log`, 0 error lines; only torch
+FutureWarnings): 111/111 cases segmented, `reports/data/test_eval_liver/phase/` (phase.csv, summary.md). Real test
+aorta median 143 HU (p5 106, p95 206), portal vein 156. **Phase mix test 0 non-contrast / 3 arterial / 45 portal
+venous / 63 late vs MAISI pool 612 / 45 / 2 / 340** (`reports/data/liver_check/summary.md` §5, same rule): the
+synthetic pool is mostly non-contrast, the real test fully contrast-enhanced → a contrast-phase gap; descriptive,
+nothing chosen from it (a candidate explanation for the residual liver gap; follow-up for the user, not run).
+Tumour Dice per phase in summary.md (burden differs between phases, so not a phase effect).
+gpu `L3_sizeSmall_rep2` healthy (epoch ~920/1000, status ETA training 20:37, test → ~21:20).
+Decision: cpu: nothing now; `phase_eval.py` is re-run after the final size eval (needs Small_rep2's test
+predictions). gpu: keep training. Next session (Small_rep2 end): cpu `size_eval.py`, then `phase_eval.py`, then the
+final summary early and `ap stop`.
+Reasons: MISSION L3/L1c; no other declared work waits on the cpu lane.
+Assumptions: the gpu job end wakes the next session (~21:20).
+Alternatives considered: re-running phase_eval now (pointless: size/cases.csv lacks Small_rep2 until the size eval).
+Started: nothing.
+
 ### s46 2026-11-28 19:06, event job_finished (L1c_ts_install)
 Saw: cpu `L1c_ts_install` exit 0 after 0.06 h (`$PROJ/logs/L1c_ts_install_20261128_190107.log`): TotalSegmentator
 2.18.0 in `$PROJ/venv-ts` (freeze `$PROJ/venv-ts-freeze.txt`), `total` weights 1.4 GB in `$PROJ/totalseg_weights`;
