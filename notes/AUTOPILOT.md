@@ -4,6 +4,31 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s44 2026-11-28 15:50, event job_finished (L3_size_eval)
+Saw: cpu `L3_size_eval` exit 0 after 0.07 h (`$PROJ/logs/L3_size_eval_20261128_153926.log`; the 1 "error" line is
+table text). **Final declared primary, 2 runs each: sizeLarge (0.421) − sizeRand (0.410) saved +0.011 [−0.010,
++0.031] p 0.14, ccPost +0.015 [−0.006, +0.036] p 0.058 → not met** (CI includes 0): no evidence that training on
+large synthetic tumours helps beyond a random 590-volume subset. Secondary: sizeLarge vs ccAucRepair +0.029 [+0.013,
++0.046] / +0.034 ccPost; sizeRand vs ccAucRepair +0.018 [+0.003, +0.035] / +0.019 ccPost (both 590-subsets ≥ full
+999 ccAucRepair: not declared, a hint only); vs baseline sizeLarge +0.118 / +0.056 ccPost, sizeRand +0.108 / +0.041.
+Recall by lesion size: Large ≈ Rand ≈ baseline in every bin (Rand_rep2 a bit lower at 1-10 ml, 0.60). Large runs
+differ 0.004, Rand runs 0.031. Data note: lits_091 (tumour-free reference) gets tumour Dice nan for sizeLarge_rep2 +
+ccPost (empty prediction vs empty reference = nan, same convention as predict_test.py / all earlier evals); the
+group mean then takes the other run's 0.0 for that case (slightly against sizeLarge), the single-run row shows nan.
+Left as is (consistent convention; changing it now would change every earlier table).
+gpu `L3_sizeSmall_rep2` healthy (D104 f7, epoch 13, 17.4 s/epoch, GPU 100 %, status-file training ETA 20:29, test
+→ ~21:15).
+Decision: gpu: keep training. cpu: nothing to start (the last size eval needs sizeSmall_rep2's predictions).
+Reasons: MISSION L3; nothing on the cpu lane is waiting. Timing for the next session: if sizeSmall_rep2 ends by
+~21:30, ~8 h remain; a 7-h arm would end ~04:30, after the final session starts (04:20) and with < 1 h margin to
+05:20 → do **not** start another training arm (also no declared, non-test-driven candidate exists); take L1c
+(contrast phase, optional, MISSION) on the gpu lane only if it installs with pip + weights alone and fits in ~5 h;
+otherwise run the final size eval and write the final summary early.
+Assumptions: training speed holds (17.4 s/epoch → ~4.8 h), so the status-file ETA is right and s43's ~22:50 was
+conservative.
+Alternatives considered: changing the empty/empty Dice convention (rejected, see above).
+Started: nothing. Wake-up set 19:00 (health check); the job end wakes the next session anyway.
+
 ### s43 2026-11-28 15:45, event job_finished (L3_sizeRand_rep2)
 Saw: gpu `L3_sizeRand_rep2` exit 0 after 7.06 h (`$PROJ/logs/L3_sizeRand_rep2_20261128_083422.log`; the 3 "error"
 lines are table text). D104 f6, 1000 epochs (training done 13:32), real val Dice liver 0.848 / tumour 0.348 (f3
