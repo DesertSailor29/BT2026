@@ -4,6 +4,19 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s40 2026-11-28 01:35, event job_finished (L3_size_eval)
+Saw: cpu `L3_size_eval` exit 0 after 0.06 h (`$PROJ/logs/L3_size_eval_20261128_012916.log`, no errors); summary
+now has sizeSmall: vs sizeRand −0.320 [−0.386, −0.254] saved / −0.331 ccPost, vs ccAucRepair −0.286 / −0.296, vs
+baseline −0.197 / −0.274. Per size bin sizeSmall finds part of the large lesions (recall 10-100 ml 0.45, 100+ ml
+0.77) but covers almost none of their volume (0.01 / 0.00; baseline 0.70 / 0.58): it marks only small specks of a
+large lesion. Primary Large − Rand unchanged (1 run each, not met). gpu `L3_sizeLarge_rep2` healthy (D104 f5,
+epoch 11, pseudo Dice 0.50, GPU 99 %, training ETA 06:22, test → ~07:10).
+Decision: gpu: keep training. cpu: nothing to start.
+Reasons: MISSION L3 order; the next size eval needs Large_rep2's test predictions; L1c only for an idle gpu lane.
+Assumptions: the job end (and the s39 wake-up at 02:59) wake the next session.
+Alternatives considered: L1c on cpu now (rejected, MISSION: only if the gpu would idle).
+Started: nothing. Next: Large_rep2 ends (~07:10) → cpu `size_eval.py`, gpu `ccAucRepair_sizeRand_rep2 104 --same-as ccAucRepair_sizeRand`.
+
 ### s39 2026-11-28 01:30, event job_finished (L3_sizeSmall)
 Saw: gpu `L3_sizeSmall` exit 0 after 7.07 h (`$PROJ/logs/L3_sizeSmall_20261127_182417.log`; the 3 "error" lines are
 table text). D104 f4, 589 volumes, 1000 epochs (training done 23:24), final pseudo Dice liver 0.91 / tumour 0.05,
