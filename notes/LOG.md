@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-27 05:47 (UCloud autopilot s33): gpu L3_sizeLarge healthy (epoch ~300, train ETA 09:06). Wrote `nnunet/size_eval.py` (L3 eval, declared comparisons; fake-tested = L1 caches); started cpu `L3_size_eval_warm` (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`).
 - 2026-11-27 04:15 (UCloud autopilot s32): L2 liver val screen done: no probability rule adds to ccPost (vs ccPost f0 ≤ +0.009, f1 −0.010..−0.037) → nothing frozen; killed `L2_liver_probs` (test probs not needed; 55/111 fold-0 files left). Started gpu `L3_sizeLarge` (`$PROJ/logs/L3_sizeLarge_20261127_041352.log`, D104 f2).
 - 2026-11-27 03:27 (UCloud autopilot s31): L2 val probs 101:0/1 done (20/20 each, ~21 min/run; test part ~2 h/run → gpu end ~07:30). Started cpu `L2_liver_screen` (`$PROJ/logs/L2_liver_screen_20261127_032710.log`).
 - 2026-11-27 02:50 (UCloud autopilot s30): pancreas all_rep3 done (exit 0): test tumour 0.165 vs baseline 0.177, −0.012 [−0.025, +0.001] p 0.095 → within ±0.015, stable by the s26 rule (3 runs range 0.018). Started gpu `L2_liver_probs` (`$PROJ/logs/L2_liver_probs_20261127_024420.log`, val then test probs of 101:0/1, ~3 h).

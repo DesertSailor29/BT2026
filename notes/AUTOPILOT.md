@@ -4,6 +4,25 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s39 2026-11-28 01:30, event job_finished (L3_sizeSmall)
+Saw: gpu `L3_sizeSmall` exit 0 after 7.07 h (`$PROJ/logs/L3_sizeSmall_20261127_182417.log`; the 3 "error" lines are
+table text). D104 f4, 589 volumes, 1000 epochs (training done 23:24), final pseudo Dice liver 0.91 / tumour 0.05,
+real val mean Dice 0.479 (sizeLarge 0.626), 111/111 test predictions. **Test 111 tumour Dice 0.106 vs baseline
+0.303: −0.197 [−0.266, −0.130] p 1e-6** (median 0.012); liver Dice 0.890 (+0.017); lesion recall 0.269, recall
+>= 1 ml 0.427 (baseline ~0.78); FP pieces/case 8.3, FP ml/case 0.9; thesis 40: −0.187 [−0.301, −0.071].
+Training only on small synthetic tumours (median 0.3 ml per volume) makes the model miss real lesions of every
+size, including the large ones: a strong, one-run, negative result (far beyond the 0.02-0.04 run-to-run spread).
+Decision: gpu **`L3_sizeLarge_rep2`** (`liver_arm.sh ccAucRepair_sizeLarge_rep2 104 --same-as ccAucRepair_sizeLarge`,
+~7 h → ~08:35 Sat). cpu **`L3_size_eval`** (`nice -n 10 python nnunet/size_eval.py --workers 12`: adds sizeSmall,
+fills the secondary sizeSmall rows).
+Reasons: MISSION L3 order, declared 2026-11-26 (rep2 of Large and Rand whatever the first results say). Time:
+Large_rep2 ~08:35, Rand_rep2 ~15:40, then ~13.6 h left: one more 7-h arm fits (~22:45), the choice (sizeSmall_rep2
+vs a follow-up) is made at ~15:40 and recorded then; a further arm after that would end past the deadline.
+Assumptions: `--same-as` reuses the sizeLarge ids and picks the next free D104 fold (f5).
+Alternatives considered: dropping sizeSmall_rep2 now because the first run is so far below (deferred: decided at
+~15:40; MISSION allows it as the remaining-time default).
+Started: gpu `L3_sizeLarge_rep2`, cpu `L3_size_eval` (log paths in the NOTES Log).
+
 ### s38 2026-11-27 18:30, event job_finished (L3_size_eval)
 Saw: cpu `L3_size_eval` exit 0 after 0.06 h (`$PROJ/logs/L3_size_eval_20261127_182417.log`, no errors);
 `reports/data/test_eval_liver/size/summary.md` now has sizeLarge + sizeRand (1 run each). **Primary (declared)
