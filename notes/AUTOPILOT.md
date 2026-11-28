@@ -4,6 +4,21 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s41 2026-11-28 08:35, event job_finished (L3_sizeLarge_rep2)
+Saw: gpu `L3_sizeLarge_rep2` exit 0 after 7.07 h (`$PROJ/logs/L3_sizeLarge_rep2_20261128_012916.log`; the 3 "error"
+lines are table text). D104 f5, 1000 epochs, real val Dice liver 0.856 / tumour 0.404 (f2 0.853 / 0.399), 111/111 test
+predictions. **Test 111 tumour Dice 0.423 vs baseline 0.303: +0.120 [+0.090, +0.153] p 2e-12** (sizeLarge f2 0.419:
+the two sizeLarge runs differ by only 0.004, unlike ccAucRepair 0.022 / posRepair 0.028); liver Dice 0.876; lesion
+recall 0.423, recall >= 1 ml 0.781; FP pieces/case 2.4 (f2 2.8), FP ml/case 16.7; thesis 40: +0.113 [+0.060, +0.175].
+Decision: gpu **`L3_sizeRand_rep2`** (`liver_arm.sh ccAucRepair_sizeRand_rep2 104 --same-as ccAucRepair_sizeRand`,
+~7 h → ~15:40). cpu **`L3_size_eval`** (`nice -n 10 python nnunet/size_eval.py --workers 12`: sizeLarge now 2 runs).
+Reasons: MISSION L3 order, declared 2026-11-26 (rep2 of Large and Rand whatever the results). Primary stays
+undecidable until Rand_rep2. After it ~13.6 h remain: one last 7-h arm (sizeSmall_rep2 or a follow-up), chosen at
+~15:40 from val/declared reasons only.
+Assumptions: `--same-as` reuses the sizeRand ids and takes the next free D104 fold (f6).
+Alternatives considered: none (order fixed in advance).
+Started: gpu `L3_sizeRand_rep2`, cpu `L3_size_eval` (log paths in the NOTES Log).
+
 ### s40 2026-11-28 01:35, event job_finished (L3_size_eval)
 Saw: cpu `L3_size_eval` exit 0 after 0.06 h (`$PROJ/logs/L3_size_eval_20261128_012916.log`, no errors); summary
 now has sizeSmall: vs sizeRand −0.320 [−0.386, −0.254] saved / −0.331 ccPost, vs ccAucRepair −0.286 / −0.296, vs

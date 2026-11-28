@@ -4,6 +4,7 @@ The newest few entries live in `NOTES.md` "## Log" (scripts such as `run_queue.p
 When that section passes ~6 entries, move the older ones to the top of the list below. Read this file only when the
 history of something is needed (grep it).
 
+- 2026-11-27 11:20 (UCloud autopilot s35): gpu L3_sizeLarge done (exit 0; D104 f2, val 0.626): test tumour 0.419 vs baseline 0.303, +0.117 [+0.086, +0.149]; FP pieces 2.8/case; one run. Started gpu `L3_sizeRand` (`$PROJ/logs/L3_sizeRand_20261127_111908.log`), cpu `L3_size_eval` (`$PROJ/logs/L3_size_eval_20261127_111908.log`).
 - 2026-11-27 06:00 (UCloud autopilot s34): cpu `L3_size_eval_warm` done (exit 0; baseline 0.303/ccPost 0.381, ccAucRepair 0.392/0.403 as before; output `reports/data/test_eval_liver/size/`). gpu sizeLarge epoch 334, ETA 09:07 train. Nothing new started.
 - 2026-11-27 05:47 (UCloud autopilot s33): gpu L3_sizeLarge healthy (epoch ~300, train ETA 09:06). Wrote `nnunet/size_eval.py` (L3 eval, declared comparisons; fake-tested = L1 caches); started cpu `L3_size_eval_warm` (`$PROJ/logs/L3_size_eval_warm_20261127_054701.log`).
 - 2026-11-27 04:15 (UCloud autopilot s32): L2 liver val screen done: no probability rule adds to ccPost (vs ccPost f0 ≤ +0.009, f1 −0.010..−0.037) → nothing frozen; killed `L2_liver_probs` (test probs not needed; 55/111 fold-0 files left). Started gpu `L3_sizeLarge` (`$PROJ/logs/L3_sizeLarge_20261127_041352.log`, D104 f2).
