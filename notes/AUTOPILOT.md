@@ -4,6 +4,20 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s45 2026-11-28 19:00, event check
+Saw: gpu `L3_sizeSmall_rep2` healthy (D104 f7, epoch 666/1000, 17.3 s/epoch, GPU 98 %, no error lines, loss not
+NaN; status-file training ETA 20:34, test → ~21:20). cpu lane idle (L3_size_eval done in s44). Disk 2.3 P free.
+Decision: gpu: keep training. cpu: **`L1c_ts_install`**: create `$PROJ/venv-ts`, `pip install TotalSegmentator`,
+download its `total` weights into `$PROJ/totalseg_weights` (TOTALSEG_HOME_DIR; home is wiped). No inference, no GPU.
+Reasons: from ~21:20 the gpu lane idles with ~8 h left and no declared training arm (s44); MISSION allows L1c then,
+"only if it needs nothing beyond pip + its weight download". Installing now on the idle cpu lane answers that
+question and saves ~20 min of gpu-idle time later; it does not run L1c itself (earlier sessions only rejected
+*running* L1c while the gpu was busy).
+Assumptions: PyPI and the TotalSegmentator weight server are reachable (PyPI checked: 200); install + weights < 1 h.
+Alternatives considered: waiting for the gpu end to install (wastes gpu-idle time); skipping L1c (decided at ~21:20
+by the next session if the install fails or the inference estimate exceeds ~5 h).
+Started: cpu `L1c_ts_install` (log below). Next wake: the gpu job end (~21:20).
+
 ### s44 2026-11-28 15:50, event job_finished (L3_size_eval)
 Saw: cpu `L3_size_eval` exit 0 after 0.07 h (`$PROJ/logs/L3_size_eval_20261128_153926.log`; the 1 "error" line is
 table text). **Final declared primary, 2 runs each: sizeLarge (0.421) − sizeRand (0.410) saved +0.011 [−0.010,
