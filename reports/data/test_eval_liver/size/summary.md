@@ -6,7 +6,7 @@ Exploratory. Comparisons declared in autopilot/MISSION.md L3 (2026-11-26) before
 |---|---|
 | baseline | all (101:0), all_rep2 (101:1) |
 | ccAucRepair | ccAucRepair (104:0), ccAucRepair_rep2 (104:1) |
-| sizeLarge | ccAucRepair_sizeLarge (104:2) |
+| sizeLarge | ccAucRepair_sizeLarge (104:2), ccAucRepair_sizeLarge_rep2 (104:5) |
 | sizeRand | ccAucRepair_sizeRand (104:3) |
 | sizeSmall | ccAucRepair_sizeSmall (104:4) |
 
@@ -26,8 +26,12 @@ Exploratory. Comparisons declared in autopilot/MISSION.md L3 (2026-11-26) before
 | ccAucRepair | ccPost | 0.4117 | 0.8924 | 0.410 | 6.3 |
 | ccAucRepair_rep2 | none | 0.3814 | 0.8731 | 0.413 | 12.2 |
 | ccAucRepair_rep2 | ccPost | 0.3947 | 0.8964 | 0.403 | 7.9 |
-| **sizeLarge** (mean of 1) | none | 0.4193 | 0.8725 | 0.430 | 2.8 |
-| **sizeLarge** (mean of 1) | ccPost | 0.4420 | 0.8956 | 0.422 | 1.6 |
+| **sizeLarge** (mean of 2) | none | 0.4211 | 0.8741 | 0.427 | 2.6 |
+| **sizeLarge** (mean of 2) | ccPost | 0.4367 | 0.9013 | 0.420 | 1.6 |
+| ccAucRepair_sizeLarge | none | 0.4193 | 0.8725 | 0.430 | 2.8 |
+| ccAucRepair_sizeLarge | ccPost | 0.4420 | 0.8956 | 0.422 | 1.6 |
+| ccAucRepair_sizeLarge_rep2 | none | 0.4228 | 0.8757 | 0.423 | 2.4 |
+| ccAucRepair_sizeLarge_rep2 | ccPost | nan | 0.9071 | 0.419 | 1.7 |
 | **sizeRand** (mean of 1) | none | 0.4256 | 0.8716 | 0.429 | 9.5 |
 | **sizeRand** (mean of 1) | ccPost | 0.4384 | 0.8927 | 0.422 | 6.5 |
 | **sizeSmall** (mean of 1) | none | 0.1060 | 0.8898 | 0.269 | 8.3 |
@@ -37,14 +41,14 @@ Exploratory. Comparisons declared in autopilot/MISSION.md L3 (2026-11-26) before
 
 | role | B vs A | runs B / A | variant | A | B | diff [CI] | p | verdict |
 |---|---|---|---|---|---|---|---|---|
-| primary | sizeLarge vs sizeRand | 1 / 1 | none | 0.4256 | 0.4193 | -0.0063 [-0.0268, +0.0134] | 0.89 | not met |
-| primary | sizeLarge vs sizeRand | 1 / 1 | ccPost | 0.4384 | 0.4420 | +0.0035 [-0.0148, +0.0220] | 0.38 | not met |
+| primary | sizeLarge vs sizeRand | 2 / 1 | none | 0.4256 | 0.4211 | -0.0046 [-0.0214, +0.0116] | 0.89 | not met |
+| primary | sizeLarge vs sizeRand | 2 / 1 | ccPost | 0.4384 | 0.4367 | -0.0017 [-0.0190, +0.0146] | 0.52 | not met |
 | secondary | sizeSmall vs sizeRand | 1 / 1 | none | 0.4256 | 0.1060 | -0.3196 [-0.3860, -0.2543] | 4.3e-12 |  |
 | secondary | sizeSmall vs sizeRand | 1 / 1 | ccPost | 0.4384 | 0.1074 | -0.3311 [-0.3971, -0.2651] | 9.9e-13 |  |
-| secondary | sizeLarge vs ccAucRepair | 1 / 2 | none | 0.3921 | 0.4193 | +0.0272 [+0.0053, +0.0493] | 0.0089 |  |
-| secondary | sizeLarge vs ccAucRepair | 1 / 2 | ccPost | 0.4032 | 0.4420 | +0.0387 [+0.0189, +0.0607] | 0.00066 |  |
-| secondary | sizeLarge vs baseline | 1 / 2 | none | 0.3027 | 0.4193 | +0.1166 [+0.0861, +0.1490] | 1.3e-11 |  |
-| secondary | sizeLarge vs baseline | 1 / 2 | ccPost | 0.3810 | 0.4420 | +0.0609 [+0.0354, +0.0897] | 2.5e-05 |  |
+| secondary | sizeLarge vs ccAucRepair | 2 / 2 | none | 0.3921 | 0.4211 | +0.0290 [+0.0134, +0.0455] | 0.0006 |  |
+| secondary | sizeLarge vs ccAucRepair | 2 / 2 | ccPost | 0.4032 | 0.4367 | +0.0335 [+0.0171, +0.0509] | 1.6e-05 |  |
+| secondary | sizeLarge vs baseline | 2 / 2 | none | 0.3027 | 0.4211 | +0.1184 [+0.0889, +0.1492] | 1.6e-12 |  |
+| secondary | sizeLarge vs baseline | 2 / 2 | ccPost | 0.3810 | 0.4367 | +0.0557 [+0.0338, +0.0802] | 1.6e-05 |  |
 | secondary | sizeRand vs ccAucRepair | 1 / 2 | none | 0.3921 | 0.4256 | +0.0335 [+0.0188, +0.0508] | 3.3e-05 |  |
 | secondary | sizeRand vs ccAucRepair | 1 / 2 | ccPost | 0.4032 | 0.4384 | +0.0352 [+0.0208, +0.0522] | 1.6e-06 |  |
 | secondary | sizeRand vs baseline | 1 / 2 | none | 0.3027 | 0.4256 | +0.1229 [+0.0942, +0.1531] | 4.1e-12 |  |
@@ -60,6 +64,8 @@ Single size runs vs the baseline (descriptive; runs of the same arm varied 0.02-
 |---|---|---|---|---|---|
 | ccAucRepair_sizeLarge (104:2) | none | 0.3027 | 0.4193 | +0.1166 [+0.0861, +0.1490] | 1.3e-11 |
 | ccAucRepair_sizeLarge (104:2) | ccPost | 0.3810 | 0.4420 | +0.0609 [+0.0354, +0.0897] | 2.5e-05 |
+| ccAucRepair_sizeLarge_rep2 (104:5) | none | 0.3027 | 0.4228 | +0.1201 [+0.0896, +0.1528] | 2.2e-12 |
+| ccAucRepair_sizeLarge_rep2 (104:5) | ccPost | 0.3845 | 0.4354 | +0.0509 [+0.0295, +0.0741] | 4.4e-06 |
 | ccAucRepair_sizeRand (104:3) | none | 0.3027 | 0.4256 | +0.1229 [+0.0942, +0.1531] | 4.1e-12 |
 | ccAucRepair_sizeRand (104:3) | ccPost | 0.3810 | 0.4384 | +0.0574 [+0.0374, +0.0794] | 1.7e-06 |
 | ccAucRepair_sizeSmall (104:4) | none | 0.3027 | 0.1060 | -0.1967 [-0.2661, -0.1299] | 1.1e-06 |
@@ -74,8 +80,12 @@ Single size runs vs the baseline (descriptive; runs of the same arm varied 0.02-
 | **baseline** | ccPost | 0.02 / 0.02 | 0.25 / 0.15 | 0.67 / 0.48 | 0.96 / 0.70 | 0.91 / 0.58 |
 | **ccAucRepair** | none | 0.02 / 0.01 | 0.23 / 0.15 | 0.67 / 0.46 | 0.95 / 0.70 | 0.89 / 0.56 |
 | **ccAucRepair** | ccPost | 0.02 / 0.01 | 0.23 / 0.15 | 0.66 / 0.46 | 0.95 / 0.70 | 0.82 / 0.56 |
-| **sizeLarge** | none | 0.01 / 0.01 | 0.27 / 0.16 | 0.70 / 0.50 | 0.95 / 0.68 | 0.82 / 0.55 |
-| **sizeLarge** | ccPost | 0.01 / 0.01 | 0.25 / 0.16 | 0.69 / 0.50 | 0.95 / 0.68 | 0.82 / 0.55 |
+| **sizeLarge** | none | 0.01 / 0.01 | 0.25 / 0.15 | 0.70 / 0.49 | 0.96 / 0.69 | 0.86 / 0.56 |
+| **sizeLarge** | ccPost | 0.01 / 0.01 | 0.24 / 0.15 | 0.69 / 0.49 | 0.96 / 0.69 | 0.86 / 0.56 |
+| ccAucRepair_sizeLarge | none | 0.01 / 0.01 | 0.27 / 0.16 | 0.70 / 0.50 | 0.95 / 0.68 | 0.82 / 0.55 |
+| ccAucRepair_sizeLarge | ccPost | 0.01 / 0.01 | 0.25 / 0.16 | 0.69 / 0.50 | 0.95 / 0.68 | 0.82 / 0.55 |
+| ccAucRepair_sizeLarge_rep2 | none | 0.02 / 0.01 | 0.24 / 0.15 | 0.69 / 0.49 | 0.97 / 0.71 | 0.91 / 0.58 |
+| ccAucRepair_sizeLarge_rep2 | ccPost | 0.02 / 0.01 | 0.23 / 0.14 | 0.68 / 0.49 | 0.97 / 0.71 | 0.91 / 0.58 |
 | **sizeRand** | none | 0.02 / 0.01 | 0.26 / 0.18 | 0.67 / 0.47 | 0.97 / 0.71 | 0.91 / 0.56 |
 | **sizeRand** | ccPost | 0.02 / 0.01 | 0.25 / 0.18 | 0.67 / 0.47 | 0.97 / 0.71 | 0.82 / 0.56 |
 | **sizeSmall** | none | 0.02 / 0.01 | 0.21 / 0.12 | 0.38 / 0.15 | 0.45 / 0.01 | 0.77 / 0.00 |
