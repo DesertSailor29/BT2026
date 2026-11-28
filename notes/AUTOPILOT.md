@@ -4,6 +4,27 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s43 2026-11-28 15:45, event job_finished (L3_sizeRand_rep2)
+Saw: gpu `L3_sizeRand_rep2` exit 0 after 7.06 h (`$PROJ/logs/L3_sizeRand_rep2_20261128_083422.log`; the 3 "error"
+lines are table text). D104 f6, 1000 epochs (training done 13:32), real val Dice liver 0.848 / tumour 0.348 (f3
+0.848 / 0.373), 111/111 test predictions. **Test 111 tumour Dice 0.395 vs baseline 0.303: +0.093 [+0.063, +0.124]
+p 5e-7** (sizeRand f3 0.426: runs differ 0.031, like ccAucRepair 0.022 / posRepair 0.028; sizeLarge runs only
+0.004); liver Dice 0.866 (−0.007); lesion recall 0.379, recall >= 1 ml 0.705; FP pieces/case 8.4, FP ml/case 4.1;
+thesis 40: +0.057 [+0.008, +0.111].
+Decision: cpu **`L3_size_eval`** (`nice -n 10 python nnunet/size_eval.py --workers 12`): the declared primary on 2
+runs each, final. gpu **`L3_sizeSmall_rep2`** (`liver_arm.sh ccAucRepair_sizeSmall_rep2 104 --same-as
+ccAucRepair_sizeSmall`, ~7 h → ~22:50 Sat), the last GPU arm.
+Reasons: MISSION L3 names sizeSmall_rep2 as the default for the remaining time, "or a follow-up that L2's frozen test
+result motivates"; L2 was null (s32), so no L2 follow-up exists. Choosing anything else now (e.g. a 3rd Large or
+Rand run because the primary is borderline) would be choosing from test, which the hard rules forbid. sizeSmall_rep2
+also makes every size arm 2 runs. After it ~6.5 h remain: no further 7-h arm fits (would end ~05:50, past the
+05:20 deadline); the gpu lane may then take L1c (contrast phase, optional) if it fits in ~5 h.
+Assumptions: `--same-as` reuses the sizeSmall ids and takes the next free D104 fold (f7).
+Alternatives considered: sizeLarge_rep3 / sizeRand_rep3 (test-driven, rejected); ccAucRepair_rep3 to test "590
+subset beats full 999" (that question came from test numbers, not declared; noted for the user instead); idling the
+GPU (wastes the paid session).
+Started: gpu `L3_sizeSmall_rep2`, cpu `L3_size_eval` (log paths in the NOTES Log).
+
 ### s42 2026-11-28 08:40, event job_finished (L3_size_eval)
 Saw: cpu `L3_size_eval` exit 0 after 0.07 h (`$PROJ/logs/L3_size_eval_20261128_083422.log`; the 1 "error" line is
 table text). sizeLarge now 2 runs (mean 0.421). **Primary sizeLarge (2) − sizeRand (1): saved −0.005 [−0.021, +0.012]
