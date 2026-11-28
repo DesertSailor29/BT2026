@@ -4,6 +4,25 @@ Unattended sessions on UCloud (`autopilot/supervisor.sh`, handoff `autopilot/MIS
 session saw, what it decided, reasons, assumptions, alternatives, what it started. The final session writes a
 summary for the user at the top.
 
+### s46 2026-11-28 19:06, event job_finished (L1c_ts_install)
+Saw: cpu `L1c_ts_install` exit 0 after 0.06 h (`$PROJ/logs/L1c_ts_install_20261128_190107.log`): TotalSegmentator
+2.18.0 in `$PROJ/venv-ts` (freeze `$PROJ/venv-ts-freeze.txt`), `total` weights 1.4 GB in `$PROJ/totalseg_weights`;
+pip + weight download only → L1c allowed (MISSION). Timing test `L1c_ts_timing` (lits_000, CPU, `--roi_subset aorta
+portal_vein_and_splenic_vein`): 22 s wall, ~4 cores; lits_000 aorta 157 HU / portal vein 170 → portal venous.
+gpu `L3_sizeSmall_rep2` healthy (epoch ~687/1000, training ETA 20:34, test → ~21:20).
+Decision: cpu **`L1c_phase`** (`nnunet/phase_segment.sh`, new: resumable TotalSegmentator loop over the 111 test
+images on the CPU, then `nnunet/phase_eval.py`, new: vessel median HU on the one-voxel-eroded masks, the pool's
+phase rule `liver_metrics.phase_of`, tumour Dice per phase per group from the L3 `size/cases.csv`). gpu: keep training.
+Reasons: L1c on CPU costs no GPU time and runs beside the training (~4 cores, nice 10, far below the 12-worker cap),
+so the "only if the gpu would idle" condition is moot: it never touches the GPU. Descriptive only; nothing is chosen
+from it. Fake-tested on lits_000 (+ a missing case listed, not guessed).
+Assumptions: larger scans (up to ~1000 slices) take ≤ 2-3 min each → whole loop ≤ ~2 h. phase_eval reads
+size/cases.csv as it is when it runs; re-run it (seconds) after the final size eval adds sizeSmall_rep2.
+Alternatives considered: running TotalSegmentator on the GPU after 21:20 (faster, but needs nothing the CPU cannot do
+and would compete with the test predictions' timing); skipping L1c (it is cheap now).
+Started: cpu `L1c_phase` (`$PROJ/logs/L1c_phase_20261128_190619.log`, ~1-2 h). Next: gpu Small_rep2 end (~21:20) →
+cpu final `size_eval.py`, then re-run `phase_eval.py`, then the final summary early (no GPU work left) and `ap stop`.
+
 ### s45 2026-11-28 19:00, event check
 Saw: gpu `L3_sizeSmall_rep2` healthy (D104 f7, epoch 666/1000, 17.3 s/epoch, GPU 98 %, no error lines, loss not
 NaN; status-file training ETA 20:34, test → ~21:20). cpu lane idle (L3_size_eval done in s44). Disk 2.3 P free.
