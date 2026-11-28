@@ -54,7 +54,9 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
    <pptx skill>/scripts/apply_theme.js`; needs `nodejs npm libreoffice-impress` (installed on the VM 2026-11-16).
 2. **Pancreas baseline done + diagnosed**: discuss with the user (and supervisor) the appearance gap (fat, lobulation,
    thick slices) and options (thick-slice/blur augmentation, MAISI fatty glands, real data) vs training filter arms.
-3. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
+3. **Follow-up "fewer synthetic volumes beat all 999"** (user, 2026-11-28, parked for later): design E1-E4 in
+   `notes/BACKLOG.md` (top entry); user decides scope / autopilot / supervisor first, then write a declared plan.
+4. Add the checkpoint_best results to report 4 (`reports/liver_results/build.py`; rep2 is in since 2026-11-16).
    Builds need a venv with pandas/matplotlib/Pillow (Kali VM has none; one-off venv in the session scratchpad).
 
 ## Decisions in force (full records + reasons: `notes/DECISIONS.md`)
@@ -87,6 +89,8 @@ Loaded every session (via CLAUDE.md): keep it short and true. Everything else is
   claude.ai/artifact/DARpa2rdB7a6fYBsu5PBbv.
 
 ## Log
+- 2026-11-28 17:55 (UCloud, user session): user wants to prove "590 subsets > full 999 ccAucRepair" (s44 hint);
+  E1-E4 design (incl. confounds: run noise ≈ gap, tumour-free share 30 % vs 18 %) parked in BACKLOG, Next steps 3.
 - 2026-11-28 15:50 (UCloud autopilot s44): cpu L3_size_eval done (exit 0): final primary sizeLarge (2) − sizeRand (2) +0.011 [−0.010, +0.031] p 0.14 saved / +0.015 [−0.006, +0.036] p 0.058 ccPost → not met; both subsets > ccAucRepair (+0.029 / +0.018). gpu Small_rep2 epoch 13, ETA 20:29. Nothing new started; wake 19:00.
 - 2026-11-28 15:45 (UCloud autopilot s43): gpu L3_sizeRand_rep2 done (exit 0; D104 f6, val tumour 0.348): test tumour 0.395 vs baseline 0.303, +0.093 [+0.063, +0.124]; sizeRand runs 0.426/0.395. Started gpu `L3_sizeSmall_rep2` (`$PROJ/logs/L3_sizeSmall_rep2_20261128_153926.log`, last arm, declared default), cpu `L3_size_eval` (`$PROJ/logs/L3_size_eval_20261128_153926.log`).
 - 2026-11-28 08:40 (UCloud autopilot s42): cpu L3_size_eval done (exit 0): primary sizeLarge (2 runs) − sizeRand (1) −0.005 [−0.021, +0.012] saved / −0.002 ccPost (not met yet); sizeLarge vs ccAucRepair +0.029 [+0.013, +0.046]. gpu Rand_rep2 epoch 13, train ETA 13:26. Nothing new started.

@@ -3,6 +3,17 @@
 New experiments are paused until the findings are presented to the supervisor (Decisions 2026-11-15).
 
 ## Experiments
+- **"Fewer synthetic volumes beat all 999?"** (2026-11-28, user: "great finding", pick up later; design only, nothing
+  built). Hint from autopilot s44 (not declared, found on test): random 590 subset (sizeRand, 2 runs mean 0.410) and
+  sizeLarge (0.421) > full-999 ccAucRepair (0.392) by +0.018 [+0.003, +0.035] / +0.029. Not proven: runs of one arm
+  differ 0.022-0.031 (≈ the gap; per-case CI ignores run variance), and the 590 subsets keep all 180 tumour-free
+  volumes (30 % vs 18 % in the 999) and each volume is seen ~1.7× as often (fixed 1000×250 iterations). Proposed,
+  declared before running: E1 ccAucRepair_rep3 (full 999, 1 arm); E2 random 590 with the 18 % tumour-free share, new
+  draw (2 arms; count vs tumour-free share against sizeRand); E3 random ~300, 18 % tumour-free (2 arms, dose-response);
+  E4 pancreas random 590 vs the 3 pancreas baselines (2 arms, independent replication). Second runs of E2/E3 use a
+  different random draw; analysis with runs as the unit. ~7 GPU h/arm: E1-E3 ~35 h, all ~49 h; the B200 uses 7.7/183
+  GB per training, so 2 parallel arms may fit (measure first). Open for the user: scope (E1-E3 or + E4), autopilot or
+  in the loop, show the supervisor first?
 - **Tumour-size test** (2026-11-15, per user): pool tumours are much smaller than real (in-liver median 2.3 ml per
   volume vs 16 ml per real case). Ids ready (`nnunet/size_split.py`, `$MAISI_RUNS/pool/filter_metrics/liver/size/`):
   sizeLarge 590 / sizeSmall 589 / sizeRand 590; no fold registered. ~7 GPU h per arm. If large tumours help → generate
